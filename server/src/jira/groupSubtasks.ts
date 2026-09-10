@@ -1,4 +1,11 @@
-import type { BugSubtask } from '../domain/types.js';
+import type { BugSubtask, WorklogEntry } from '../domain/types.js';
+
+interface RawWorklogEntry {
+  author: { displayName: string };
+  started: string;
+  timeSpentSeconds: number;
+  comment?: string;
+}
 
 export interface RawSubtask {
   key: string;
@@ -9,6 +16,8 @@ export interface RawSubtask {
   created: string;
   updated: string;
   parent?: { key: string };
+  /** Só presente quando `worklog` é pedido como extraField na busca (subtarefas de Implementação/Teste). */
+  worklog?: { worklogs: RawWorklogEntry[] };
 }
 
 export interface GroupedSubtasks {
@@ -16,6 +25,11 @@ export interface GroupedSubtasks {
   implStartByParent: Map<string, string>;
   /** True quando a(s) subtarefa(s) "Implementação" da atividade pai estão todas "Atendida". */
   implDoneByParent: Map<string, boolean>;
+  /** Soma das horas apontadas (worklog) nas subtarefas de Implementação/Teste de cada atividade pai. */
+  implLoggedHoursByParent: Map<string, number>;
+  testLoggedHoursByParent: Map<string, number>;
+  /** Todos os apontamentos (Implementação + Teste), por atividade pai, ordenados por data. */
+  worklogEntriesByParent: Map<string, WorklogEntry[]>;
   bugsByParent: Map<string, BugSubtask[]>;
 }
 
@@ -34,11 +48,32 @@ function isResolvedStatus(status: string): boolean {
   return normalize(status) === 'atendida';
 }
 
-/** Agrupa subtarefas (Implementação/Bug) buscadas em lote pela atividade (Story) pai. */
+/** Agrupa subtarefas (Implementação/Teste/Bug) buscadas em lote pela atividade (Story) pai. */
 export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
   const implStartByParent = new Map<string, string>();
   const implStatusesByParent = new Map<string, string[]>();
+  const implLoggedSecondsByParent = new Map<string, number>();
+  const testLoggedSecondsByParent = new Map<string, number>();
+  const worklogEntriesByParent = new Map<string, WorklogEntry[]>();
   const bugsByParent = new Map<string, BugSubtask[]>();
+
+  function addWorklogs(subtask: RawSubtask, parentKey: string, subtaskType: 'Implementação' | 'Teste', secondsByParent: Map<string, number>) {
+    const entries = subtask.worklog?.worklogs ?? [];
+    let totalSeconds = secondsByParent.get(parentKey) ?? 0;
+    const list = worklogEntriesByParent.get(parentKey) ?? [];
+    for (const worklog of entries) {
+      totalSeconds += worklog.timeSpentSeconds;
+      list.push({
+        subtaskType,
+        author: worklog.author.displayName,
+        date: dateOnly(worklog.started),
+        hours: worklog.timeSpentSeconds / 3600,
+        comment: worklog.comment ?? null,
+      });
+    }
+    secondsByParent.set(parentKey, totalSeconds);
+    worklogEntriesByParent.set(parentKey, list);
+  }
 
   for (const subtask of subtasks) {
     const parentKey = subtask.parent?.key;
@@ -53,6 +88,11 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
       const statuses = implStatusesByParent.get(parentKey) ?? [];
       statuses.push(subtask.status);
       implStatusesByParent.set(parentKey, statuses);
+      addWorklogs(subtask, parentKey, 'Implementação', implLoggedSecondsByParent);
+    }
+
+    if (subtask.type === 'Teste') {
+      addWorklogs(subtask, parentKey, 'Teste', testLoggedSecondsByParent);
     }
 
     if (subtask.type === 'Bug') {
@@ -75,5 +115,26 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
     implDoneByParent.set(parentKey, statuses.every(isResolvedStatus));
   }
 
-  return { implStartByParent, implDoneByParent, bugsByParent };
+  const implLoggedHoursByParent = new Map<string, number>();
+  for (const [parentKey, seconds] of implLoggedSecondsByParent) {
+    implLoggedHoursByParent.set(parentKey, seconds / 3600);
+  }
+
+  const testLoggedHoursByParent = new Map<string, number>();
+  for (const [parentKey, seconds] of testLoggedSecondsByParent) {
+    testLoggedHoursByParent.set(parentKey, seconds / 3600);
+  }
+
+  for (const list of worklogEntriesByParent.values()) {
+    list.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  return {
+    implStartByParent,
+    implDoneByParent,
+    implLoggedHoursByParent,
+    testLoggedHoursByParent,
+    worklogEntriesByParent,
+    bugsByParent,
+  };
 }

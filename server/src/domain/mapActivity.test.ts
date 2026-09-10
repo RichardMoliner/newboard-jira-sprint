@@ -226,6 +226,82 @@ describe('mapActivity', () => {
     expect(activity.status).toBe('Em andamento');
   });
 
+  test('computes implEstimatedHours/testEstimatedHours from the projected windows', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10 }),
+      sprint,
+      implStartDate: '2026-09-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+      hoursPerPf: 5,
+      hoursPerDay: 8,
+    });
+    // pfPerDay = 8/5 = 1.6; totalBusinessDays = ceil(10/1.6) = 7; implSteps = round(7*0.7) = 5; testSteps = 2
+    expect(activity.implEstimatedHours).toBeCloseTo(5 * 8);
+    expect(activity.testEstimatedHours).toBeCloseTo(2 * 8);
+  });
+
+  test('leaves implEstimatedHours/testEstimatedHours null when there is no timeline (no estimate)', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: null }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.implEstimatedHours).toBeNull();
+    expect(activity.testEstimatedHours).toBeNull();
+  });
+
+  test('leaves implEstimatedHours/testEstimatedHours null for a notStarted activity, even with an estimate', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Novo' }),
+      sprint,
+      implStartDate: null,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.implEstimatedHours).toBeNull();
+    expect(activity.testEstimatedHours).toBeNull();
+  });
+
+  test('passes implLoggedHours, testLoggedHours and worklogEntries through untouched', () => {
+    const worklogEntries = [
+      { subtaskType: 'Implementação' as const, author: 'Fulano', date: '2026-09-08', hours: 4.25, comment: null },
+    ];
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint,
+      implStartDate: '2026-08-04',
+      implLoggedHours: 4.25,
+      testLoggedHours: 0,
+      worklogEntries,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.implLoggedHours).toBe(4.25);
+    expect(activity.testLoggedHours).toBe(0);
+    expect(activity.worklogEntries).toEqual(worklogEntries);
+  });
+
+  test('defaults implLoggedHours, testLoggedHours to null and worklogEntries to an empty array', () => {
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.implLoggedHours).toBeNull();
+    expect(activity.testLoggedHours).toBeNull();
+    expect(activity.worklogEntries).toEqual([]);
+  });
+
   test('flags overdue when dueDate is in the past and status is not done', () => {
     const activity = mapActivity({
       story: baseStory({ storyPoints: 10, statusCategory: 'Em andamento' }),

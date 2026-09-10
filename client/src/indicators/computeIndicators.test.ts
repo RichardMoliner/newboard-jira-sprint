@@ -25,6 +25,11 @@ function activity(overrides: Partial<Activity>): Activity {
     notStarted: false,
     implWindow: null,
     testWindow: null,
+    implEstimatedHours: null,
+    testEstimatedHours: null,
+    implLoggedHours: null,
+    testLoggedHours: null,
+    worklogEntries: [],
     bugs: [],
     ...overrides,
   };

@@ -55,13 +55,14 @@ export async function fetchBoardData(
       credentials,
     ),
     searchAllIssues<RawSubtask>(
-      `vertical = ${quoteJql(vertical)} AND issuetype in (Bug, Implementação) AND sprint in openSprints()`,
-      ['parent'],
+      `vertical = ${quoteJql(vertical)} AND issuetype in (Bug, Implementação, Teste) AND sprint in openSprints()`,
+      ['parent', 'worklog'],
       credentials,
     ),
   ]);
 
-  const { implStartByParent, implDoneByParent, bugsByParent } = groupSubtasks(subtasks);
+  const { implStartByParent, implDoneByParent, implLoggedHoursByParent, testLoggedHoursByParent, worklogEntriesByParent, bugsByParent } =
+    groupSubtasks(subtasks);
 
   const storyDetails = await mapWithConcurrency(storyHits, GET_ISSUE_CONCURRENCY, async (hit) => {
     try {
@@ -99,6 +100,9 @@ export async function fetchBoardData(
         sprint,
         implStartDate: implStartByParent.get(story.key) ?? null,
         implDone: implDoneByParent.get(story.key) ?? false,
+        implLoggedHours: implLoggedHoursByParent.get(story.key) ?? null,
+        testLoggedHours: testLoggedHoursByParent.get(story.key) ?? null,
+        worklogEntries: worklogEntriesByParent.get(story.key) ?? [],
         bugs: bugsByParent.get(story.key) ?? [],
         baseUrl,
         today,

@@ -3,7 +3,7 @@ import { isCarried, isOverdue, isDeliveredOnTime } from '../compute/status.js';
 import { businessDaysBetween } from '../compute/businessDays.js';
 import { computeAccuracyPercent } from '../compute/accuracy.js';
 import type { ParsedSprint } from '../jira/parseSprintField.js';
-import type { Activity, BugSubtask } from './types.js';
+import type { Activity, BugSubtask, WorklogEntry } from './types.js';
 
 export interface RawStory {
   key: string;
@@ -40,6 +40,9 @@ export function mapActivity(params: {
   sprint: ParsedSprint;
   implStartDate: string | null;
   implDone?: boolean;
+  implLoggedHours?: number | null;
+  testLoggedHours?: number | null;
+  worklogEntries?: WorklogEntry[];
   bugs: BugSubtask[];
   baseUrl: string;
   today: string;
@@ -51,6 +54,9 @@ export function mapActivity(params: {
     sprint,
     implStartDate,
     implDone = false,
+    implLoggedHours = null,
+    testLoggedHours = null,
+    worklogEntries = [],
     bugs,
     baseUrl,
     today,
@@ -71,6 +77,10 @@ export function mapActivity(params: {
   const timeline =
     !notStarted && story.storyPoints !== null ? computeTimeline(story.storyPoints, startDate, hoursPerPf, hoursPerDay) : null;
   const dueDate = timeline?.test.end ?? null;
+  // Horas úteis previstas por fase (dias úteis da janela × horas produtivas/dia) — mesma conta já
+  // usada no tooltip de PF, agora exposta como campo para comparar com o apontado (worklog).
+  const implEstimatedHours = timeline ? businessDaysBetween(timeline.impl.start, timeline.impl.end) * hoursPerDay : null;
+  const testEstimatedHours = timeline ? businessDaysBetween(timeline.test.start, timeline.test.end) * hoursPerDay : null;
   const realizedBusinessDays = isDone && deliveredDate !== null ? businessDaysBetween(startDate, deliveredDate) : null;
   const assertividadePercent =
     story.storyPoints !== null && realizedBusinessDays !== null
@@ -99,6 +109,11 @@ export function mapActivity(params: {
     notStarted,
     implWindow: timeline?.impl ?? null,
     testWindow: timeline?.test ?? null,
+    implEstimatedHours,
+    testEstimatedHours,
+    implLoggedHours,
+    testLoggedHours,
+    worklogEntries,
     bugs,
   };
 }

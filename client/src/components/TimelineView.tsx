@@ -641,7 +641,13 @@ function ActivityRow({
       >
         <div style={{ display: 'flex', gap: 14 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <a href={activity.url} target="_blank" rel="noreferrer" style={{ fontWeight: 600, color: 'var(--text-primary)', textDecoration: 'none' }}>
+            <a
+              href={activity.url}
+              target="_blank"
+              rel="noreferrer"
+              title={worklogTooltip(activity.worklogEntries)}
+              style={{ fontWeight: 600, color: 'var(--text-primary)', textDecoration: 'none' }}
+            >
               {activity.title}
             </a>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 3, fontSize: 10.5, color: 'var(--text-secondary)' }}>
@@ -691,7 +697,7 @@ function ActivityRow({
               </button>
             )}
           </div>
-          <SideList activity={activity} hoursPerDay={hoursPerDay} />
+          <SideList activity={activity} />
         </div>
       </div>
       <div style={{ position: 'relative', height: 34, borderBottom: '1px solid var(--gridline)' }}>
@@ -954,29 +960,47 @@ function firstName(fullName: string): string {
   return parts[0];
 }
 
-function pfBreakdownTitle(activity: Activity, hoursPerDay: number): string | undefined {
-  if (!activity.implWindow || !activity.testWindow) return undefined;
-  const implDays = businessDaysBetween(activity.implWindow.start, activity.implWindow.end);
-  const testDays = businessDaysBetween(activity.testWindow.start, activity.testWindow.end);
-  const line = (label: string, days: number) =>
-    `${label}: ${days} ${days === 1 ? 'dia útil' : 'dias úteis'} (${Math.round(days * hoursPerDay * 10) / 10}h)`;
-  return `${line('Implementação', implDays)}\n${line('Teste', testDays)}`;
+function formatHours(hours: number): string {
+  return `${Math.round(hours * 10) / 10}h`;
 }
 
-function SideList({ activity, hoursPerDay }: { activity: Activity; hoursPerDay: number }) {
-  const pfTitle = pfBreakdownTitle(activity, hoursPerDay);
+/** "Apontado / Previsto" — '—' de cada lado quando não há dado (sem subtarefa ainda / sem estimativa). */
+function formatHoursPair(logged: number | null, estimated: number | null): string {
+  if (logged === null && estimated === null) return '—';
+  return `${logged !== null ? formatHours(logged) : '—'} / ${estimated !== null ? formatHours(estimated) : '—'}`;
+}
+
+function formatWorklogDuration(hours: number): string {
+  const totalMinutes = Math.round(hours * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, '0')}`;
+}
+
+/** Lista todos os apontamentos (Implementação + Teste) da atividade, para o tooltip do nome da tarefa. */
+function worklogTooltip(entries: Activity['worklogEntries']): string | undefined {
+  if (entries.length === 0) return undefined;
+  const lines = entries.map((e) => `[${e.subtaskType}] ${formatShort(e.date)} · ${e.author} · ${formatWorklogDuration(e.hours)}`);
+  return `Apontamentos:\n${lines.join('\n')}`;
+}
+
+const HOURS_PAIR_TITLE = 'Apontado (worklog da subtarefa) / Previsto (a partir do PF e das horas por PF configuradas).';
+
+function SideList({ activity }: { activity: Activity }) {
   const assertividadeTitle =
     activity.assertividadePercent !== null
       ? 'Horas realizadas (dias úteis do início até a entrega × horas produtivas/dia) dividido pelas horas estimadas (PF × horas/PF). 100% = estimativa bateu exatamente com o realizado; abaixo de 100% superestimamos, acima subestimamos.'
       : undefined;
   const items: [string, string, string?][] = [
-    ['PF', activity.storyPoints !== null ? String(activity.storyPoints) : '—', pfTitle],
+    ['PF', activity.storyPoints !== null ? String(activity.storyPoints) : '—'],
     ['Dev', firstName(activity.developer)],
     ['Tester', activity.tester ? firstName(activity.tester) : '—'],
+    ['Impl. (h)', formatHoursPair(activity.implLoggedHours, activity.implEstimatedHours), HOURS_PAIR_TITLE],
+    ['Teste (h)', formatHoursPair(activity.testLoggedHours, activity.testEstimatedHours), HOURS_PAIR_TITLE],
     ['Assert.', activity.assertividadePercent !== null ? `${Math.round(activity.assertividadePercent)}%` : '—', assertividadeTitle],
   ];
   return (
-    <dl style={{ width: 130, flexShrink: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10.5, color: 'var(--text-secondary)' }}>
+    <dl style={{ width: 150, flexShrink: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10.5, color: 'var(--text-secondary)' }}>
       {items.map(([label, value, title]) => (
         <div key={label} title={title} style={{ display: 'flex', gap: 4, overflow: 'hidden', cursor: title ? 'help' : undefined }}>
           <dt style={{ margin: 0, color: 'var(--text-muted)', flexShrink: 0 }}>{label}:</dt>
@@ -1003,17 +1027,6 @@ function addDays(iso: string, days: number): string {
   const date = new Date(`${iso}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
-}
-
-/** Conta dias úteis em (startISO, endISO] — mesma janela usada para plotar a barra correspondente. */
-function businessDaysBetween(startISO: string, endISO: string): number {
-  let count = 0;
-  let cursor = startISO;
-  while (cursor < endISO) {
-    cursor = addDays(cursor, 1);
-    if (isBusinessDay(cursor)) count++;
-  }
-  return count;
 }
 
 function formatShort(iso: string): string {

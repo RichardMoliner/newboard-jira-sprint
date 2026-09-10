@@ -12,6 +12,14 @@ export interface TimelineWindow {
   end: string;
 }
 
+export interface WorklogEntry {
+  subtaskType: 'Implementação' | 'Teste';
+  author: string;
+  date: string;
+  hours: number;
+  comment: string | null;
+}
+
 export interface Activity {
   key: string;
   url: string;
@@ -38,6 +46,14 @@ export interface Activity {
   notStarted: boolean;
   implWindow: TimelineWindow | null;
   testWindow: TimelineWindow | null;
+  /** Horas úteis previstas para implementação/teste (dias úteis da janela × horas/dia); null sem estimativa. */
+  implEstimatedHours: number | null;
+  testEstimatedHours: number | null;
+  /** Horas realmente apontadas (worklog) nas subtarefas de Implementação/Teste; null quando a subtarefa ainda não existe. */
+  implLoggedHours: number | null;
+  testLoggedHours: number | null;
+  /** Todos os apontamentos das subtarefas de Implementação/Teste, para exibir no tooltip da atividade. */
+  worklogEntries: WorklogEntry[];
   bugs: BugSubtask[];
 }
 

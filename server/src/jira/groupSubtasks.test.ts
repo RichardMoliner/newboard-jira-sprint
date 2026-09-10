@@ -96,4 +96,83 @@ describe('groupSubtasks', () => {
     const { bugsByParent } = groupSubtasks([subtask({ type: 'Implementação' })]);
     expect(bugsByParent.get('EC-11420')).toBeUndefined();
   });
+
+  test('sums worklog hours from the Implementação subtask into implLoggedHoursByParent', () => {
+    const { implLoggedHoursByParent } = groupSubtasks([
+      subtask({
+        worklog: {
+          worklogs: [
+            { author: { displayName: 'Fulano' }, started: '2026-09-08T16:57:00.000-0300', timeSpentSeconds: 15300 },
+          ],
+        },
+      }),
+    ]);
+    expect(implLoggedHoursByParent.get('EC-11420')).toBeCloseTo(15300 / 3600);
+  });
+
+  test('sums worklog hours across multiple Implementação subtasks of the same parent', () => {
+    const { implLoggedHoursByParent } = groupSubtasks([
+      subtask({ key: 'EC-1', worklog: { worklogs: [{ author: { displayName: 'A' }, started: '2026-09-08T00:00:00.000-0300', timeSpentSeconds: 3600 }] } }),
+      subtask({ key: 'EC-2', worklog: { worklogs: [{ author: { displayName: 'B' }, started: '2026-09-09T00:00:00.000-0300', timeSpentSeconds: 7200 }] } }),
+    ]);
+    expect(implLoggedHoursByParent.get('EC-11420')).toBeCloseTo(3);
+  });
+
+  test('sums worklog hours from the Teste subtask into testLoggedHoursByParent, separately from Implementação', () => {
+    const { implLoggedHoursByParent, testLoggedHoursByParent } = groupSubtasks([
+      subtask({
+        key: 'EC-1',
+        type: 'Implementação',
+        worklog: { worklogs: [{ author: { displayName: 'A' }, started: '2026-09-08T00:00:00.000-0300', timeSpentSeconds: 3600 }] },
+      }),
+      subtask({
+        key: 'EC-2',
+        type: 'Teste',
+        worklog: { worklogs: [{ author: { displayName: 'B' }, started: '2026-09-09T00:00:00.000-0300', timeSpentSeconds: 1800 }] },
+      }),
+    ]);
+    expect(implLoggedHoursByParent.get('EC-11420')).toBeCloseTo(1);
+    expect(testLoggedHoursByParent.get('EC-11420')).toBeCloseTo(0.5);
+  });
+
+  test('leaves implLoggedHoursByParent/testLoggedHoursByParent unset for a parent with no subtasks of that type', () => {
+    const { implLoggedHoursByParent, testLoggedHoursByParent } = groupSubtasks([subtask({ type: 'Bug' })]);
+    expect(implLoggedHoursByParent.has('EC-11420')).toBe(false);
+    expect(testLoggedHoursByParent.has('EC-11420')).toBe(false);
+  });
+
+  test('registers 0 logged hours (not unset) for a subtask that exists but has no worklog entries', () => {
+    const { implLoggedHoursByParent } = groupSubtasks([subtask({})]);
+    expect(implLoggedHoursByParent.get('EC-11420')).toBe(0);
+  });
+
+  test('collects worklogEntries from both Implementação and Teste subtasks, sorted by date', () => {
+    const { worklogEntriesByParent } = groupSubtasks([
+      subtask({
+        key: 'EC-1',
+        type: 'Implementação',
+        worklog: {
+          worklogs: [{ author: { displayName: 'Fulano' }, started: '2026-09-09T00:00:00.000-0300', timeSpentSeconds: 3600, comment: 'Impl' }],
+        },
+      }),
+      subtask({
+        key: 'EC-2',
+        type: 'Teste',
+        worklog: {
+          worklogs: [{ author: { displayName: 'Ciclana' }, started: '2026-09-08T00:00:00.000-0300', timeSpentSeconds: 1800, comment: 'Teste' }],
+        },
+      }),
+    ]);
+    expect(worklogEntriesByParent.get('EC-11420')).toEqual([
+      { subtaskType: 'Teste', author: 'Ciclana', date: '2026-09-08', hours: 0.5, comment: 'Teste' },
+      { subtaskType: 'Implementação', author: 'Fulano', date: '2026-09-09', hours: 1, comment: 'Impl' },
+    ]);
+  });
+
+  test('defaults comment to null when a worklog entry has none', () => {
+    const { worklogEntriesByParent } = groupSubtasks([
+      subtask({ worklog: { worklogs: [{ author: { displayName: 'Fulano' }, started: '2026-09-08T00:00:00.000-0300', timeSpentSeconds: 3600 }] } }),
+    ]);
+    expect(worklogEntriesByParent.get('EC-11420')?.[0].comment).toBeNull();
+  });
 });
