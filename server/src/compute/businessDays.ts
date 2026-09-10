@@ -88,3 +88,15 @@ export function addBusinessDays(startISO: string, days: number): string {
   }
   return toISO(current);
 }
+
+/** Counts business days in (startISO, endISO] — 0 when endISO is on or before startISO. */
+export function businessDaysBetween(startISO: string, endISO: string): number {
+  let count = 0;
+  let current = parseISO(startISO);
+  const end = parseISO(endISO);
+  while (current.getTime() < end.getTime()) {
+    current = addDays(current, 1);
+    if (isBusinessDay(toISO(current))) count++;
+  }
+  return count;
+}

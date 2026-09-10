@@ -25,6 +25,9 @@ export interface Activity {
   startDate: string;
   dueDate: string | null;
   deliveredDate: string | null;
+  deliveredOnTime: boolean | null;
+  realizedBusinessDays: number | null;
+  assertividadePercent: number | null;
   status: string;
   isDone: boolean;
   isOverdue: boolean;

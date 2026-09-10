@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { computeKpis, computePersonSummaries, computeSprintSummaries, topActivitiesByBugCount } from './computeIndicators.js';
+import { computeKpis, computePersonSummaries, computeSprintSummaries, computeRealizedProductivity, topActivitiesByBugCount } from './computeIndicators.js';
 import type { Activity } from '../types.js';
 
 function activity(overrides: Partial<Activity>): Activity {
@@ -16,6 +16,9 @@ function activity(overrides: Partial<Activity>): Activity {
     startDate: '2026-09-03',
     dueDate: '2026-09-10',
     deliveredDate: null,
+    deliveredOnTime: null,
+    realizedBusinessDays: null,
+    assertividadePercent: null,
     status: 'Em andamento',
     isDone: false,
     isOverdue: false,
@@ -61,6 +64,74 @@ describe('computeKpis', () => {
     const kpis = computeKpis([], '2026-09-08');
     expect(kpis.totalActivities).toBe(0);
     expect(kpis.bugsPerActivity).toBe(0);
+  });
+});
+
+describe('computeRealizedProductivity', () => {
+  test('returns null with zero sample size when there are no completed activities', () => {
+    const activities = [activity({ key: 'A', isDone: false })];
+    const result = computeRealizedProductivity(activities, 5, 8);
+    expect(result.hoursPerPf).toBeNull();
+    expect(result.accuracyPercent).toBeNull();
+    expect(result.sampleSize).toBe(0);
+  });
+
+  test('computes hours per PF for a single completed activity', () => {
+    const activities = [activity({ key: 'A', isDone: true, storyPoints: 5, realizedBusinessDays: 4 })];
+    // 4 dias úteis x 8h = 32h realizadas para 5 PF -> 6.4h/PF
+    const result = computeRealizedProductivity(activities, 5, 8);
+    expect(result.hoursPerPf).toBeCloseTo(6.4);
+    expect(result.sampleSize).toBe(1);
+  });
+
+  test('weights the average by story points across completed activities', () => {
+    const activities = [
+      activity({ key: 'A', isDone: true, storyPoints: 10, realizedBusinessDays: 8 }), // 64h / 10 PF
+      activity({ key: 'B', isDone: true, storyPoints: 2, realizedBusinessDays: 1 }), // 8h / 2 PF
+    ];
+    // (64h + 8h) / (10 PF + 2 PF) = 72 / 12 = 6
+    const result = computeRealizedProductivity(activities, 5, 8);
+    expect(result.hoursPerPf).toBeCloseTo(72 / 12);
+    expect(result.sampleSize).toBe(2);
+  });
+
+  test('ignores activities not done, without an estimate, or without realizedBusinessDays', () => {
+    const activities = [
+      activity({ key: 'A', isDone: true, storyPoints: 5, realizedBusinessDays: 4 }),
+      activity({ key: 'B', isDone: false, storyPoints: 5, realizedBusinessDays: 4 }),
+      activity({ key: 'C', isDone: true, storyPoints: null, realizedBusinessDays: 4 }),
+      activity({ key: 'D', isDone: true, storyPoints: 5, realizedBusinessDays: null }),
+    ];
+    const result = computeRealizedProductivity(activities, 5, 8);
+    expect(result.sampleSize).toBe(1);
+    expect(result.hoursPerPf).toBeCloseTo(6.4);
+  });
+
+  test('computes 100% accuracy when total estimated hours match total realized hours', () => {
+    const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, realizedBusinessDays: 8 })];
+    // estimado: 10 PF x 8h/PF = 80h; realizado: 8 dias úteis x 10h/dia = 80h
+    const result = computeRealizedProductivity(activities, 8, 10);
+    expect(result.accuracyPercent).toBeCloseTo(100);
+  });
+
+  test('computes accuracy above 100% when the task took longer than estimated (subestimamos)', () => {
+    const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, realizedBusinessDays: 8 })];
+    // estimado: 10 PF x 5h/PF = 50h; realizado: 8 dias úteis x 8h/dia = 64h -> 64/50 = 128%
+    const result = computeRealizedProductivity(activities, 5, 8);
+    expect(result.accuracyPercent).toBeCloseTo(128);
+  });
+
+  test('computes accuracy below 100% when the task took less time than estimated (superestimamos)', () => {
+    const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, realizedBusinessDays: 6 })];
+    // estimado: 10 PF x 8h/PF = 80h; realizado: 6 dias úteis x 8h/dia = 48h -> 48/80 = 60%
+    const result = computeRealizedProductivity(activities, 8, 8);
+    expect(result.accuracyPercent).toBeCloseTo(60);
+  });
+
+  test('returns null accuracy when there are no eligible activities', () => {
+    const activities = [activity({ key: 'A', isDone: false, storyPoints: 5 })];
+    const result = computeRealizedProductivity(activities, 5, 8);
+    expect(result.accuracyPercent).toBeNull();
   });
 });
 

@@ -14,7 +14,21 @@ export default function BoardScreen({
 }) {
   const { data, loading, error, refresh, secondsToNextRefresh } = useBoardData();
   const [tab, setTab] = useState<Tab>('timeline');
-  const [sprintFilter, setSprintFilter] = useState<string>('all');
+  const [sprintFilter, setSprintFilter] = useState<string[]>([]);
+
+  // Clique normal seleciona só aquela sprint; shift+clique soma/remove da seleção atual,
+  // permitindo combinar várias sprints no filtro.
+  function handleSprintClick(id: string, shiftKey: boolean) {
+    if (id === 'all') {
+      setSprintFilter([]);
+      return;
+    }
+    if (shiftKey) {
+      setSprintFilter((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    } else {
+      setSprintFilter([id]);
+    }
+  }
 
   return (
     <div style={{ padding: '24px 32px 60px' }}>
@@ -77,15 +91,17 @@ export default function BoardScreen({
               hoursPerPf={data.hoursPerPf}
               hoursPerDay={data.hoursPerDay}
               sprintFilter={sprintFilter}
-              onChangeSprintFilter={setSprintFilter}
+              onSprintClick={handleSprintClick}
             />
           ) : (
             <IndicatorsView
               activities={data.activities}
               sprints={data.sprints}
               today={data.today}
+              hoursPerPf={data.hoursPerPf}
+              hoursPerDay={data.hoursPerDay}
               sprintFilter={sprintFilter}
-              onChangeSprintFilter={setSprintFilter}
+              onSprintClick={handleSprintClick}
             />
           )}
         </>

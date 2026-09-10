@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { isBusinessDay, addBusinessDays } from './businessDays.js';
+import { isBusinessDay, addBusinessDays, businessDaysBetween } from './businessDays.js';
 
 describe('isBusinessDay', () => {
   test('returns true for a regular weekday', () => {
@@ -44,5 +44,23 @@ describe('addBusinessDays', () => {
 
   test('matches the real EC-11739 example (15.5 SP): 4 more business days from 16/09 lands on 22/09', () => {
     expect(addBusinessDays('2026-09-16', 4)).toBe('2026-09-22');
+  });
+});
+
+describe('businessDaysBetween', () => {
+  test('counts 0 when start and end are the same date', () => {
+    expect(businessDaysBetween('2026-09-04', '2026-09-04')).toBe(0);
+  });
+
+  test('counts 0 when end is before start', () => {
+    expect(businessDaysBetween('2026-09-08', '2026-09-04')).toBe(0);
+  });
+
+  test('skips the weekend + holiday of 05-07/09/2026 when counting from Friday 04/09 to Tuesday 08/09', () => {
+    expect(businessDaysBetween('2026-09-04', '2026-09-08')).toBe(1);
+  });
+
+  test('matches the inverse of addBusinessDays for the real EC-11739 example', () => {
+    expect(businessDaysBetween('2026-09-03', '2026-09-16')).toBe(8);
   });
 });

@@ -1,7 +1,20 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { getConfig, saveConfig } from '../api/client.js';
 
-const VERTICAL_OPTIONS = ['Contratos', 'Contábil', 'Arrecadação', 'Saúde', 'Educação'];
+const VERTICAL_OPTIONS = ['Contratos', 'Contábil', 'Arrecadação', 'Saúde', 'Educação', 'ISS'];
+
+/** Converte um valor em horas decimais (ex.: "6,4") para "6h 24min", para o usuário conferir o valor exato digitado. */
+function formatHoursAsClock(rawValue: string): string | null {
+  const parsed = Number(rawValue.replace(',', '.'));
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  let hours = Math.floor(parsed);
+  let minutes = Math.round((parsed - hours) * 60);
+  if (minutes === 60) {
+    hours += 1;
+    minutes = 0;
+  }
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}min`;
+}
 
 export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string) => void }) {
   const [vertical, setVertical] = useState('');
@@ -12,6 +25,7 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
   const [hoursPerDay, setHoursPerDay] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hoursPerDayClock = formatHoursAsClock(hoursPerDay);
 
   useEffect(() => {
     getConfig().then((config) => {
@@ -148,7 +162,7 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
         <Field label="Horas produtivas por dia">
           <input
             type="number"
-            step="0.5"
+            step="0.01"
             min="0.5"
             max="24"
             value={hoursPerDay}
@@ -157,8 +171,9 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
             style={inputStyle}
           />
           <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-            Quantas horas de trabalho efetivo consideramos em 1 dia útil (descontando reuniões, pausas etc). Usado
-            junto com as horas por PF nas previsões de prazo.
+            Quantas horas de trabalho efetivo consideramos em 1 dia útil (descontando reuniões, pausas etc)
+            {hoursPerDayClock ? ` — equivale a ${hoursPerDayClock}` : ''}. Usado junto com as horas por PF nas
+            previsões de prazo.
           </span>
         </Field>
 

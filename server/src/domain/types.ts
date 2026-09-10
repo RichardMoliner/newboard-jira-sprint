@@ -25,6 +25,12 @@ export interface Activity {
   startDate: string;
   dueDate: string | null;
   deliveredDate: string | null;
+  /** Se a entrega ocorreu até a previsão; null quando ainda não foi concluída ou não há previsão para comparar. */
+  deliveredOnTime: boolean | null;
+  /** Dias úteis do início até a entrega — só preenchido quando concluída; base do indicador de horas/PF realizado. */
+  realizedBusinessDays: number | null;
+  /** % de assertividade da estimativa desta tarefa (estimado x realizado); null quando ainda não concluída ou sem estimativa. */
+  assertividadePercent: number | null;
   status: string;
   isDone: boolean;
   isOverdue: boolean;

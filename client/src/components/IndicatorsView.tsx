@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { Activity, SprintInfo } from '../types.js';
 import {
   computeKpis,
   computePersonSummaries,
   computeSprintSummaries,
+  computeRealizedProductivity,
   topActivitiesByBugCount,
 } from '../indicators/computeIndicators.js';
 import { FilterPill } from './TimelineView.js';
@@ -15,20 +16,34 @@ export default function IndicatorsView({
   sprints,
   today,
   sprintFilter,
-  onChangeSprintFilter,
+  onSprintClick,
+  hoursPerPf,
+  hoursPerDay,
 }: {
   activities: Activity[];
   sprints: SprintInfo[];
   today: string;
-  sprintFilter: string;
-  onChangeSprintFilter: (id: string) => void;
+  sprintFilter: string[];
+  onSprintClick: (id: string, shiftKey: boolean) => void;
+  hoursPerPf: number;
+  hoursPerDay: number;
 }) {
   const filtered = useMemo(
-    () => (sprintFilter === 'all' ? activities : activities.filter((a) => a.sprintId === sprintFilter)),
+    () => (sprintFilter.length === 0 ? activities : activities.filter((a) => sprintFilter.includes(a.sprintId))),
     [activities, sprintFilter],
   );
 
   const kpis = useMemo(() => computeKpis(filtered, today), [filtered, today]);
+
+  const [considerCarriedInProductivity, setConsiderCarriedInProductivity] = useState(false);
+  const productivityActivities = useMemo(
+    () => (considerCarriedInProductivity ? filtered : filtered.filter((a) => !a.isCarried)),
+    [filtered, considerCarriedInProductivity],
+  );
+  const realizedProductivity = useMemo(
+    () => computeRealizedProductivity(productivityActivities, hoursPerPf, hoursPerDay),
+    [productivityActivities, hoursPerPf, hoursPerDay],
+  );
   const people = useMemo(() => computePersonSummaries(filtered), [filtered]);
   const sprintSummaries = useMemo(() => computeSprintSummaries(filtered), [filtered]);
   const topBuggy = useMemo(() => topActivitiesByBugCount(filtered, 10), [filtered]);
@@ -41,13 +56,24 @@ export default function IndicatorsView({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <FilterPill label="Todas as sprints" active={sprintFilter === 'all'} onClick={() => onChangeSprintFilter('all')} />
-        {sprints.map((s) => (
-          <FilterPill key={s.id} label={s.name} active={sprintFilter === s.id} onClick={() => onChangeSprintFilter(s.id)} />
-        ))}
+      <div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <FilterPill label="Todas as sprints" active={sprintFilter.length === 0} onClick={() => onSprintClick('all', false)} />
+          {sprints.map((s) => (
+            <FilterPill
+              key={s.id}
+              label={s.name}
+              active={sprintFilter.includes(s.id)}
+              onClick={(e) => onSprintClick(s.id, e.shiftKey)}
+            />
+          ))}
+        </div>
+        <p style={{ fontSize: 10.5, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+          Segure <strong>Shift</strong> e clique para combinar várias sprints no filtro.
+        </p>
       </div>
 
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
         <Kpi label="Atividades" value={kpis.totalActivities} />
         <Kpi label="Story points totais" value={kpis.totalStoryPoints} />
@@ -58,6 +84,52 @@ export default function IndicatorsView({
         <Kpi label="Bugs abertos" value={kpis.openBugsCount} />
         <Kpi label="Bugs por atividade" value={kpis.bugsPerActivity.toFixed(1)} />
         <Kpi label="Sem estimativa" value={kpis.noEstimateCount} suffix={`/${kpis.totalActivities}`} />
+        <Kpi
+          label="Horas / PF (realizado)"
+          value={realizedProductivity.hoursPerPf !== null ? realizedProductivity.hoursPerPf.toFixed(2) : '—'}
+          suffix={
+            realizedProductivity.sampleSize > 0
+              ? `${realizedProductivity.sampleSize} concluída${realizedProductivity.sampleSize > 1 ? 's' : ''} · estimado ${hoursPerPf.toFixed(2)}`
+              : 'sem concluídas com estimativa'
+          }
+          accent={
+            realizedProductivity.hoursPerPf === null
+              ? undefined
+              : realizedProductivity.hoursPerPf > hoursPerPf
+                ? 'var(--status-warning)'
+                : 'var(--status-good)'
+          }
+          title="Média de horas por Ponto de Função realmente gastas nas tarefas concluídas (dias úteis do início até a entrega × horas produtivas por dia), ponderada pelos PFs de cada tarefa e comparada com a estimativa configurada. Atualiza sozinho conforme mais tarefas são concluídas."
+        />
+        <Kpi
+          label="% de Assertividade"
+          value={realizedProductivity.accuracyPercent !== null ? `${realizedProductivity.accuracyPercent.toFixed(0)}%` : '—'}
+          suffix={realizedProductivity.sampleSize > 0 ? `${realizedProductivity.sampleSize} concluída${realizedProductivity.sampleSize > 1 ? 's' : ''}` : 'sem concluídas'}
+          accent={
+            realizedProductivity.accuracyPercent === null
+              ? undefined
+              : Math.abs(realizedProductivity.accuracyPercent - 100) <= 10
+                ? 'var(--status-good)'
+                : Math.abs(realizedProductivity.accuracyPercent - 100) <= 30
+                  ? 'var(--status-warning)'
+                  : 'var(--status-critical)'
+          }
+          title="Total de horas realizadas dividido pelo total de horas estimadas (PF × horas/PF) nas tarefas concluídas. 100% = a estimativa bateu exatamente com o realizado. Abaixo de 100%, superestimamos (a tarefa levou menos tempo que o previsto); acima de 100%, subestimamos (levou mais tempo que o previsto). Atualiza sozinho conforme mais tarefas são concluídas."
+        />
+      </div>
+
+        <label
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--text-secondary)', cursor: 'pointer' }}
+          title="Quando desmarcado (padrão), os indicadores de Horas/PF e % de Assertividade acima ignoram tarefas herdadas de sprints anteriores — elas costumam ficar muito tempo paradas antes da entrega e distorcem o cálculo."
+        >
+          <input
+            type="checkbox"
+            checked={considerCarriedInProductivity}
+            onChange={(e) => setConsiderCarriedInProductivity(e.target.checked)}
+            style={{ cursor: 'pointer' }}
+          />
+          Considerar herdadas nos indicadores de Horas/PF e % de Assertividade
+        </label>
       </div>
 
       <Section title="⚠️ Atividades em risco (previsão vencida e não concluídas)">
@@ -152,9 +224,30 @@ export default function IndicatorsView({
   );
 }
 
-function Kpi({ label, value, suffix, accent }: { label: string; value: number | string; suffix?: string; accent?: string }) {
+function Kpi({
+  label,
+  value,
+  suffix,
+  accent,
+  title,
+}: {
+  label: string;
+  value: number | string;
+  suffix?: string;
+  accent?: string;
+  title?: string;
+}) {
   return (
-    <div style={{ background: 'var(--surface-1)', border: '1px solid var(--gridline)', borderRadius: 10, padding: '12px 14px' }}>
+    <div
+      title={title}
+      style={{
+        background: 'var(--surface-1)',
+        border: '1px solid var(--gridline)',
+        borderRadius: 10,
+        padding: '12px 14px',
+        cursor: title ? 'help' : undefined,
+      }}
+    >
       <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 6 }}>
         {label}
       </div>

@@ -149,15 +149,15 @@ export default function TimelineView({
   hoursPerPf,
   hoursPerDay,
   sprintFilter,
-  onChangeSprintFilter,
+  onSprintClick,
 }: {
   activities: Activity[];
   sprints: SprintInfo[];
   today: string;
   hoursPerPf: number;
   hoursPerDay: number;
-  sprintFilter: string;
-  onChangeSprintFilter: (id: string) => void;
+  sprintFilter: string[];
+  onSprintClick: (id: string, shiftKey: boolean) => void;
 }) {
   const [expandedBugs, setExpandedBugs] = useState<Set<string>>(new Set());
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
@@ -168,7 +168,7 @@ export default function TimelineView({
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(() => {
-    const bySprint = sprintFilter === 'all' ? activities : activities.filter((a) => a.sprintId === sprintFilter);
+    const bySprint = sprintFilter.length === 0 ? activities : activities.filter((a) => sprintFilter.includes(a.sprintId));
     const byDone = hideDone ? bySprint.filter((a) => !a.isDone) : bySprint;
     const query = searchQuery.trim().toLowerCase();
     if (!query) return byDone;
@@ -281,57 +281,68 @@ export default function TimelineView({
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-        <FilterPill label="Todas as sprints" active={sprintFilter === 'all'} onClick={() => onChangeSprintFilter('all')} />
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
+        <FilterPill label="Todas as sprints" active={sprintFilter.length === 0} onClick={() => onSprintClick('all', false)} />
         {sprints.map((s) => (
-          <FilterPill key={s.id} label={s.name} active={sprintFilter === s.id} onClick={() => onChangeSprintFilter(s.id)} />
-        ))}
-        <SwitchPill
-          active={analyticalView}
-          onClick={() => setAnalyticalView((v) => !v)}
-          label="Visão analítica (por hora)"
-          title="Mostra a linha do tempo em horas (08h-18h), com as barras posicionadas a partir dos Pontos de Função, sem arredondar para dias inteiros."
-        />
-        <SwitchPill active={hideDone} onClick={() => setHideDone((v) => !v)} label="Ocultar concluídas" />
-        <div style={{ position: 'relative', marginLeft: 'auto' }}>
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar por tarefa ou responsável..."
-            style={{
-              padding: `6px ${searchQuery ? 28 : 12}px 6px 12px`,
-              fontSize: 11.5,
-              borderRadius: 20,
-              border: '1px solid var(--baseline)',
-              background: 'var(--surface-1)',
-              color: 'var(--text-primary)',
-              fontFamily: 'inherit',
-              minWidth: 220,
-            }}
+          <FilterPill
+            key={s.id}
+            label={s.name}
+            active={sprintFilter.includes(s.id)}
+            onClick={(e) => onSprintClick(s.id, e.shiftKey)}
           />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              aria-label="Limpar busca"
+        ))}
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginLeft: 'auto' }}>
+          <SwitchPill
+            active={analyticalView}
+            onClick={() => setAnalyticalView((v) => !v)}
+            label="Visão analítica (por hora)"
+            title="Mostra a linha do tempo em horas (08h-18h), com as barras posicionadas a partir dos Pontos de Função, sem arredondar para dias inteiros."
+          />
+          <SwitchPill active={hideDone} onClick={() => setHideDone((v) => !v)} label="Ocultar concluídas" />
+          <div style={{ position: 'relative' }}>
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar por tarefa ou responsável..."
               style={{
-                position: 'absolute',
-                right: 8,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: 'var(--text-muted)',
-                fontSize: 15,
-                lineHeight: 1,
-                padding: 2,
+                padding: `6px ${searchQuery ? 28 : 12}px 6px 12px`,
+                fontSize: 11.5,
+                borderRadius: 20,
+                border: '1px solid var(--baseline)',
+                background: 'var(--surface-1)',
+                color: 'var(--text-primary)',
+                fontFamily: 'inherit',
+                minWidth: 220,
               }}
-            >
-              ×
-            </button>
-          )}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                aria-label="Limpar busca"
+                style={{
+                  position: 'absolute',
+                  right: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-muted)',
+                  fontSize: 15,
+                  lineHeight: 1,
+                  padding: 2,
+                }}
+              >
+                ×
+              </button>
+            )}
+          </div>
         </div>
       </div>
+
+      <p style={{ fontSize: 10.5, color: 'var(--text-muted)', margin: '0 0 14px' }}>
+        Segure <strong>Shift</strong> e clique para combinar várias sprints no filtro.
+      </p>
 
       <Legend />
 
@@ -627,17 +638,28 @@ function ActivityRow({
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 3, fontSize: 10.5, color: 'var(--text-secondary)' }}>
               <StatusBadge activity={activity} />
               {activity.isCarried && <Tag color="var(--status-warning)">🕓 Herdada</Tag>}
-              {!activity.isDone && (
-                <span>
-                  <span style={{ color: 'var(--text-muted)' }}>Início: </span>
-                  {formatShort(activity.startDate)}
-                </span>
-              )}
+              <span>
+                <span style={{ color: 'var(--text-muted)' }}>Início: </span>
+                {formatShort(activity.startDate)}
+              </span>
               {activity.isDone && activity.deliveredDate ? (
-                <span>
-                  <span style={{ color: 'var(--text-muted)' }}>Entregue em: </span>
-                  {formatShort(activity.deliveredDate)}
-                </span>
+                <>
+                  {activity.dueDate && (
+                    <span>
+                      <span style={{ color: 'var(--text-muted)' }}>Previsão: </span>
+                      {formatShort(activity.dueDate)}
+                    </span>
+                  )}
+                  <span>
+                    <span style={{ color: 'var(--text-muted)' }}>Entregue em: </span>
+                    {formatShort(activity.deliveredDate)}
+                  </span>
+                  {activity.deliveredOnTime !== null && (
+                    <Tag color={activity.deliveredOnTime ? 'var(--status-good)' : 'var(--status-critical)'}>
+                      {activity.deliveredOnTime ? '✓ No prazo' : '✗ Fora do prazo'}
+                    </Tag>
+                  )}
+                </>
               ) : activity.isOverdue && activity.dueDate ? (
                 <span>
                   <span style={{ color: 'var(--text-muted)' }}>Atrasada desde: </span>
@@ -780,7 +802,15 @@ function Tag({ children, color }: { children: React.ReactNode; color: string }) 
   return <span style={{ color, fontWeight: 700, fontSize: 10 }}>{children}</span>;
 }
 
-export function FilterPill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+export function FilterPill({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
   return (
     <button
       onClick={onClick}
@@ -810,13 +840,12 @@ function SwitchPill({ active, onClick, label, title }: { active: boolean; onClic
         display: 'flex',
         alignItems: 'center',
         gap: 8,
-        padding: '5px 12px 5px 6px',
+        padding: 0,
         fontSize: 11.5,
         fontWeight: 700,
         color: active ? 'var(--series-impl)' : 'var(--text-secondary)',
-        background: 'var(--surface-1)',
-        border: `1px solid ${active ? 'var(--series-impl)' : 'var(--baseline)'}`,
-        borderRadius: 20,
+        background: 'none',
+        border: 'none',
         cursor: 'pointer',
         fontFamily: 'inherit',
       }}
@@ -918,10 +947,15 @@ function pfBreakdownTitle(activity: Activity, hoursPerDay: number): string | und
 
 function SideList({ activity, hoursPerDay }: { activity: Activity; hoursPerDay: number }) {
   const pfTitle = pfBreakdownTitle(activity, hoursPerDay);
+  const assertividadeTitle =
+    activity.assertividadePercent !== null
+      ? 'Horas realizadas (dias úteis do início até a entrega × horas produtivas/dia) dividido pelas horas estimadas (PF × horas/PF). 100% = estimativa bateu exatamente com o realizado; abaixo de 100% superestimamos, acima subestimamos.'
+      : undefined;
   const items: [string, string, string?][] = [
     ['PF', activity.storyPoints !== null ? String(activity.storyPoints) : '—', pfTitle],
     ['Dev', firstName(activity.developer)],
     ['Tester', activity.tester ? firstName(activity.tester) : '—'],
+    ['Assert.', activity.assertividadePercent !== null ? `${Math.round(activity.assertividadePercent)}%` : '—', assertividadeTitle],
   ];
   return (
     <dl style={{ width: 130, flexShrink: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10.5, color: 'var(--text-secondary)' }}>

@@ -1,5 +1,7 @@
 import { computeTimeline, DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY } from '../compute/timeline.js';
-import { isCarried, isOverdue } from '../compute/status.js';
+import { isCarried, isOverdue, isDeliveredOnTime } from '../compute/status.js';
+import { businessDaysBetween } from '../compute/businessDays.js';
+import { computeAccuracyPercent } from '../compute/accuracy.js';
 import type { ParsedSprint } from '../jira/parseSprintField.js';
 import type { Activity, BugSubtask } from './types.js';
 
@@ -60,6 +62,11 @@ export function mapActivity(params: {
 
   const timeline = story.storyPoints !== null ? computeTimeline(story.storyPoints, startDate, hoursPerPf, hoursPerDay) : null;
   const dueDate = timeline?.test.end ?? null;
+  const realizedBusinessDays = isDone && deliveredDate !== null ? businessDaysBetween(startDate, deliveredDate) : null;
+  const assertividadePercent =
+    story.storyPoints !== null && realizedBusinessDays !== null
+      ? computeAccuracyPercent(story.storyPoints * hoursPerPf, realizedBusinessDays * hoursPerDay)
+      : null;
 
   return {
     key: story.key,
@@ -74,6 +81,9 @@ export function mapActivity(params: {
     startDate,
     dueDate,
     deliveredDate,
+    deliveredOnTime: isDeliveredOnTime(deliveredDate, dueDate),
+    realizedBusinessDays,
+    assertividadePercent,
     status: story.status,
     isDone,
     isOverdue: isOverdue(dueDate, isDone, today),

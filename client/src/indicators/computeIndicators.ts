@@ -35,6 +35,39 @@ export function computeKpis(activities: Activity[], _today: string): Kpis {
   };
 }
 
+export interface RealizedProductivity {
+  hoursPerPf: number | null;
+  /**
+   * % de assertividade agregado: total de horas realizadas / total de horas estimadas nas
+   * tarefas concluídas. 100% = bateram exatamente; abaixo de 100% superestimamos (a tarefa levou
+   * menos tempo que o previsto); acima de 100% subestimamos (levou mais tempo que o previsto).
+   */
+  accuracyPercent: number | null;
+  sampleSize: number;
+}
+
+/**
+ * Horas por PF realmente observadas nas tarefas concluídas: dias úteis do início até a entrega
+ * (`realizedBusinessDays`) convertidos em horas pela produtividade da vertical, ponderados pelos
+ * PFs de cada tarefa. Indicador "vivo" — muda conforme mais tarefas são concluídas.
+ */
+export function computeRealizedProductivity(activities: Activity[], hoursPerPf: number, hoursPerDay: number): RealizedProductivity {
+  const eligible = activities.filter(
+    (a) => a.isDone && a.storyPoints !== null && a.storyPoints > 0 && a.realizedBusinessDays !== null,
+  );
+  const totalStoryPoints = sum(eligible.map((a) => a.storyPoints ?? 0));
+  const totalRealizedHours = sum(eligible.map((a) => (a.realizedBusinessDays ?? 0) * hoursPerDay));
+  const totalEstimatedHours = totalStoryPoints * hoursPerPf;
+
+  const accuracyPercent = totalEstimatedHours > 0 ? (totalRealizedHours / totalEstimatedHours) * 100 : null;
+
+  return {
+    hoursPerPf: totalStoryPoints > 0 ? totalRealizedHours / totalStoryPoints : null,
+    accuracyPercent,
+    sampleSize: eligible.length,
+  };
+}
+
 export interface PersonSummary {
   person: string;
   activities: number;

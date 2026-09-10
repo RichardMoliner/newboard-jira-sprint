@@ -127,6 +127,107 @@ describe('mapActivity', () => {
     expect(activity.deliveredDate).toBe('2026-09-08');
   });
 
+  test('flags a done activity delivered after its dueDate as not on time', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Concluído', status: 'Atendida', updated: '2026-09-08T16:37:55.000-0300' }),
+      sprint,
+      implStartDate: '2026-08-04', // dueDate: 2026-08-14, well before the 08/09 delivery
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.deliveredOnTime).toBe(false);
+  });
+
+  test('flags a done activity delivered on or before its dueDate as on time', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Concluído', status: 'Atendida', updated: '2026-08-10T16:37:55.000-0300' }),
+      sprint,
+      implStartDate: '2026-08-04', // dueDate: 2026-08-14
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.deliveredOnTime).toBe(true);
+  });
+
+  test('leaves deliveredOnTime null when there is no estimate to project a dueDate', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: null, statusCategory: 'Concluído', status: 'Atendida' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.deliveredOnTime).toBeNull();
+  });
+
+  test('leaves deliveredOnTime and realizedBusinessDays null for activities not done yet', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.deliveredOnTime).toBeNull();
+    expect(activity.realizedBusinessDays).toBeNull();
+  });
+
+  test('computes realizedBusinessDays as the business days between startDate and deliveredDate', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Concluído', status: 'Atendida', updated: '2026-09-08T16:37:55.000-0300' }),
+      sprint,
+      implStartDate: '2026-09-04', // Friday; deliveredDate 2026-09-08 (Tuesday, after the 05-07/09 weekend+holiday)
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.deliveredDate).toBe('2026-09-08');
+    expect(activity.realizedBusinessDays).toBe(1);
+  });
+
+  test('computes assertividadePercent from estimated vs realized hours for a done activity', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Concluído', status: 'Atendida', updated: '2026-09-08T16:37:55.000-0300' }),
+      sprint,
+      implStartDate: '2026-09-04', // realizedBusinessDays: 1
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+      hoursPerPf: 5,
+      hoursPerDay: 8,
+    });
+    // estimado: 10 PF x 5h/PF = 50h; realizado: 1 dia útil x 8h/dia = 8h -> 8/50 = 16%
+    expect(activity.assertividadePercent).toBeCloseTo(16);
+  });
+
+  test('leaves assertividadePercent null for activities not done yet', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.assertividadePercent).toBeNull();
+  });
+
+  test('leaves assertividadePercent null when there is no estimate', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: null, statusCategory: 'Concluído', status: 'Atendida' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.assertividadePercent).toBeNull();
+  });
+
   test('normalizes "Concluido" without accent as done too', () => {
     const activity = mapActivity({
       story: baseStory({ statusCategory: 'Concluido' }),
