@@ -14,6 +14,8 @@ export interface RawSubtask {
 export interface GroupedSubtasks {
   /** Data (YYYY-MM-DD) de criação da subtarefa "Implementação" mais antiga de cada atividade pai. */
   implStartByParent: Map<string, string>;
+  /** True quando a(s) subtarefa(s) "Implementação" da atividade pai estão todas "Atendida". */
+  implDoneByParent: Map<string, boolean>;
   bugsByParent: Map<string, BugSubtask[]>;
 }
 
@@ -21,9 +23,21 @@ function dateOnly(isoDateTime: string): string {
   return isoDateTime.slice(0, 10);
 }
 
+function normalize(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
+}
+
+function isResolvedStatus(status: string): boolean {
+  return normalize(status) === 'atendida';
+}
+
 /** Agrupa subtarefas (Implementação/Bug) buscadas em lote pela atividade (Story) pai. */
 export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
   const implStartByParent = new Map<string, string>();
+  const implStatusesByParent = new Map<string, string[]>();
   const bugsByParent = new Map<string, BugSubtask[]>();
 
   for (const subtask of subtasks) {
@@ -36,6 +50,9 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
       if (!current || startDate < current) {
         implStartByParent.set(parentKey, startDate);
       }
+      const statuses = implStatusesByParent.get(parentKey) ?? [];
+      statuses.push(subtask.status);
+      implStatusesByParent.set(parentKey, statuses);
     }
 
     if (subtask.type === 'Bug') {
@@ -53,5 +70,10 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
     }
   }
 
-  return { implStartByParent, bugsByParent };
+  const implDoneByParent = new Map<string, boolean>();
+  for (const [parentKey, statuses] of implStatusesByParent) {
+    implDoneByParent.set(parentKey, statuses.every(isResolvedStatus));
+  }
+
+  return { implStartByParent, implDoneByParent, bugsByParent };
 }

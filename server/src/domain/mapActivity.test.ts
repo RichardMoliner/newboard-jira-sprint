@@ -175,6 +175,57 @@ describe('mapActivity', () => {
     expect(activity.isOverdue).toBe(false);
   });
 
+  test('overrides status to "Em testes" when the Implementação subtask is done but the story is not', () => {
+    const activity = mapActivity({
+      story: baseStory({ status: 'Em andamento', statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implDone: true,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.status).toBe('Em testes');
+  });
+
+  test('keeps the original story status when the Implementação subtask is not done', () => {
+    const activity = mapActivity({
+      story: baseStory({ status: 'Em andamento', statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implDone: false,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.status).toBe('Em andamento');
+  });
+
+  test('keeps the original story status once the story itself is done, even if implDone is true', () => {
+    const activity = mapActivity({
+      story: baseStory({ status: 'Atendida', statusCategory: 'Concluído' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implDone: true,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.status).toBe('Atendida');
+  });
+
+  test('defaults implDone to false when not provided', () => {
+    const activity = mapActivity({
+      story: baseStory({ status: 'Em andamento', statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.status).toBe('Em andamento');
+  });
+
   test('flags overdue when dueDate is in the past and status is not done', () => {
     const activity = mapActivity({
       story: baseStory({ storyPoints: 10, statusCategory: 'Em andamento' }),

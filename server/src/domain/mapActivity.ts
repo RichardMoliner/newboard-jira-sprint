@@ -39,6 +39,7 @@ export function mapActivity(params: {
   story: RawStory;
   sprint: ParsedSprint;
   implStartDate: string | null;
+  implDone?: boolean;
   bugs: BugSubtask[];
   baseUrl: string;
   today: string;
@@ -49,6 +50,7 @@ export function mapActivity(params: {
     story,
     sprint,
     implStartDate,
+    implDone = false,
     bugs,
     baseUrl,
     today,
@@ -62,6 +64,9 @@ export function mapActivity(params: {
   // Sem subtarefa de Implementação ainda e não concluída: `startDate` é só a data de criação da
   // story, não um início real — não dá pra projetar prazo nem considerar herdada a partir dela.
   const notStarted = !isDone && implStartDate === null;
+  // Subtarefa de Implementação atendida mas a story ainda não foi marcada como concluída: o
+  // trabalho de fato já passou para a fase de testes, mesmo que o status do Jira ainda não reflita isso.
+  const status = !isDone && implDone ? 'Em testes' : story.status;
 
   const timeline =
     !notStarted && story.storyPoints !== null ? computeTimeline(story.storyPoints, startDate, hoursPerPf, hoursPerDay) : null;
@@ -88,7 +93,7 @@ export function mapActivity(params: {
     deliveredOnTime: isDeliveredOnTime(deliveredDate, dueDate),
     realizedBusinessDays,
     assertividadePercent,
-    status: story.status,
+    status,
     isDone,
     isOverdue: isOverdue(dueDate, isDone, today),
     notStarted,

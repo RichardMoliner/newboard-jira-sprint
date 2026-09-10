@@ -39,6 +39,34 @@ describe('groupSubtasks', () => {
     expect(implStartByParent.size).toBe(0);
   });
 
+  test('flags implDoneByParent true when the Implementação subtask is Atendida', () => {
+    const { implDoneByParent } = groupSubtasks([subtask({ status: 'Atendida' })]);
+    expect(implDoneByParent.get('EC-11420')).toBe(true);
+  });
+
+  test('flags implDoneByParent false when the Implementação subtask is not Atendida', () => {
+    const { implDoneByParent } = groupSubtasks([subtask({ status: 'Em andamento' })]);
+    expect(implDoneByParent.get('EC-11420')).toBe(false);
+  });
+
+  test('flags implDoneByParent false when only some of multiple Implementação subtasks are Atendida', () => {
+    const { implDoneByParent } = groupSubtasks([
+      subtask({ key: 'EC-1', status: 'Atendida' }),
+      subtask({ key: 'EC-2', status: 'Em andamento' }),
+    ]);
+    expect(implDoneByParent.get('EC-11420')).toBe(false);
+  });
+
+  test('normalizes "atendida" without accent/case when checking implDoneByParent', () => {
+    const { implDoneByParent } = groupSubtasks([subtask({ status: 'ATENDIDA' })]);
+    expect(implDoneByParent.get('EC-11420')).toBe(true);
+  });
+
+  test('leaves implDoneByParent unset for a parent with no Implementação subtask', () => {
+    const { implDoneByParent } = groupSubtasks([subtask({ type: 'Bug' })]);
+    expect(implDoneByParent.has('EC-11420')).toBe(false);
+  });
+
   test('groups Bug subtasks under their parent key as BugSubtask entries', () => {
     const { bugsByParent } = groupSubtasks([
       subtask({
