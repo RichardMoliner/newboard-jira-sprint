@@ -1,10 +1,11 @@
-import { callJiraTool } from '../mcp/client.js';
+import { callJiraTool, type JiraCredentials } from '../mcp/client.js';
 import { searchAllIssues } from './searchAllIssues.js';
 import { mapWithConcurrency } from './mapWithConcurrency.js';
 import { groupSubtasks, type RawSubtask } from './groupSubtasks.js';
 import { parseSprintField } from './parseSprintField.js';
 import { mapActivity, type RawStory } from '../domain/mapActivity.js';
 import type { Activity, BoardDataResponse, SprintInfo } from '../domain/types.js';
+import { DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY } from '../compute/timeline.js';
 
 const GET_ISSUE_CONCURRENCY = 6;
 
@@ -19,7 +20,8 @@ interface StoryDetail {
   status: string;
   statusCategory: string;
   storyPoints: number | null;
-  desenvolvedor: string;
+  desenvolvedor: string | null;
+  assignee: string | null;
   testador: string | null;
   created: string;
   updated: string;
@@ -37,7 +39,12 @@ function quoteJql(value: string): string {
   return `"${value.replace(/"/g, '\\"')}"`;
 }
 
-export async function fetchBoardData(vertical: string): Promise<BoardDataResponse> {
+export async function fetchBoardData(
+  vertical: string,
+  credentials: JiraCredentials,
+  hoursPerPf: number | undefined,
+  hoursPerDay: number | undefined,
+): Promise<BoardDataResponse> {
   const baseUrl = requireEnv('JIRA_BASE_URL').replace(/\/$/, '');
   const today = todayISO();
 
@@ -45,10 +52,12 @@ export async function fetchBoardData(vertical: string): Promise<BoardDataRespons
     searchAllIssues<StorySearchHit>(
       `vertical = ${quoteJql(vertical)} AND issuetype = Story AND sprint in openSprints()`,
       ['customfield_10001'],
+      credentials,
     ),
     searchAllIssues<RawSubtask>(
       `vertical = ${quoteJql(vertical)} AND issuetype in (Bug, Implementação) AND sprint in openSprints()`,
       ['parent'],
+      credentials,
     ),
   ]);
 
@@ -56,7 +65,7 @@ export async function fetchBoardData(vertical: string): Promise<BoardDataRespons
 
   const storyDetails = await mapWithConcurrency(storyHits, GET_ISSUE_CONCURRENCY, async (hit) => {
     try {
-      return await callJiraTool<StoryDetail>('get_issue', { issueKey: hit.key, response_format: 'detailed' });
+      return await callJiraTool<StoryDetail>('get_issue', { issueKey: hit.key, response_format: 'detailed' }, credentials);
     } catch (err) {
       console.error(`[fetchBoardData] Falha ao buscar ${hit.key}, ignorando:`, err instanceof Error ? err.message : err);
       return null;
@@ -82,7 +91,8 @@ export async function fetchBoardData(vertical: string): Promise<BoardDataRespons
       mapActivity({
         story: {
           ...story,
-          desenvolvedor: story.desenvolvedor ?? 'Não atribuído',
+          desenvolvedor: story.desenvolvedor ?? null,
+          assignee: story.assignee ?? null,
           testador: story.testador ?? null,
           storyPoints: story.storyPoints ?? null,
         },
@@ -91,6 +101,8 @@ export async function fetchBoardData(vertical: string): Promise<BoardDataRespons
         bugs: bugsByParent.get(story.key) ?? [],
         baseUrl,
         today,
+        hoursPerPf,
+        hoursPerDay,
       }),
     );
   }
@@ -101,6 +113,8 @@ export async function fetchBoardData(vertical: string): Promise<BoardDataRespons
     generatedAt: new Date().toISOString(),
     today,
     vertical,
+    hoursPerPf: hoursPerPf ?? DEFAULT_HOURS_PER_PF,
+    hoursPerDay: hoursPerDay ?? DEFAULT_HOURS_PER_DAY,
     sprints: [...sprints.values()].sort((a, b) => a.name.localeCompare(b.name)),
     activities,
   };

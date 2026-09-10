@@ -15,7 +15,8 @@ export default function App() {
   useEffect(() => {
     getConfig()
       .then((config) => {
-        setState(config.vertical ? { status: 'ready', vertical: config.vertical } : { status: 'needs-setup' });
+        const isComplete = config.vertical && config.jiraUsername && config.jiraPasswordSet;
+        setState(isComplete ? { status: 'ready', vertical: config.vertical! } : { status: 'needs-setup' });
       })
       .catch((err) => setState({ status: 'error', message: err.message }));
   }, []);

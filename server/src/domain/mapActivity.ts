@@ -1,4 +1,4 @@
-import { computeTimeline } from '../compute/timeline.js';
+import { computeTimeline, DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY } from '../compute/timeline.js';
 import { isCarried, isOverdue } from '../compute/status.js';
 import type { ParsedSprint } from '../jira/parseSprintField.js';
 import type { Activity, BugSubtask } from './types.js';
@@ -9,7 +9,10 @@ export interface RawStory {
   status: string;
   statusCategory: string;
   storyPoints: number | null;
-  desenvolvedor: string;
+  /** Campo customizado "Desenvolvedor", normalmente preenchido só quando já existe uma subtarefa de Implementação. */
+  desenvolvedor: string | null;
+  /** Responsável (assignee) padrão da story, usado quando ainda não há subtarefa de Implementação. */
+  assignee: string | null;
   testador: string | null;
   created: string;
   updated: string;
@@ -37,14 +40,25 @@ export function mapActivity(params: {
   bugs: BugSubtask[];
   baseUrl: string;
   today: string;
+  hoursPerPf?: number;
+  hoursPerDay?: number;
 }): Activity {
-  const { story, sprint, implStartDate, bugs, baseUrl, today } = params;
+  const {
+    story,
+    sprint,
+    implStartDate,
+    bugs,
+    baseUrl,
+    today,
+    hoursPerPf = DEFAULT_HOURS_PER_PF,
+    hoursPerDay = DEFAULT_HOURS_PER_DAY,
+  } = params;
 
   const startDate = implStartDate ?? dateOnly(story.created);
   const isDone = isDoneStatusCategory(story.statusCategory);
   const deliveredDate = isDone ? dateOnly(story.updated) : null;
 
-  const timeline = story.storyPoints !== null ? computeTimeline(story.storyPoints, startDate) : null;
+  const timeline = story.storyPoints !== null ? computeTimeline(story.storyPoints, startDate, hoursPerPf, hoursPerDay) : null;
   const dueDate = timeline?.test.end ?? null;
 
   return {
@@ -54,7 +68,7 @@ export function mapActivity(params: {
     sprintId: sprint.id,
     sprintName: sprint.name,
     isCarried: isCarried(startDate, sprint.startDate),
-    developer: story.desenvolvedor,
+    developer: story.desenvolvedor ?? story.assignee ?? 'Não atribuído',
     tester: story.testador,
     storyPoints: story.storyPoints,
     startDate,

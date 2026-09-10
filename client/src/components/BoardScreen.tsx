@@ -12,26 +12,35 @@ export default function BoardScreen({
   vertical: string;
   onChangeVertical: () => void;
 }) {
-  const { data, loading, error, refresh } = useBoardData();
+  const { data, loading, error, refresh, secondsToNextRefresh } = useBoardData();
   const [tab, setTab] = useState<Tab>('timeline');
   const [sprintFilter, setSprintFilter] = useState<string>('all');
 
   return (
     <div style={{ padding: '24px 32px 60px' }}>
       <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: 20, margin: 0 }}>Painel de acompanhamento — {vertical}</h1>
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
-            {data ? `Atualizado às ${formatTime(data.generatedAt)}` : loading ? 'Buscando dados do Jira...' : 'Sem dados ainda'}
+        <h1 style={{ fontSize: 20, margin: 0 }}>Painel de acompanhamento — {vertical}</h1>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onChangeVertical} style={secondaryButtonStyle}>
+              Configurações
+            </button>
+            <button onClick={refresh} disabled={loading} style={primaryButtonStyle(loading)}>
+              {loading ? 'Atualizando...' : 'Atualizar'}
+            </button>
+          </div>
+          <p className="tabular-nums" style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: 0 }}>
+            {data ? (
+              <>
+                Atualizado às {formatTime(data.generatedAt)}
+                {!loading && ` · Próxima em ${formatCountdown(secondsToNextRefresh)}`}
+              </>
+            ) : loading ? (
+              'Buscando dados do Jira...'
+            ) : (
+              'Sem dados ainda'
+            )}
           </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onChangeVertical} style={secondaryButtonStyle}>
-            Configurações
-          </button>
-          <button onClick={refresh} disabled={loading} style={primaryButtonStyle(loading)}>
-            {loading ? 'Atualizando...' : 'Atualizar'}
-          </button>
         </div>
       </header>
 
@@ -65,6 +74,8 @@ export default function BoardScreen({
               activities={data.activities}
               sprints={data.sprints}
               today={data.today}
+              hoursPerPf={data.hoursPerPf}
+              hoursPerDay={data.hoursPerDay}
               sprintFilter={sprintFilter}
               onChangeSprintFilter={setSprintFilter}
             />
@@ -106,6 +117,12 @@ function TabButton({ active, onClick, label }: { active: boolean; onClick: () =>
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatCountdown(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 const primaryButtonStyle = (disabled: boolean): React.CSSProperties => ({

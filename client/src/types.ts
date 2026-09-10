@@ -44,6 +44,8 @@ export interface BoardDataResponse {
   generatedAt: string;
   today: string;
   vertical: string;
+  hoursPerPf: number;
+  hoursPerDay: number;
   sprints: SprintInfo[];
   activities: Activity[];
 }

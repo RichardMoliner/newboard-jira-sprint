@@ -13,13 +13,11 @@ e a página é atualizada sob demanda com o botão **Atualizar**.
    npm install
    ```
 
-2. Copie `.env.example` para `.env` e preencha com as mesmas credenciais que
-   você já usa no MCP `jira-desenv` do Claude Code:
+2. Copie `.env.example` para `.env` (a URL base do Jira já vem preenchida,
+   igual para todo mundo):
 
    ```
    JIRA_BASE_URL=https://desenv.betha.com.br
-   JIRA_USERNAME=seu.usuario
-   JIRA_PASSWORD=sua-senha-ou-token
    ```
 
 3. Suba o backend e o frontend juntos:
@@ -28,14 +26,27 @@ e a página é atualizada sob demanda com o botão **Atualizar**.
    npm run dev
    ```
 
-4. Abra `http://localhost:5173`. Na primeira execução, informe a **vertical**
-   do Jira que o painel deve acompanhar (ex: `CONTRATOS`) — essa configuração
-   fica salva em `config.json` (não versionado) e pode ser trocada depois pelo
-   botão **Configurações**.
+4. Abra `http://localhost:5173`. Na primeira execução, selecione a **vertical**
+   do Jira que o painel deve acompanhar e informe o seu usuário e senha/token
+   do Jira (as mesmas credenciais que você já usa no MCP `jira-desenv` do
+   Claude Code) — essa configuração fica salva em `config.json` (não
+   versionado, com a senha em texto puro só localmente) e pode ser trocada
+   depois pelo botão **Configurações**. Ao editar depois, deixar o campo de
+   senha em branco mantém a senha já salva.
 
 O painel busca automaticamente todas as sprints ativas (`sprint in
 openSprints()`) dos projetos da vertical informada — não é preciso saber IDs
 de board ou sprint.
+
+> **Precisa estar na rede/VPN da Betha**: o backend baixa o `@betha/jira-mcp`
+> do registro npm interno (`nexus3.betha.com.br`) na primeira execução.
+
+### Problemas conhecidos
+
+- **`npm install` mostra avisos de vulnerabilidade**: são de dependências de
+  desenvolvimento (`vite`/`vitest`/`express`→`qs`) sem correção não-destrutiva
+  disponível ainda — não afetam o uso local da ferramenta. `npm audit` mostra
+  os detalhes se quiser conferir.
 
 ## Como funciona
 

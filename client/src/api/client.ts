@@ -14,14 +14,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export interface AppConfig {
   vertical: string | null;
+  jiraUsername: string | null;
+  jiraPasswordSet: boolean;
+  hoursPerPf: number;
+  hoursPerDay: number;
+}
+
+export interface SaveConfigInput {
+  vertical: string;
+  jiraUsername: string;
+  /** Em branco na edição mantém a senha já salva. */
+  jiraPassword: string;
+  hoursPerPf: number;
+  hoursPerDay: number;
 }
 
 export function getConfig(): Promise<AppConfig> {
   return request<AppConfig>('/config');
 }
 
-export function saveConfig(vertical: string): Promise<AppConfig> {
-  return request<AppConfig>('/config', { method: 'POST', body: JSON.stringify({ vertical }) });
+export function saveConfig(input: SaveConfigInput): Promise<AppConfig> {
+  return request<AppConfig>('/config', { method: 'POST', body: JSON.stringify(input) });
 }
 
 export function getBoardData<T>(): Promise<T> {

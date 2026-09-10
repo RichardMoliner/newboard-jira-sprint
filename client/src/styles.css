@@ -27,13 +27,13 @@ body {
   --border: rgba(11, 11, 11, 0.1);
 
   --series-impl: #2a78d6;
-  --series-test: #eb6834;
+  --series-test: #9333ea;
   --series-bug: #898781;
 
   --status-good: #0ca30c;
   --status-warning: #fab219;
   --status-serious: #ec835a;
-  --status-critical: #d03b3b;
+  --status-critical: #e6231e;
 
   --seq-blue-300: #6da7ec;
   --seq-blue-450: #2a78d6;
@@ -54,13 +54,13 @@ body {
     --border: rgba(255, 255, 255, 0.1);
 
     --series-impl: #3987e5;
-    --series-test: #d95926;
+    --series-test: #c084fc;
     --series-bug: #898781;
 
     --status-good: #0ca30c;
     --status-warning: #fab219;
     --status-serious: #ec835a;
-    --status-critical: #e66767;
+    --status-critical: #ff5252;
   }
 }
 
@@ -76,13 +76,13 @@ body {
   --border: rgba(255, 255, 255, 0.1);
 
   --series-impl: #3987e5;
-  --series-test: #d95926;
+  --series-test: #c084fc;
   --series-bug: #898781;
 
   --status-good: #0ca30c;
   --status-warning: #fab219;
   --status-serious: #ec835a;
-  --status-critical: #e66767;
+  --status-critical: #ff5252;
 }
 
 .tabular-nums {

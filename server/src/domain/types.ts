@@ -44,6 +44,9 @@ export interface BoardDataResponse {
   generatedAt: string;
   today: string;
   vertical: string;
+  /** Produtividade usada nas previsões desta resposta — para a visualização analítica (por hora) no client. */
+  hoursPerPf: number;
+  hoursPerDay: number;
   sprints: SprintInfo[];
   activities: Activity[];
 }

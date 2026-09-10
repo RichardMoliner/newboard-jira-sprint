@@ -7,13 +7,18 @@ export function boardDataRouter(configPath: string): Router {
 
   router.get('/board-data', async (_req, res) => {
     const config = await readConfig(configPath);
-    if (!config.vertical) {
-      res.status(409).json({ error: 'Nenhuma vertical configurada ainda.' });
+    if (!config.vertical || !config.jiraUsername || !config.jiraPassword) {
+      res.status(409).json({ error: 'Configuração incompleta. Informe vertical, usuário e senha do Jira.' });
       return;
     }
 
     try {
-      const data = await fetchBoardData(config.vertical);
+      const data = await fetchBoardData(
+        config.vertical,
+        { username: config.jiraUsername, password: config.jiraPassword },
+        config.hoursPerPf ?? undefined,
+        config.hoursPerDay ?? undefined,
+      );
       res.json(data);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro desconhecido ao buscar dados do Jira.';

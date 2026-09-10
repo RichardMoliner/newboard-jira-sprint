@@ -18,6 +18,7 @@ function baseStory(overrides: Partial<RawStory> = {}): RawStory {
     statusCategory: 'Em andamento',
     storyPoints: 3,
     desenvolvedor: 'Guilherme Henrique Gibim de Mello',
+    assignee: 'Guilherme Henrique Gibim de Mello',
     testador: 'Luana de Souza Bez Batti',
     created: '2026-07-08T10:26:04.000-0300',
     updated: '2026-09-08T16:37:55.000-0300',
@@ -151,6 +152,30 @@ describe('mapActivity', () => {
       today: '2026-09-08',
     });
     expect(activity.bugs).toEqual(bugs);
+  });
+
+  test('falls back to the story assignee when there is no Implementação subtask to fill "desenvolvedor"', () => {
+    const activity = mapActivity({
+      story: baseStory({ desenvolvedor: null, assignee: 'Gabriela Camilo Serafim' }),
+      sprint,
+      implStartDate: null,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.developer).toBe('Gabriela Camilo Serafim');
+  });
+
+  test('defaults developer to "Não atribuído" when neither desenvolvedor nor assignee is set', () => {
+    const activity = mapActivity({
+      story: baseStory({ desenvolvedor: null, assignee: null }),
+      sprint,
+      implStartDate: null,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.developer).toBe('Não atribuído');
   });
 
   test('defaults tester to null when the story has no testador', () => {
