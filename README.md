@@ -7,6 +7,15 @@ e a página é atualizada sob demanda com o botão **Atualizar**.
 
 ## Como rodar
 
+### Modo fácil (Windows, sem usar terminal)
+
+Dê dois cliques em **`iniciar-painel.bat`**, na raiz do projeto. Ele instala as
+dependências sozinho na primeira vez, sobe o painel e abre o navegador
+automaticamente. Precisa estar na rede/VPN da Betha (veja o aviso abaixo). Para
+encerrar o painel, feche a janela preta que abrir.
+
+### Modo manual (qualquer sistema operacional)
+
 1. Instale as dependências (na raiz do projeto):
 
    ```
