@@ -13,12 +13,7 @@ e a página é atualizada sob demanda com o botão **Atualizar**.
    npm install
    ```
 
-2. Copie `.env.example` para `.env` (a URL base do Jira já vem preenchida,
-   igual para todo mundo):
-
-   ```
-   JIRA_BASE_URL=https://desenv.betha.com.br
-   ```
+2. Renomeie o arquivo `.env.example` para `.env`
 
 3. Suba o backend e o frontend juntos:
 
