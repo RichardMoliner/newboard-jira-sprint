@@ -278,6 +278,11 @@ export default function TimelineView({
   const hoverDayIndex = hover ? Math.floor(hover.x / dayPixelWidth) : null;
   const hoverDate = hoverDayIndex !== null ? days[hoverDayIndex]?.date ?? null : null;
   const hoverHour = analyticalView && hover ? START_HOUR + Math.floor((hover.x % dayPixelWidth) / HOUR_COLUMN_WIDTH) : null;
+  // Largura da régua de destaque: a coluna do dia inteiro na visão padrão, ou só a coluna da hora
+  // na visão analítica — sempre a mesma largura usada para desenhar aquela coluna na régua.
+  const hoverColumnWidth = analyticalView && hoverHour !== null ? HOUR_COLUMN_WIDTH : dayPixelWidth;
+  const hoverColumnLeft =
+    hoverDate !== null ? (analyticalView && hoverHour !== null ? xHour(hoverDate, hoverHour) : x(hoverDate)) : null;
 
   return (
     <div>
@@ -540,18 +545,16 @@ export default function TimelineView({
             }}
           />
 
-          {hoverDate && hover && (
+          {hoverDate && hover && hoverColumnLeft !== null && (
             <>
               <div
                 style={{
                   position: 'absolute',
                   top: 0,
                   bottom: 0,
-                  left:
-                    LABEL_COL_WIDTH +
-                    (analyticalView && hoverHour !== null ? xHour(hoverDate, hoverHour) + HOUR_COLUMN_WIDTH / 2 : x(hoverDate) + dayPixelWidth / 2),
-                  width: 0,
-                  borderLeft: '1.5px dashed var(--text-muted)',
+                  left: LABEL_COL_WIDTH + hoverColumnLeft,
+                  width: hoverColumnWidth,
+                  background: 'color-mix(in srgb, var(--text-muted) 14%, transparent)',
                   pointerEvents: 'none',
                 }}
               />
@@ -559,9 +562,7 @@ export default function TimelineView({
                 style={{
                   position: 'absolute',
                   top: Math.max(2, hover.y - 22),
-                  left:
-                    LABEL_COL_WIDTH +
-                    (analyticalView && hoverHour !== null ? xHour(hoverDate, hoverHour) + HOUR_COLUMN_WIDTH / 2 : x(hoverDate) + dayPixelWidth / 2),
+                  left: LABEL_COL_WIDTH + hoverColumnLeft + hoverColumnWidth / 2,
                   transform: 'translateX(-50%)',
                   background: 'var(--text-primary)',
                   color: 'var(--surface-1)',
@@ -613,7 +614,15 @@ function ActivityRow({
   const implLeft = analytical ? xHour(analytical.implStart.date, analytical.implStart.hour) : activity.implWindow && x(activity.implWindow.start);
   const implRight = analytical ? xHour(analytical.implEnd.date, analytical.implEnd.hour) : activity.implWindow && x(activity.implWindow.end);
   const testLeft = analytical ? xHour(analytical.implEnd.date, analytical.implEnd.hour) : activity.testWindow && x(activity.testWindow.start);
-  const testRight = analytical ? xHour(analytical.testEnd.date, analytical.testEnd.hour) : activity.testWindow && x(activity.testWindow.end);
+  // Concluída: a barra vai até a entrega real, não até o fim da janela de teste projetada — para
+  // tarefas herdadas que ficaram muito tempo paradas, a previsão original pode estar bem no
+  // passado em relação à data em que a tarefa foi de fato entregue.
+  const testRight =
+    activity.isDone && activity.deliveredDate
+      ? x(activity.deliveredDate)
+      : analytical
+        ? xHour(analytical.testEnd.date, analytical.testEnd.hour)
+        : activity.testWindow && x(activity.testWindow.end);
   const overdueLeft = analytical ? xHour(analytical.testEnd.date, analytical.testEnd.hour) : activity.dueDate !== null ? x(activity.dueDate) : null;
 
   return (
@@ -638,10 +647,12 @@ function ActivityRow({
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 3, fontSize: 10.5, color: 'var(--text-secondary)' }}>
               <StatusBadge activity={activity} />
               {activity.isCarried && <Tag color="var(--status-warning)">🕓 Herdada</Tag>}
-              <span>
-                <span style={{ color: 'var(--text-muted)' }}>Início: </span>
-                {formatShort(activity.startDate)}
-              </span>
+              {!activity.notStarted && (
+                <span>
+                  <span style={{ color: 'var(--text-muted)' }}>Início: </span>
+                  {formatShort(activity.startDate)}
+                </span>
+              )}
               {activity.isDone && activity.deliveredDate ? (
                 <>
                   {activity.dueDate && (
@@ -701,15 +712,21 @@ function ActivityRow({
               right={testRight}
               color={activity.isDone ? 'var(--status-good)' : 'var(--series-test)'}
               title={
-                analytical
-                  ? `Teste: ${formatShort(analytical.implEnd.date)} ${Math.round(analytical.implEnd.hour * 10) / 10}h a ${formatShort(analytical.testEnd.date)} ${Math.round(analytical.testEnd.hour * 10) / 10}h`
-                  : `Teste: ${formatShort(activity.testWindow!.start)} a ${formatShort(activity.testWindow!.end)}`
+                activity.isDone && activity.deliveredDate
+                  ? `Teste: ${formatShort(activity.testWindow!.start)} a ${formatShort(activity.deliveredDate)} (entregue)`
+                  : analytical
+                    ? `Teste: ${formatShort(analytical.implEnd.date)} ${Math.round(analytical.implEnd.hour * 10) / 10}h a ${formatShort(analytical.testEnd.date)} ${Math.round(analytical.testEnd.hour * 10) / 10}h`
+                    : `Teste: ${formatShort(activity.testWindow!.start)} a ${formatShort(activity.testWindow!.end)}`
               }
             />
             {activity.isOverdue && overdueLeft !== null && overdueLeft !== undefined && (
               <Bar left={overdueLeft} right={todayX} color="var(--status-critical)" title={`Atrasada desde ${formatShort(activity.dueDate!)}`} />
             )}
           </>
+        ) : activity.notStarted ? (
+          <span style={{ position: 'absolute', left: 4, top: 10, fontSize: 10, color: 'var(--text-muted)' }}>
+            ainda não iniciada
+          </span>
         ) : (
           <span style={{ position: 'absolute', left: x(activity.startDate) + 4, top: 10, fontSize: 10, color: 'var(--text-muted)' }}>
             sem estimativa
@@ -794,6 +811,7 @@ function Bar({
 
 function StatusBadge({ activity }: { activity: Activity }) {
   if (activity.isDone) return <Tag color="var(--status-good)">✅ Concluída</Tag>;
+  if (activity.notStarted) return <Tag color="var(--text-muted)">◌ Ainda não iniciada</Tag>;
   if (activity.isOverdue) return <Tag color="var(--status-critical)">⚠️ Atrasada - {activity.status}</Tag>;
   return <span>{activity.status}</span>;
 }
@@ -1048,7 +1066,9 @@ function buildDayList(minDate: string, maxDate: string, todayISO: string): DayIn
 function computeDomain(activities: Activity[], sprints: SprintInfo[], today: string): { minDate: string; maxDate: string } {
   const dates: string[] = [today, ...sprints.flatMap((s) => [s.startDate, s.endDate])];
   for (const a of activities) {
-    dates.push(a.startDate);
+    // Sem subtarefa de Implementação ainda, `startDate` é só a data de criação da story — não é
+    // um início real e não deve esticar o período exibido no eixo de dias.
+    if (!a.notStarted) dates.push(a.startDate);
     if (a.testWindow) dates.push(a.testWindow.end);
     if (a.dueDate) dates.push(a.dueDate);
   }
@@ -1063,9 +1083,15 @@ function groupByDeveloper(activities: Activity[]): [string, Activity[]][] {
     list.push(a);
     map.set(a.developer, list);
   }
-  // Concluídas primeiro, depois por data de início — dentro de cada desenvolvedor.
+  // Concluídas primeiro, depois por data de início, e as ainda não iniciadas sempre por último
+  // (não têm um início real para ordenar) — dentro de cada desenvolvedor.
   for (const list of map.values()) {
-    list.sort((a, b) => Number(b.isDone) - Number(a.isDone) || a.startDate.localeCompare(b.startDate));
+    list.sort(
+      (a, b) =>
+        Number(a.notStarted) - Number(b.notStarted) ||
+        Number(b.isDone) - Number(a.isDone) ||
+        a.startDate.localeCompare(b.startDate),
+    );
   }
   return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
 }

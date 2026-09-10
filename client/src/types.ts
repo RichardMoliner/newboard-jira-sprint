@@ -31,6 +31,7 @@ export interface Activity {
   status: string;
   isDone: boolean;
   isOverdue: boolean;
+  notStarted: boolean;
   implWindow: TimelineWindow | null;
   testWindow: TimelineWindow | null;
   bugs: BugSubtask[];

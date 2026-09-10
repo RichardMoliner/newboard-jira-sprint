@@ -101,6 +101,80 @@ describe('mapActivity', () => {
     expect(activity.testWindow).toBeNull();
   });
 
+  test('flags notStarted when there is no Implementação subtask yet and the story is not done', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 1.75, statusCategory: 'Novo', status: 'Novo', created: '2026-08-12T10:00:00.000-0300' }),
+      sprint,
+      implStartDate: null,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.notStarted).toBe(true);
+  });
+
+  test('does not flag notStarted once an Implementação subtask exists', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 1.75, statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.notStarted).toBe(false);
+  });
+
+  test('does not flag a done activity as notStarted, even without an Implementação subtask', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 1.75, statusCategory: 'Concluído', status: 'Atendida' }),
+      sprint,
+      implStartDate: null,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.notStarted).toBe(false);
+  });
+
+  test('does not project dueDate/implWindow/testWindow for a notStarted activity, even with a storyPoints estimate', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 1.75, statusCategory: 'Novo', created: '2026-08-12T10:00:00.000-0300' }),
+      sprint,
+      implStartDate: null,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.dueDate).toBeNull();
+    expect(activity.implWindow).toBeNull();
+    expect(activity.testWindow).toBeNull();
+  });
+
+  test('does not flag a notStarted activity as carried, even when its creation date predates the sprint', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 1.75, statusCategory: 'Novo', created: '2026-08-12T10:00:00.000-0300' }),
+      sprint, // sprint.startDate is 2026-09-03, after the creation date
+      implStartDate: null,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.isCarried).toBe(false);
+  });
+
+  test('does not flag a notStarted activity as overdue', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 1.75, statusCategory: 'Novo', created: '2026-01-01T10:00:00.000-0300' }),
+      sprint,
+      implStartDate: null,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.isOverdue).toBe(false);
+  });
+
   test('flags overdue when dueDate is in the past and status is not done', () => {
     const activity = mapActivity({
       story: baseStory({ storyPoints: 10, statusCategory: 'Em andamento' }),

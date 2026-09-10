@@ -59,8 +59,12 @@ export function mapActivity(params: {
   const startDate = implStartDate ?? dateOnly(story.created);
   const isDone = isDoneStatusCategory(story.statusCategory);
   const deliveredDate = isDone ? dateOnly(story.updated) : null;
+  // Sem subtarefa de Implementação ainda e não concluída: `startDate` é só a data de criação da
+  // story, não um início real — não dá pra projetar prazo nem considerar herdada a partir dela.
+  const notStarted = !isDone && implStartDate === null;
 
-  const timeline = story.storyPoints !== null ? computeTimeline(story.storyPoints, startDate, hoursPerPf, hoursPerDay) : null;
+  const timeline =
+    !notStarted && story.storyPoints !== null ? computeTimeline(story.storyPoints, startDate, hoursPerPf, hoursPerDay) : null;
   const dueDate = timeline?.test.end ?? null;
   const realizedBusinessDays = isDone && deliveredDate !== null ? businessDaysBetween(startDate, deliveredDate) : null;
   const assertividadePercent =
@@ -74,7 +78,7 @@ export function mapActivity(params: {
     title: story.summary,
     sprintId: sprint.id,
     sprintName: sprint.name,
-    isCarried: isCarried(startDate, sprint.startDate),
+    isCarried: notStarted ? false : isCarried(startDate, sprint.startDate),
     developer: story.desenvolvedor ?? story.assignee ?? 'Não atribuído',
     tester: story.testador,
     storyPoints: story.storyPoints,
@@ -87,6 +91,7 @@ export function mapActivity(params: {
     status: story.status,
     isDone,
     isOverdue: isOverdue(dueDate, isDone, today),
+    notStarted,
     implWindow: timeline?.impl ?? null,
     testWindow: timeline?.test ?? null,
     bugs,

@@ -22,6 +22,7 @@ function activity(overrides: Partial<Activity>): Activity {
     status: 'Em andamento',
     isDone: false,
     isOverdue: false,
+    notStarted: false,
     implWindow: null,
     testWindow: null,
     bugs: [],

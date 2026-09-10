@@ -34,6 +34,8 @@ export interface Activity {
   status: string;
   isDone: boolean;
   isOverdue: boolean;
+  /** True quando ainda não existe subtarefa de Implementação (o trabalho não começou de fato) e não está concluída. */
+  notStarted: boolean;
   implWindow: TimelineWindow | null;
   testWindow: TimelineWindow | null;
   bugs: BugSubtask[];
