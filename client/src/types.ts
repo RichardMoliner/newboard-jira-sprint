@@ -34,12 +34,12 @@ export interface Activity {
   dueDate: string | null;
   deliveredDate: string | null;
   deliveredOnTime: boolean | null;
-  realizedBusinessDays: number | null;
   assertividadePercent: number | null;
   status: string;
   isDone: boolean;
   isOverdue: boolean;
   notStarted: boolean;
+  implDone: boolean;
   implWindow: TimelineWindow | null;
   testWindow: TimelineWindow | null;
   implEstimatedHours: number | null;

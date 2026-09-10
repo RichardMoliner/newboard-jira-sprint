@@ -151,6 +151,31 @@ describe('mapActivity', () => {
     expect(activity.testWindow).toBeNull();
   });
 
+  test('exposes implDone as a field on the returned activity', () => {
+    const activity = mapActivity({
+      story: baseStory({ statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implDone: true,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.implDone).toBe(true);
+  });
+
+  test('defaults implDone to false when not provided', () => {
+    const activity = mapActivity({
+      story: baseStory({ statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.implDone).toBe(false);
+  });
+
   test('does not flag a notStarted activity as carried, even when its creation date predates the sprint', () => {
     const activity = mapActivity({
       story: baseStory({ storyPoints: 1.75, statusCategory: 'Novo', created: '2026-08-12T10:00:00.000-0300' }),
@@ -364,7 +389,7 @@ describe('mapActivity', () => {
     expect(activity.deliveredOnTime).toBeNull();
   });
 
-  test('leaves deliveredOnTime and realizedBusinessDays null for activities not done yet', () => {
+  test('leaves deliveredOnTime null for activities not done yet', () => {
     const activity = mapActivity({
       story: baseStory({ storyPoints: 10, statusCategory: 'Em andamento' }),
       sprint,
@@ -374,35 +399,66 @@ describe('mapActivity', () => {
       today: '2026-09-08',
     });
     expect(activity.deliveredOnTime).toBeNull();
-    expect(activity.realizedBusinessDays).toBeNull();
   });
 
-  test('computes realizedBusinessDays as the business days between startDate and deliveredDate', () => {
+  test('computes assertividadePercent from estimated hours vs. hours logged on Implementação + Teste', () => {
     const activity = mapActivity({
-      story: baseStory({ storyPoints: 10, statusCategory: 'Concluído', status: 'Atendida', updated: '2026-09-08T16:37:55.000-0300' }),
+      story: baseStory({ storyPoints: 10, statusCategory: 'Concluído', status: 'Atendida' }),
       sprint,
-      implStartDate: '2026-09-04', // Friday; deliveredDate 2026-09-08 (Tuesday, after the 05-07/09 weekend+holiday)
-      bugs: [],
-      baseUrl: 'https://desenv.betha.com.br',
-      today: '2026-09-08',
-    });
-    expect(activity.deliveredDate).toBe('2026-09-08');
-    expect(activity.realizedBusinessDays).toBe(1);
-  });
-
-  test('computes assertividadePercent from estimated vs realized hours for a done activity', () => {
-    const activity = mapActivity({
-      story: baseStory({ storyPoints: 10, statusCategory: 'Concluído', status: 'Atendida', updated: '2026-09-08T16:37:55.000-0300' }),
-      sprint,
-      implStartDate: '2026-09-04', // realizedBusinessDays: 1
+      implStartDate: '2026-09-04',
+      implLoggedHours: 5,
+      testLoggedHours: 3,
       bugs: [],
       baseUrl: 'https://desenv.betha.com.br',
       today: '2026-09-08',
       hoursPerPf: 5,
-      hoursPerDay: 8,
     });
-    // estimado: 10 PF x 5h/PF = 50h; realizado: 1 dia útil x 8h/dia = 8h -> 8/50 = 16%
+    // estimado: 10 PF x 5h/PF = 50h; apontado: 5h + 3h = 8h -> 8/50 = 16%
     expect(activity.assertividadePercent).toBeCloseTo(16);
+  });
+
+  test('sums implLoggedHours and testLoggedHours even when only one of them has data', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Concluído', status: 'Atendida' }),
+      sprint,
+      implStartDate: '2026-09-04',
+      implLoggedHours: 5,
+      testLoggedHours: null,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+      hoursPerPf: 5,
+    });
+    // estimado: 50h; apontado: 5h (testLoggedHours null tratado como 0) -> 5/50 = 10%
+    expect(activity.assertividadePercent).toBeCloseTo(10);
+  });
+
+  test('leaves assertividadePercent null when the activity is done but has no logged hours at all', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Concluído', status: 'Atendida' }),
+      sprint,
+      implStartDate: '2026-09-04',
+      implLoggedHours: null,
+      testLoggedHours: null,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.assertividadePercent).toBeNull();
+  });
+
+  test('leaves assertividadePercent null for an activity in progress, even with hours already logged', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-09-04',
+      implLoggedHours: 5,
+      testLoggedHours: 0,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.assertividadePercent).toBeNull();
   });
 
   test('leaves assertividadePercent null for activities not done yet', () => {

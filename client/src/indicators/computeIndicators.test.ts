@@ -17,12 +17,12 @@ function activity(overrides: Partial<Activity>): Activity {
     dueDate: '2026-09-10',
     deliveredDate: null,
     deliveredOnTime: null,
-    realizedBusinessDays: null,
     assertividadePercent: null,
     status: 'Em andamento',
     isDone: false,
     isOverdue: false,
     notStarted: false,
+    implDone: false,
     implWindow: null,
     testWindow: null,
     implEstimatedHours: null,
@@ -76,68 +76,85 @@ describe('computeKpis', () => {
 describe('computeRealizedProductivity', () => {
   test('returns null with zero sample size when there are no completed activities', () => {
     const activities = [activity({ key: 'A', isDone: false })];
-    const result = computeRealizedProductivity(activities, 5, 8);
+    const result = computeRealizedProductivity(activities, 5);
     expect(result.hoursPerPf).toBeNull();
     expect(result.accuracyPercent).toBeNull();
     expect(result.sampleSize).toBe(0);
   });
 
-  test('computes hours per PF for a single completed activity', () => {
-    const activities = [activity({ key: 'A', isDone: true, storyPoints: 5, realizedBusinessDays: 4 })];
-    // 4 dias úteis x 8h = 32h realizadas para 5 PF -> 6.4h/PF
-    const result = computeRealizedProductivity(activities, 5, 8);
+  test('computes hours per PF for a single completed activity from logged hours', () => {
+    const activities = [activity({ key: 'A', isDone: true, storyPoints: 5, implLoggedHours: 24, testLoggedHours: 8 })];
+    // 24h + 8h = 32h apontadas para 5 PF -> 6.4h/PF
+    const result = computeRealizedProductivity(activities, 5);
     expect(result.hoursPerPf).toBeCloseTo(6.4);
     expect(result.sampleSize).toBe(1);
   });
 
   test('weights the average by story points across completed activities', () => {
     const activities = [
-      activity({ key: 'A', isDone: true, storyPoints: 10, realizedBusinessDays: 8 }), // 64h / 10 PF
-      activity({ key: 'B', isDone: true, storyPoints: 2, realizedBusinessDays: 1 }), // 8h / 2 PF
+      activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 64, testLoggedHours: 0 }), // 64h / 10 PF
+      activity({ key: 'B', isDone: true, storyPoints: 2, implLoggedHours: 8, testLoggedHours: 0 }), // 8h / 2 PF
     ];
     // (64h + 8h) / (10 PF + 2 PF) = 72 / 12 = 6
-    const result = computeRealizedProductivity(activities, 5, 8);
+    const result = computeRealizedProductivity(activities, 5);
     expect(result.hoursPerPf).toBeCloseTo(72 / 12);
     expect(result.sampleSize).toBe(2);
   });
 
-  test('ignores activities not done, without an estimate, or without realizedBusinessDays', () => {
+  test('ignores activities not done, without an estimate, or without any logged hours', () => {
     const activities = [
-      activity({ key: 'A', isDone: true, storyPoints: 5, realizedBusinessDays: 4 }),
-      activity({ key: 'B', isDone: false, storyPoints: 5, realizedBusinessDays: 4 }),
-      activity({ key: 'C', isDone: true, storyPoints: null, realizedBusinessDays: 4 }),
-      activity({ key: 'D', isDone: true, storyPoints: 5, realizedBusinessDays: null }),
+      activity({ key: 'A', isDone: true, storyPoints: 5, implLoggedHours: 32, testLoggedHours: 0 }),
+      activity({ key: 'B', isDone: false, storyPoints: 5, implLoggedHours: 32 }),
+      activity({ key: 'C', isDone: true, storyPoints: null, implLoggedHours: 32 }),
+      activity({ key: 'D', isDone: true, storyPoints: 5, implLoggedHours: null, testLoggedHours: null }),
     ];
-    const result = computeRealizedProductivity(activities, 5, 8);
+    const result = computeRealizedProductivity(activities, 5);
     expect(result.sampleSize).toBe(1);
     expect(result.hoursPerPf).toBeCloseTo(6.4);
   });
 
-  test('computes 100% accuracy when total estimated hours match total realized hours', () => {
-    const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, realizedBusinessDays: 8 })];
-    // estimado: 10 PF x 8h/PF = 80h; realizado: 8 dias úteis x 10h/dia = 80h
-    const result = computeRealizedProductivity(activities, 8, 10);
+  test('treats a null implLoggedHours or testLoggedHours as 0 when summing, as long as one of them has data', () => {
+    const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 40, testLoggedHours: null })];
+    // apontado: 40h + 0h = 40h / 10 PF = 4h/PF
+    const result = computeRealizedProductivity(activities, 5);
+    expect(result.hoursPerPf).toBeCloseTo(4);
+  });
+
+  test('computes 100% accuracy when total estimated hours match total logged hours', () => {
+    const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 60, testLoggedHours: 20 })];
+    // estimado: 10 PF x 8h/PF = 80h; apontado: 60h + 20h = 80h
+    const result = computeRealizedProductivity(activities, 8);
     expect(result.accuracyPercent).toBeCloseTo(100);
   });
 
-  test('computes accuracy above 100% when the task took longer than estimated (subestimamos)', () => {
-    const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, realizedBusinessDays: 8 })];
-    // estimado: 10 PF x 5h/PF = 50h; realizado: 8 dias úteis x 8h/dia = 64h -> 64/50 = 128%
-    const result = computeRealizedProductivity(activities, 5, 8);
+  test('computes accuracy above 100% when more hours were logged than estimated (subestimamos)', () => {
+    const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 50, testLoggedHours: 14 })];
+    // estimado: 10 PF x 5h/PF = 50h; apontado: 50h + 14h = 64h -> 64/50 = 128%
+    const result = computeRealizedProductivity(activities, 5);
     expect(result.accuracyPercent).toBeCloseTo(128);
   });
 
-  test('computes accuracy below 100% when the task took less time than estimated (superestimamos)', () => {
-    const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, realizedBusinessDays: 6 })];
-    // estimado: 10 PF x 8h/PF = 80h; realizado: 6 dias úteis x 8h/dia = 48h -> 48/80 = 60%
-    const result = computeRealizedProductivity(activities, 8, 8);
+  test('computes accuracy below 100% when fewer hours were logged than estimated (superestimamos)', () => {
+    const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 30, testLoggedHours: 18 })];
+    // estimado: 10 PF x 8h/PF = 80h; apontado: 30h + 18h = 48h -> 48/80 = 60%
+    const result = computeRealizedProductivity(activities, 8);
     expect(result.accuracyPercent).toBeCloseTo(60);
   });
 
-  test('returns null accuracy when there are no eligible activities', () => {
-    const activities = [activity({ key: 'A', isDone: false, storyPoints: 5 })];
-    const result = computeRealizedProductivity(activities, 5, 8);
+  test('returns null for both metrics when there are no eligible activities', () => {
+    const activities = [activity({ key: 'A', isDone: false, storyPoints: 5, implLoggedHours: 10 })];
+    const result = computeRealizedProductivity(activities, 5);
+    expect(result.hoursPerPf).toBeNull();
     expect(result.accuracyPercent).toBeNull();
+    expect(result.sampleSize).toBe(0);
+  });
+
+  test('excludes a done activity with no logged hours at all', () => {
+    const activities = [activity({ key: 'A', isDone: true, storyPoints: 5, implLoggedHours: null, testLoggedHours: null })];
+    const result = computeRealizedProductivity(activities, 5);
+    expect(result.hoursPerPf).toBeNull();
+    expect(result.accuracyPercent).toBeNull();
+    expect(result.sampleSize).toBe(0);
   });
 });
 

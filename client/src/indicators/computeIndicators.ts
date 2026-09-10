@@ -38,32 +38,31 @@ export function computeKpis(activities: Activity[], _today: string): Kpis {
 export interface RealizedProductivity {
   hoursPerPf: number | null;
   /**
-   * % de assertividade agregado: total de horas realizadas / total de horas estimadas nas
-   * tarefas concluídas. 100% = bateram exatamente; abaixo de 100% superestimamos (a tarefa levou
-   * menos tempo que o previsto); acima de 100% subestimamos (levou mais tempo que o previsto).
+   * % de assertividade agregado: total de horas apontadas (Implementação + Teste) / total de
+   * horas estimadas (PF × horas/PF) nas tarefas concluídas. 100% = bateram exatamente; abaixo de
+   * 100% superestimamos (levou menos tempo que o previsto); acima de 100% subestimamos (levou
+   * mais tempo que o previsto).
    */
   accuracyPercent: number | null;
   sampleSize: number;
 }
 
 /**
- * Horas por PF realmente observadas nas tarefas concluídas: dias úteis do início até a entrega
- * (`realizedBusinessDays`) convertidos em horas pela produtividade da vertical, ponderados pelos
- * PFs de cada tarefa. Indicador "vivo" — muda conforme mais tarefas são concluídas.
+ * Horas por PF e % de assertividade a partir das horas realmente apontadas (worklog de
+ * Implementação + Teste) nas tarefas concluídas, ponderadas pelos PFs de cada uma. Indicador
+ * "vivo" — muda conforme mais tarefas são concluídas e mais apontamentos são lançados.
  */
-export function computeRealizedProductivity(activities: Activity[], hoursPerPf: number, hoursPerDay: number): RealizedProductivity {
+export function computeRealizedProductivity(activities: Activity[], hoursPerPf: number): RealizedProductivity {
   const eligible = activities.filter(
-    (a) => a.isDone && a.storyPoints !== null && a.storyPoints > 0 && a.realizedBusinessDays !== null,
+    (a) => a.isDone && a.storyPoints !== null && a.storyPoints > 0 && (a.implLoggedHours !== null || a.testLoggedHours !== null),
   );
   const totalStoryPoints = sum(eligible.map((a) => a.storyPoints ?? 0));
-  const totalRealizedHours = sum(eligible.map((a) => (a.realizedBusinessDays ?? 0) * hoursPerDay));
+  const totalLoggedHours = sum(eligible.map((a) => (a.implLoggedHours ?? 0) + (a.testLoggedHours ?? 0)));
   const totalEstimatedHours = totalStoryPoints * hoursPerPf;
 
-  const accuracyPercent = totalEstimatedHours > 0 ? (totalRealizedHours / totalEstimatedHours) * 100 : null;
-
   return {
-    hoursPerPf: totalStoryPoints > 0 ? totalRealizedHours / totalStoryPoints : null,
-    accuracyPercent,
+    hoursPerPf: totalStoryPoints > 0 ? totalLoggedHours / totalStoryPoints : null,
+    accuracyPercent: totalEstimatedHours > 0 ? (totalLoggedHours / totalEstimatedHours) * 100 : null,
     sampleSize: eligible.length,
   };
 }

@@ -986,16 +986,34 @@ function worklogTooltip(entries: Activity['worklogEntries']): string | undefined
 
 const HOURS_PAIR_TITLE = 'Apontado (worklog da subtarefa) / Previsto (a partir do PF e das horas por PF configuradas).';
 
+/** Verde se a Implementação (já atendida) levou menos horas que o previsto; vermelho se levou mais; null se não dá pra comparar. */
+function implCheckColor(activity: Activity): string | null {
+  if (!activity.implDone || activity.implLoggedHours === null || activity.implEstimatedHours === null) return null;
+  return activity.implLoggedHours <= activity.implEstimatedHours ? 'var(--status-good)' : 'var(--status-critical)';
+}
+
 function SideList({ activity }: { activity: Activity }) {
   const assertividadeTitle =
     activity.assertividadePercent !== null
-      ? 'Horas realizadas (dias úteis do início até a entrega × horas produtivas/dia) dividido pelas horas estimadas (PF × horas/PF). 100% = estimativa bateu exatamente com o realizado; abaixo de 100% superestimamos, acima subestimamos.'
+      ? 'Horas apontadas (Implementação + Teste) dividido pelas horas estimadas (PF × horas/PF). 100% = estimativa bateu exatamente com o apontado; abaixo de 100% superestimamos, acima subestimamos.'
       : undefined;
-  const items: [string, string, string?][] = [
+  const checkColor = implCheckColor(activity);
+  const items: [string, React.ReactNode, string?][] = [
     ['PF', activity.storyPoints !== null ? String(activity.storyPoints) : '—'],
     ['Dev', firstName(activity.developer)],
     ['Tester', activity.tester ? firstName(activity.tester) : '—'],
-    ['Impl. (h)', formatHoursPair(activity.implLoggedHours, activity.implEstimatedHours), HOURS_PAIR_TITLE],
+    [
+      'Impl. (h)',
+      <>
+        {formatHoursPair(activity.implLoggedHours, activity.implEstimatedHours)}
+        {checkColor && (
+          <span style={{ color: checkColor, marginLeft: 4, fontWeight: 700 }} title="Implementação atendida">
+            ✓
+          </span>
+        )}
+      </>,
+      HOURS_PAIR_TITLE,
+    ],
     ['Teste (h)', formatHoursPair(activity.testLoggedHours, activity.testEstimatedHours), HOURS_PAIR_TITLE],
     ['Assert.', activity.assertividadePercent !== null ? `${Math.round(activity.assertividadePercent)}%` : '—', assertividadeTitle],
   ];

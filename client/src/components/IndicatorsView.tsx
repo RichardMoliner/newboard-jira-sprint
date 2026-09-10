@@ -18,7 +18,6 @@ export default function IndicatorsView({
   sprintFilter,
   onSprintClick,
   hoursPerPf,
-  hoursPerDay,
 }: {
   activities: Activity[];
   sprints: SprintInfo[];
@@ -26,7 +25,6 @@ export default function IndicatorsView({
   sprintFilter: string[];
   onSprintClick: (id: string, shiftKey: boolean) => void;
   hoursPerPf: number;
-  hoursPerDay: number;
 }) {
   const filtered = useMemo(
     () => (sprintFilter.length === 0 ? activities : activities.filter((a) => sprintFilter.includes(a.sprintId))),
@@ -41,8 +39,8 @@ export default function IndicatorsView({
     [filtered, considerCarriedInProductivity],
   );
   const realizedProductivity = useMemo(
-    () => computeRealizedProductivity(productivityActivities, hoursPerPf, hoursPerDay),
-    [productivityActivities, hoursPerPf, hoursPerDay],
+    () => computeRealizedProductivity(productivityActivities, hoursPerPf),
+    [productivityActivities, hoursPerPf],
   );
   const people = useMemo(() => computePersonSummaries(filtered), [filtered]);
   const sprintSummaries = useMemo(() => computeSprintSummaries(filtered), [filtered]);
@@ -90,7 +88,7 @@ export default function IndicatorsView({
           suffix={
             realizedProductivity.sampleSize > 0
               ? `${realizedProductivity.sampleSize} concluída${realizedProductivity.sampleSize > 1 ? 's' : ''} · estimado ${hoursPerPf.toFixed(2)}`
-              : 'sem concluídas com estimativa'
+              : 'sem concluídas com apontamento'
           }
           accent={
             realizedProductivity.hoursPerPf === null
@@ -99,12 +97,16 @@ export default function IndicatorsView({
                 ? 'var(--status-warning)'
                 : 'var(--status-good)'
           }
-          title="Média de horas por Ponto de Função realmente gastas nas tarefas concluídas (dias úteis do início até a entrega × horas produtivas por dia), ponderada pelos PFs de cada tarefa e comparada com a estimativa configurada. Atualiza sozinho conforme mais tarefas são concluídas."
+          title="Média de horas por Ponto de Função realmente apontadas (worklog de Implementação + Teste) nas tarefas concluídas, ponderada pelos PFs de cada tarefa e comparada com a estimativa configurada. Atualiza sozinho conforme mais tarefas são concluídas e mais apontamentos são lançados."
         />
         <Kpi
           label="% de Assertividade"
           value={realizedProductivity.accuracyPercent !== null ? `${realizedProductivity.accuracyPercent.toFixed(0)}%` : '—'}
-          suffix={realizedProductivity.sampleSize > 0 ? `${realizedProductivity.sampleSize} concluída${realizedProductivity.sampleSize > 1 ? 's' : ''}` : 'sem concluídas'}
+          suffix={
+            realizedProductivity.sampleSize > 0
+              ? `${realizedProductivity.sampleSize} concluída${realizedProductivity.sampleSize > 1 ? 's' : ''}`
+              : 'sem concluídas'
+          }
           accent={
             realizedProductivity.accuracyPercent === null
               ? undefined
@@ -114,7 +116,7 @@ export default function IndicatorsView({
                   ? 'var(--status-warning)'
                   : 'var(--status-critical)'
           }
-          title="Total de horas realizadas dividido pelo total de horas estimadas (PF × horas/PF) nas tarefas concluídas. 100% = a estimativa bateu exatamente com o realizado. Abaixo de 100%, superestimamos (a tarefa levou menos tempo que o previsto); acima de 100%, subestimamos (levou mais tempo que o previsto). Atualiza sozinho conforme mais tarefas são concluídas."
+          title="Total de horas apontadas (worklog de Implementação + Teste) dividido pelo total de horas estimadas (PF × horas/PF) nas tarefas concluídas. 100% = a estimativa bateu exatamente com o apontado. Abaixo de 100%, superestimamos (levou menos tempo que o previsto); acima de 100%, subestimamos (levou mais tempo que o previsto). Atualiza sozinho conforme mais tarefas são concluídas."
         />
       </div>
 

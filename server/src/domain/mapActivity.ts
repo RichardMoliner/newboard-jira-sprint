@@ -81,10 +81,13 @@ export function mapActivity(params: {
   // usada no tooltip de PF, agora exposta como campo para comparar com o apontado (worklog).
   const implEstimatedHours = timeline ? businessDaysBetween(timeline.impl.start, timeline.impl.end) * hoursPerDay : null;
   const testEstimatedHours = timeline ? businessDaysBetween(timeline.test.start, timeline.test.end) * hoursPerDay : null;
-  const realizedBusinessDays = isDone && deliveredDate !== null ? businessDaysBetween(startDate, deliveredDate) : null;
+  // Assertividade compara o estimado (PF × horas/PF) com o realmente apontado nas subtarefas de
+  // Implementação/Teste — só faz sentido depois que a story está concluída (apontamento fechado).
+  const totalLoggedHours =
+    implLoggedHours !== null || testLoggedHours !== null ? (implLoggedHours ?? 0) + (testLoggedHours ?? 0) : null;
   const assertividadePercent =
-    story.storyPoints !== null && realizedBusinessDays !== null
-      ? computeAccuracyPercent(story.storyPoints * hoursPerPf, realizedBusinessDays * hoursPerDay)
+    isDone && story.storyPoints !== null && totalLoggedHours !== null
+      ? computeAccuracyPercent(story.storyPoints * hoursPerPf, totalLoggedHours)
       : null;
 
   return {
@@ -101,12 +104,12 @@ export function mapActivity(params: {
     dueDate,
     deliveredDate,
     deliveredOnTime: isDeliveredOnTime(deliveredDate, dueDate),
-    realizedBusinessDays,
     assertividadePercent,
     status,
     isDone,
     isOverdue: isOverdue(dueDate, isDone, today),
     notStarted,
+    implDone,
     implWindow: timeline?.impl ?? null,
     testWindow: timeline?.test ?? null,
     implEstimatedHours,

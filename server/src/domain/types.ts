@@ -35,15 +35,15 @@ export interface Activity {
   deliveredDate: string | null;
   /** Se a entrega ocorreu até a previsão; null quando ainda não foi concluída ou não há previsão para comparar. */
   deliveredOnTime: boolean | null;
-  /** Dias úteis do início até a entrega — só preenchido quando concluída; base do indicador de horas/PF realizado. */
-  realizedBusinessDays: number | null;
-  /** % de assertividade da estimativa desta tarefa (estimado x realizado); null quando ainda não concluída ou sem estimativa. */
+  /** % de assertividade: horas apontadas (Implementação + Teste) vs. horas estimadas (PF × horas/PF); null até a tarefa ser concluída ou sem apontamento algum. */
   assertividadePercent: number | null;
   status: string;
   isDone: boolean;
   isOverdue: boolean;
   /** True quando ainda não existe subtarefa de Implementação (o trabalho não começou de fato) e não está concluída. */
   notStarted: boolean;
+  /** True quando a(s) subtarefa(s) de Implementação já estão "Atendida" (independente do status geral da story). */
+  implDone: boolean;
   implWindow: TimelineWindow | null;
   testWindow: TimelineWindow | null;
   /** Horas úteis previstas para implementação/teste (dias úteis da janela × horas/dia); null sem estimativa. */
