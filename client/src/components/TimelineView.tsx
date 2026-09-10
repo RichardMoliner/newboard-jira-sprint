@@ -960,27 +960,24 @@ function firstName(fullName: string): string {
   return parts[0];
 }
 
-function formatHours(hours: number): string {
-  return `${Math.round(hours * 10) / 10}h`;
-}
-
-/** "Apontado / Previsto" — '—' de cada lado quando não há dado (sem subtarefa ainda / sem estimativa). */
-function formatHoursPair(logged: number | null, estimated: number | null): string {
-  if (logged === null && estimated === null) return '—';
-  return `${logged !== null ? formatHours(logged) : '—'} / ${estimated !== null ? formatHours(estimated) : '—'}`;
-}
-
-function formatWorklogDuration(hours: number): string {
+/** Converte horas decimais para "Xh" ou "XhMM" — não existe "137,7h", só 137h42min. */
+function formatHoursMinutes(hours: number): string {
   const totalMinutes = Math.round(hours * 60);
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
   return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, '0')}`;
 }
 
+/** "Apontado / Previsto" — '—' de cada lado quando não há dado (sem subtarefa ainda / sem estimativa). */
+function formatHoursPair(logged: number | null, estimated: number | null): string {
+  if (logged === null && estimated === null) return '—';
+  return `${logged !== null ? formatHoursMinutes(logged) : '—'} / ${estimated !== null ? formatHoursMinutes(estimated) : '—'}`;
+}
+
 /** Lista todos os apontamentos (Implementação + Teste) da atividade, para o tooltip do nome da tarefa. */
 function worklogTooltip(entries: Activity['worklogEntries']): string | undefined {
   if (entries.length === 0) return undefined;
-  const lines = entries.map((e) => `[${e.subtaskType}] ${formatShort(e.date)} · ${e.author} · ${formatWorklogDuration(e.hours)}`);
+  const lines = entries.map((e) => `[${e.subtaskType}] ${formatShort(e.date)} · ${e.author} · ${formatHoursMinutes(e.hours)}`);
   return `Apontamentos:\n${lines.join('\n')}`;
 }
 
