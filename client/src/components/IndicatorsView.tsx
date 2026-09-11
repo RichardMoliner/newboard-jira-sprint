@@ -141,7 +141,7 @@ export default function IndicatorsView({
           <Table
             columns={['Atividade', 'Sprint', 'Responsável', 'Previsão', 'SP']}
             rows={atRisk.map((a) => [
-              a.title,
+              `${a.key} - ${a.title}`,
               a.sprintName,
               a.developer,
               <span style={{ color: 'var(--status-critical)', fontWeight: 700 }}>{formatShort(a.dueDate!)}</span>,
@@ -158,7 +158,7 @@ export default function IndicatorsView({
           <Table
             columns={['Atividade', 'Sprint', 'Responsável', 'Início original', 'SP', 'Dias carregando']}
             rows={carried.map((a) => [
-              a.title,
+              `${a.key} - ${a.title}`,
               a.sprintName,
               a.developer,
               formatShort(a.startDate),
@@ -214,7 +214,7 @@ export default function IndicatorsView({
           <Table
             columns={['Atividade', 'Sprint', 'Responsável', 'Bugs']}
             rows={topBuggy.map((a) => [
-              a.title,
+              `${a.key} - ${a.title}`,
               a.sprintName,
               a.developer,
               <span style={{ fontWeight: 700, color: 'var(--status-critical)' }}>{a.bugCount}</span>,

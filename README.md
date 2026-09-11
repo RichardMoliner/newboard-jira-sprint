@@ -30,7 +30,9 @@ encerrar o painel, feche a janela preta que abrir.
    npm run dev
    ```
 
-4. Abra `http://localhost:5173`. Na primeira execução, selecione a **vertical**
+4. Abra `http://localhost:5173` (o Vite mostra no terminal a porta usada; se a
+   5173 já estiver ocupada por outro programa na máquina, ele sobe em outra
+   porta, como 5174). Na primeira execução, selecione a **vertical**
    do Jira que o painel deve acompanhar e informe o seu usuário e senha/token
    do Jira (as mesmas credenciais que você já usa no MCP `jira-desenv` do
    Claude Code) — essa configuração fica salva em `config.json` (não

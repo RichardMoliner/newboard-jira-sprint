@@ -50,7 +50,7 @@ echo  Para encerrar o painel, feche esta janela.
 echo ================================================================
 echo.
 
-start "" cmd /c "timeout /t 8 >nul && start http://localhost:5173"
+start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0abrir-navegador.ps1"
 call npm run dev
 
 pause

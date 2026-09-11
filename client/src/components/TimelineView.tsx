@@ -101,7 +101,9 @@ export default function TimelineView({
     const byDone = hideDone ? bySprint.filter((a) => !a.isDone) : bySprint;
     const query = searchQuery.trim().toLowerCase();
     if (!query) return byDone;
-    return byDone.filter((a) => a.title.toLowerCase().includes(query) || a.developer.toLowerCase().includes(query));
+    return byDone.filter(
+      (a) => a.title.toLowerCase().includes(query) || a.key.toLowerCase().includes(query) || a.developer.toLowerCase().includes(query),
+    );
   }, [activities, sprintFilter, hideDone, searchQuery]);
 
   const { minDate, maxDate } = useMemo(() => computeDomain(activities, sprints, today), [activities, sprints, today]);
@@ -518,7 +520,7 @@ function ActivityRow({
               title={worklogTooltip(activity.worklogEntries)}
               style={{ fontWeight: 600, color: 'var(--text-primary)', textDecoration: 'none' }}
             >
-              {activity.title}
+              {activity.key} - {activity.title}
             </a>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 3, fontSize: 10.5, color: 'var(--text-secondary)' }}>
               <StatusBadge activity={activity} />
