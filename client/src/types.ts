@@ -1,3 +1,11 @@
+export interface WorklogEntry {
+  subtaskType: 'Implementação' | 'Teste' | 'Bug';
+  author: string;
+  date: string;
+  hours: number;
+  comment: string | null;
+}
+
 export interface BugSubtask {
   key: string;
   title: string;
@@ -5,19 +13,12 @@ export interface BugSubtask {
   status: string;
   startDate: string;
   endDate: string;
+  worklogEntries: WorklogEntry[];
 }
 
 export interface TimelineWindow {
   start: string;
   end: string;
-}
-
-export interface WorklogEntry {
-  subtaskType: 'Implementação' | 'Teste';
-  author: string;
-  date: string;
-  hours: number;
-  comment: string | null;
 }
 
 export interface Activity {

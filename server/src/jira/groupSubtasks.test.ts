@@ -118,6 +118,7 @@ describe('groupSubtasks', () => {
         status: 'Disponível para testes',
         startDate: '2026-08-27',
         endDate: '2026-09-08',
+        worklogEntries: [],
       },
     ]);
   });
@@ -204,5 +205,40 @@ describe('groupSubtasks', () => {
       subtask({ worklog: { worklogs: [{ author: { displayName: 'Fulano' }, started: '2026-09-08T00:00:00.000-0300', timeSpentSeconds: 3600 }] } }),
     ]);
     expect(worklogEntriesByParent.get('EC-11420')?.[0].comment).toBeNull();
+  });
+
+  test('attaches the Bug subtask worklog entries onto its BugSubtask entry', () => {
+    const { bugsByParent } = groupSubtasks([
+      subtask({
+        key: 'EC-11983',
+        type: 'Bug',
+        worklog: {
+          worklogs: [{ author: { displayName: 'Fulano' }, started: '2026-09-08T00:00:00.000-0300', timeSpentSeconds: 3600, comment: 'Correção' }],
+        },
+      }),
+    ]);
+    expect(bugsByParent.get('EC-11420')?.[0].worklogEntries).toEqual([
+      { subtaskType: 'Bug', author: 'Fulano', date: '2026-09-08', hours: 1, comment: 'Correção' },
+    ]);
+  });
+
+  test('includes Bug worklog entries in the parent activity worklogEntriesByParent list too', () => {
+    const { worklogEntriesByParent } = groupSubtasks([
+      subtask({
+        key: 'EC-11983',
+        type: 'Bug',
+        worklog: {
+          worklogs: [{ author: { displayName: 'Fulano' }, started: '2026-09-08T00:00:00.000-0300', timeSpentSeconds: 3600 }],
+        },
+      }),
+    ]);
+    expect(worklogEntriesByParent.get('EC-11420')).toEqual([
+      { subtaskType: 'Bug', author: 'Fulano', date: '2026-09-08', hours: 1, comment: null },
+    ]);
+  });
+
+  test('a Bug with no worklog gets an empty worklogEntries array', () => {
+    const { bugsByParent } = groupSubtasks([subtask({ key: 'EC-11983', type: 'Bug' })]);
+    expect(bugsByParent.get('EC-11420')?.[0].worklogEntries).toEqual([]);
   });
 });

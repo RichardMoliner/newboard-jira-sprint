@@ -57,7 +57,7 @@ describe('computeKpis', () => {
 
   test('counts open bugs and computes the average bugs per activity', () => {
     const activities = [
-      activity({ key: 'A', bugs: [{ key: 'B1', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02' }] }),
+      activity({ key: 'A', bugs: [{ key: 'B1', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [] }] }),
       activity({ key: 'B', bugs: [] }),
     ];
 
@@ -168,7 +168,7 @@ describe('computePersonSummaries', () => {
         developer: 'Alicio',
         storyPoints: 5,
         isOverdue: true,
-        bugs: [{ key: 'B1', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02' }],
+        bugs: [{ key: 'B1', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [] }],
       }),
       activity({ key: 'C', developer: 'Bia', storyPoints: null }),
     ];
@@ -233,7 +233,7 @@ describe('computeSprintSummaries', () => {
 
 describe('topActivitiesByBugCount', () => {
   test('returns activities sorted by bug count descending, limited to N', () => {
-    const bug = { key: 'B', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02' };
+    const bug = { key: 'B', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [] };
     const activities = [
       activity({ key: 'A', title: 'Poucos bugs', bugs: [bug] }),
       activity({ key: 'B', title: 'Muitos bugs', bugs: [bug, bug, bug] }),

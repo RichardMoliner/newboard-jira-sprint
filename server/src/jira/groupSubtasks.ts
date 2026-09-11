@@ -16,7 +16,7 @@ export interface RawSubtask {
   created: string;
   updated: string;
   parent?: { key: string };
-  /** Só presente quando `worklog` é pedido como extraField na busca (subtarefas de Implementação/Teste). */
+  /** Só presente quando `worklog` é pedido como extraField na busca (subtarefas de Implementação/Teste/Bug). */
   worklog?: { worklogs: RawWorklogEntry[] };
 }
 
@@ -110,6 +110,14 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
     }
 
     if (subtask.type === 'Bug') {
+      const bugWorklogEntries: WorklogEntry[] = (subtask.worklog?.worklogs ?? []).map((worklog) => ({
+        subtaskType: 'Bug' as const,
+        author: worklog.author.displayName,
+        date: dateOnly(worklog.started),
+        hours: worklog.timeSpentSeconds / 3600,
+        comment: worklog.comment ?? null,
+      }));
+
       const bug: BugSubtask = {
         key: subtask.key,
         title: subtask.summary,
@@ -117,10 +125,17 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
         status: subtask.status,
         startDate: dateOnly(subtask.created),
         endDate: dateOnly(subtask.updated),
+        worklogEntries: bugWorklogEntries,
       };
       const list = bugsByParent.get(parentKey) ?? [];
       list.push(bug);
       bugsByParent.set(parentKey, list);
+
+      // Também entram na lista geral de apontamentos (tooltip da atividade) — a classificação em
+      // horas de Implementação/Teste acontece depois, em mapActivity, por quem apontou.
+      const allEntries = worklogEntriesByParent.get(parentKey) ?? [];
+      allEntries.push(...bugWorklogEntries);
+      worklogEntriesByParent.set(parentKey, allEntries);
     }
   }
 

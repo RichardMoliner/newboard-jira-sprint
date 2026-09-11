@@ -599,7 +599,7 @@ describe('mapActivity', () => {
 
   test('passes bugs through untouched', () => {
     const bugs = [
-      { key: 'EC-11983', title: 'Bug X', developer: 'Fulano', status: 'Em correção', startDate: '2026-08-27', endDate: '2026-09-03' },
+      { key: 'EC-11983', title: 'Bug X', developer: 'Fulano', status: 'Em correção', startDate: '2026-08-27', endDate: '2026-09-03', worklogEntries: [] },
     ];
     const activity = mapActivity({
       story: baseStory(),
@@ -610,6 +610,104 @@ describe('mapActivity', () => {
       today: '2026-09-08',
     });
     expect(activity.bugs).toEqual(bugs);
+  });
+
+  test('sums bug worklog hours logged by someone other than the tester into implLoggedHours', () => {
+    const bugs = [
+      {
+        key: 'EC-11983',
+        title: 'Bug X',
+        developer: 'Fulano',
+        status: 'Em correção',
+        startDate: '2026-08-27',
+        endDate: '2026-09-03',
+        worklogEntries: [
+          { subtaskType: 'Bug' as const, author: 'Guilherme Henrique Gibim de Mello', date: '2026-08-28', hours: 2, comment: null },
+        ],
+      },
+    ];
+    const activity = mapActivity({
+      story: baseStory(), // testador: 'Luana de Souza Bez Batti'
+      sprint,
+      implStartDate: '2026-08-04',
+      implLoggedHours: 5,
+      bugs,
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.implLoggedHours).toBeCloseTo(7); // 5h da Implementação + 2h do bug
+    expect(activity.testLoggedHours).toBeNull();
+  });
+
+  test('sums bug worklog hours logged by the tester into testLoggedHours', () => {
+    const bugs = [
+      {
+        key: 'EC-11983',
+        title: 'Bug X',
+        developer: 'Fulano',
+        status: 'Em correção',
+        startDate: '2026-08-27',
+        endDate: '2026-09-03',
+        worklogEntries: [{ subtaskType: 'Bug' as const, author: 'Luana de Souza Bez Batti', date: '2026-08-28', hours: 1.5, comment: null }],
+      },
+    ];
+    const activity = mapActivity({
+      story: baseStory(), // testador: 'Luana de Souza Bez Batti'
+      sprint,
+      implStartDate: '2026-08-04',
+      testLoggedHours: 3,
+      bugs,
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.testLoggedHours).toBeCloseTo(4.5); // 3h do Teste + 1.5h do bug
+    expect(activity.implLoggedHours).toBeNull();
+  });
+
+  test('matches the tester name case/accent-insensitively when classifying bug worklogs', () => {
+    const bugs = [
+      {
+        key: 'EC-11983',
+        title: 'Bug X',
+        developer: 'Fulano',
+        status: 'Em correção',
+        startDate: '2026-08-27',
+        endDate: '2026-09-03',
+        worklogEntries: [{ subtaskType: 'Bug' as const, author: 'LUANA DE SOUZA BEZ BATTI', date: '2026-08-28', hours: 1, comment: null }],
+      },
+    ];
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs,
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.testLoggedHours).toBeCloseTo(1);
+  });
+
+  test('starts implLoggedHours/testLoggedHours from bug worklogs alone, even with no Implementação/Teste subtask yet', () => {
+    const bugs = [
+      {
+        key: 'EC-11983',
+        title: 'Bug X',
+        developer: 'Fulano',
+        status: 'Em correção',
+        startDate: '2026-08-27',
+        endDate: '2026-09-03',
+        worklogEntries: [{ subtaskType: 'Bug' as const, author: 'Guilherme Henrique Gibim de Mello', date: '2026-08-28', hours: 2, comment: null }],
+      },
+    ];
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs,
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.implLoggedHours).toBeCloseTo(2);
   });
 
   test('falls back to the story assignee when there is no Implementação subtask to fill "desenvolvedor"', () => {
