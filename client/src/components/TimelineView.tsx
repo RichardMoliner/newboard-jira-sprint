@@ -990,17 +990,36 @@ function hoursCheckColor(done: boolean, logged: number | null, estimated: number
   return logged <= estimated ? 'var(--status-good)' : 'var(--status-critical)';
 }
 
-function HoursWithCheck({ logged, estimated, checkColor, checkTitle }: { logged: number | null; estimated: number | null; checkColor: string | null; checkTitle: string }) {
+function HoursWithCheck({ logged, estimated, indicator }: { logged: number | null; estimated: number | null; indicator: React.ReactNode }) {
   return (
     <>
       {formatHoursPair(logged, estimated)}
-      {checkColor && (
-        <span style={{ color: checkColor, marginLeft: 4, fontWeight: 700 }} title={checkTitle}>
-          ✓
-        </span>
-      )}
+      {indicator}
     </>
   );
+}
+
+function checkIndicator(color: string | null, title: string): React.ReactNode {
+  if (!color) return null;
+  return (
+    <span style={{ color, marginLeft: 4, fontWeight: 700 }} title={title}>
+      ✓
+    </span>
+  );
+}
+
+/** Enquanto a tarefa ainda está aberta e tem bugs, mostra um 🐛 no lugar do check — a implementação
+ * pode até estar "atendida", mas ainda há bugs em aberto pra resolver. */
+function implIndicator(activity: Activity): React.ReactNode {
+  if (!activity.isDone && activity.bugs.length > 0) {
+    const count = activity.bugs.length;
+    return (
+      <span style={{ marginLeft: 4 }} title={`${count} bug${count > 1 ? 's' : ''} nesta tarefa`}>
+        🐛
+      </span>
+    );
+  }
+  return checkIndicator(hoursCheckColor(activity.implDone, activity.implLoggedHours, activity.implEstimatedHours), 'Implementação atendida');
 }
 
 function SideList({ activity }: { activity: Activity }) {
@@ -1008,7 +1027,6 @@ function SideList({ activity }: { activity: Activity }) {
     activity.assertividadePercent !== null
       ? 'Horas apontadas (Implementação + Teste) dividido pelas horas estimadas (PF × horas/PF). 100% = estimativa bateu exatamente com o apontado; abaixo de 100% superestimamos, acima subestimamos.'
       : undefined;
-  const implCheckColor = hoursCheckColor(activity.implDone, activity.implLoggedHours, activity.implEstimatedHours);
   const testCheckColor = hoursCheckColor(activity.testDone, activity.testLoggedHours, activity.testEstimatedHours);
   const items: [string, React.ReactNode, string?][] = [
     ['PF', activity.storyPoints !== null ? String(activity.storyPoints) : '—'],
@@ -1016,12 +1034,12 @@ function SideList({ activity }: { activity: Activity }) {
     ['Tester', activity.tester ? firstName(activity.tester) : '—'],
     [
       'Impl. (h)',
-      <HoursWithCheck logged={activity.implLoggedHours} estimated={activity.implEstimatedHours} checkColor={implCheckColor} checkTitle="Implementação atendida" />,
+      <HoursWithCheck logged={activity.implLoggedHours} estimated={activity.implEstimatedHours} indicator={implIndicator(activity)} />,
       HOURS_PAIR_TITLE,
     ],
     [
       'Teste (h)',
-      <HoursWithCheck logged={activity.testLoggedHours} estimated={activity.testEstimatedHours} checkColor={testCheckColor} checkTitle="Teste atendido" />,
+      <HoursWithCheck logged={activity.testLoggedHours} estimated={activity.testEstimatedHours} indicator={checkIndicator(testCheckColor, 'Teste atendido')} />,
       HOURS_PAIR_TITLE,
     ],
     ['Assert.', activity.assertividadePercent !== null ? `${Math.round(activity.assertividadePercent)}%` : '—', assertividadeTitle],
