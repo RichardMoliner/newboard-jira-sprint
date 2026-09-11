@@ -251,6 +251,106 @@ describe('mapActivity', () => {
     expect(activity.status).toBe('Em andamento');
   });
 
+  test('overrides status to "Aguardando liberação" when the Teste subtask is done but the story is not', () => {
+    const activity = mapActivity({
+      story: baseStory({ status: 'Em andamento', statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implDone: true,
+      testDone: true,
+      testDoneDate: '2026-09-08',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.status).toBe('Aguardando liberação');
+  });
+
+  test('"Aguardando liberação" takes priority over "Em testes" when both implDone and testDone are true', () => {
+    const activity = mapActivity({
+      story: baseStory({ statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implDone: true,
+      testDone: true,
+      testDoneDate: '2026-09-08',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.status).toBe('Aguardando liberação');
+  });
+
+  test('keeps the original story status once the story itself is done, even if testDone is true', () => {
+    const activity = mapActivity({
+      story: baseStory({ status: 'Atendida', statusCategory: 'Concluído' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      testDone: true,
+      testDoneDate: '2026-09-08',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.status).toBe('Atendida');
+  });
+
+  test('uses the Teste subtask completion date as deliveredDate when testDone but the story is not formally done', () => {
+    const activity = mapActivity({
+      story: baseStory({ statusCategory: 'Em andamento', updated: '2026-01-01T00:00:00.000-0300' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      testDone: true,
+      testDoneDate: '2026-09-08',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.deliveredDate).toBe('2026-09-08');
+  });
+
+  test('leaves deliveredDate null when testDone is true but testDoneDate is missing', () => {
+    const activity = mapActivity({
+      story: baseStory({ statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      testDone: true,
+      testDoneDate: null,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.deliveredDate).toBeNull();
+  });
+
+  test('is not overdue once testDone is true, even with an expired dueDate, and exposes testDone', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04', // dueDate falls well before "today", would normally be overdue
+      testDone: true,
+      testDoneDate: '2026-09-08',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.isOverdue).toBe(false);
+    expect(activity.testDone).toBe(true);
+  });
+
+  test('defaults testDone to false and testDoneDate to not affecting deliveredDate when not provided', () => {
+    const activity = mapActivity({
+      story: baseStory({ statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.testDone).toBe(false);
+    expect(activity.deliveredDate).toBeNull();
+  });
+
   test('computes implEstimatedHours/testEstimatedHours from the projected windows', () => {
     const activity = mapActivity({
       story: baseStory({ storyPoints: 10 }),

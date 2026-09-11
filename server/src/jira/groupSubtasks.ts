@@ -25,6 +25,10 @@ export interface GroupedSubtasks {
   implStartByParent: Map<string, string>;
   /** True quando a(s) subtarefa(s) "Implementação" da atividade pai estão todas "Atendida". */
   implDoneByParent: Map<string, boolean>;
+  /** True quando a(s) subtarefa(s) "Teste" da atividade pai estão todas "Atendida". */
+  testDoneByParent: Map<string, boolean>;
+  /** Data (YYYY-MM-DD) mais recente de atualização das subtarefas "Teste" já atendidas — usada como data de entrega quando a story ainda não foi formalmente concluída. */
+  testDoneDateByParent: Map<string, string>;
   /** Soma das horas apontadas (worklog) nas subtarefas de Implementação/Teste de cada atividade pai. */
   implLoggedHoursByParent: Map<string, number>;
   testLoggedHoursByParent: Map<string, number>;
@@ -52,6 +56,8 @@ function isResolvedStatus(status: string): boolean {
 export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
   const implStartByParent = new Map<string, string>();
   const implStatusesByParent = new Map<string, string[]>();
+  const testStatusesByParent = new Map<string, string[]>();
+  const testUpdatedByParent = new Map<string, string>();
   const implLoggedSecondsByParent = new Map<string, number>();
   const testLoggedSecondsByParent = new Map<string, number>();
   const worklogEntriesByParent = new Map<string, WorklogEntry[]>();
@@ -92,6 +98,14 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
     }
 
     if (subtask.type === 'Teste') {
+      const statuses = testStatusesByParent.get(parentKey) ?? [];
+      statuses.push(subtask.status);
+      testStatusesByParent.set(parentKey, statuses);
+      const updatedDate = dateOnly(subtask.updated);
+      const current = testUpdatedByParent.get(parentKey);
+      if (!current || updatedDate > current) {
+        testUpdatedByParent.set(parentKey, updatedDate);
+      }
       addWorklogs(subtask, parentKey, 'Teste', testLoggedSecondsByParent);
     }
 
@@ -115,6 +129,11 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
     implDoneByParent.set(parentKey, statuses.every(isResolvedStatus));
   }
 
+  const testDoneByParent = new Map<string, boolean>();
+  for (const [parentKey, statuses] of testStatusesByParent) {
+    testDoneByParent.set(parentKey, statuses.every(isResolvedStatus));
+  }
+
   const implLoggedHoursByParent = new Map<string, number>();
   for (const [parentKey, seconds] of implLoggedSecondsByParent) {
     implLoggedHoursByParent.set(parentKey, seconds / 3600);
@@ -132,6 +151,8 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
   return {
     implStartByParent,
     implDoneByParent,
+    testDoneByParent,
+    testDoneDateByParent: testUpdatedByParent,
     implLoggedHoursByParent,
     testLoggedHoursByParent,
     worklogEntriesByParent,

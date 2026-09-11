@@ -61,8 +61,16 @@ export async function fetchBoardData(
     ),
   ]);
 
-  const { implStartByParent, implDoneByParent, implLoggedHoursByParent, testLoggedHoursByParent, worklogEntriesByParent, bugsByParent } =
-    groupSubtasks(subtasks);
+  const {
+    implStartByParent,
+    implDoneByParent,
+    testDoneByParent,
+    testDoneDateByParent,
+    implLoggedHoursByParent,
+    testLoggedHoursByParent,
+    worklogEntriesByParent,
+    bugsByParent,
+  } = groupSubtasks(subtasks);
 
   const storyDetails = await mapWithConcurrency(storyHits, GET_ISSUE_CONCURRENCY, async (hit) => {
     try {
@@ -100,6 +108,8 @@ export async function fetchBoardData(
         sprint,
         implStartDate: implStartByParent.get(story.key) ?? null,
         implDone: implDoneByParent.get(story.key) ?? false,
+        testDone: testDoneByParent.get(story.key) ?? false,
+        testDoneDate: testDoneDateByParent.get(story.key) ?? null,
         implLoggedHours: implLoggedHoursByParent.get(story.key) ?? null,
         testLoggedHours: testLoggedHoursByParent.get(story.key) ?? null,
         worklogEntries: worklogEntriesByParent.get(story.key) ?? [],

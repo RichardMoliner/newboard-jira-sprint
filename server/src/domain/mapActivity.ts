@@ -40,6 +40,8 @@ export function mapActivity(params: {
   sprint: ParsedSprint;
   implStartDate: string | null;
   implDone?: boolean;
+  testDone?: boolean;
+  testDoneDate?: string | null;
   implLoggedHours?: number | null;
   testLoggedHours?: number | null;
   worklogEntries?: WorklogEntry[];
@@ -54,6 +56,8 @@ export function mapActivity(params: {
     sprint,
     implStartDate,
     implDone = false,
+    testDone = false,
+    testDoneDate = null,
     implLoggedHours = null,
     testLoggedHours = null,
     worklogEntries = [],
@@ -66,13 +70,15 @@ export function mapActivity(params: {
 
   const startDate = implStartDate ?? dateOnly(story.created);
   const isDone = isDoneStatusCategory(story.statusCategory);
-  const deliveredDate = isDone ? dateOnly(story.updated) : null;
+  // Sem a story formalmente concluída no Jira, mas com a subtarefa de Teste já atendida, usamos a
+  // data dela como entrega — o trabalho terminou de fato, só falta a liberação/fechamento formal.
+  const deliveredDate = isDone ? dateOnly(story.updated) : testDone && testDoneDate !== null ? testDoneDate : null;
   // Sem subtarefa de Implementação ainda e não concluída: `startDate` é só a data de criação da
   // story, não um início real — não dá pra projetar prazo nem considerar herdada a partir dela.
   const notStarted = !isDone && implStartDate === null;
-  // Subtarefa de Implementação atendida mas a story ainda não foi marcada como concluída: o
-  // trabalho de fato já passou para a fase de testes, mesmo que o status do Jira ainda não reflita isso.
-  const status = !isDone && implDone ? 'Em testes' : story.status;
+  // Progressão do status conforme as subtarefas avançam, quando o status do Jira ainda não reflete isso:
+  // Teste atendida -> aguardando liberação; só Implementação atendida -> em testes; senão, status real.
+  const status = isDone ? story.status : testDone ? 'Aguardando liberação' : implDone ? 'Em testes' : story.status;
 
   const timeline =
     !notStarted && story.storyPoints !== null ? computeTimeline(story.storyPoints, startDate, hoursPerPf, hoursPerDay) : null;
@@ -107,9 +113,12 @@ export function mapActivity(params: {
     assertividadePercent,
     status,
     isDone,
-    isOverdue: isOverdue(dueDate, isDone, today),
+    // Uma vez que os testes já foram atendidos, a tarefa não está mais "atrasada" de fato — só
+    // aguardando liberação/fechamento formal.
+    isOverdue: isOverdue(dueDate, isDone || testDone, today),
     notStarted,
     implDone,
+    testDone,
     implWindow: timeline?.impl ?? null,
     testWindow: timeline?.test ?? null,
     implEstimatedHours,

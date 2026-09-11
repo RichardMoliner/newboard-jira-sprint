@@ -40,6 +40,7 @@ export interface Activity {
   isOverdue: boolean;
   notStarted: boolean;
   implDone: boolean;
+  testDone: boolean;
   implWindow: TimelineWindow | null;
   testWindow: TimelineWindow | null;
   implEstimatedHours: number | null;

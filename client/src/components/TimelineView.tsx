@@ -614,11 +614,11 @@ function ActivityRow({
   const implLeft = analytical ? xHour(analytical.implStart.date, analytical.implStart.hour) : activity.implWindow && x(activity.implWindow.start);
   const implRight = analytical ? xHour(analytical.implEnd.date, analytical.implEnd.hour) : activity.implWindow && x(activity.implWindow.end);
   const testLeft = analytical ? xHour(analytical.implEnd.date, analytical.implEnd.hour) : activity.testWindow && x(activity.testWindow.start);
-  // Concluída: a barra vai até a entrega real, não até o fim da janela de teste projetada — para
-  // tarefas herdadas que ficaram muito tempo paradas, a previsão original pode estar bem no
-  // passado em relação à data em que a tarefa foi de fato entregue.
+  // Concluída (ou com o teste já atendido): a barra vai até a entrega real, não até o fim da
+  // janela de teste projetada — para tarefas herdadas que ficaram muito tempo paradas, a previsão
+  // original pode estar bem no passado em relação à data em que o trabalho foi de fato entregue.
   const testRight =
-    activity.isDone && activity.deliveredDate
+    (activity.isDone || activity.testDone) && activity.deliveredDate
       ? x(activity.deliveredDate)
       : analytical
         ? xHour(analytical.testEnd.date, analytical.testEnd.hour)
@@ -659,7 +659,7 @@ function ActivityRow({
                   {formatShort(activity.startDate)}
                 </span>
               )}
-              {activity.isDone && activity.deliveredDate ? (
+              {(activity.isDone || activity.testDone) && activity.deliveredDate ? (
                 <>
                   {activity.dueDate && (
                     <span>
@@ -706,7 +706,7 @@ function ActivityRow({
             <Bar
               left={implLeft}
               right={implRight}
-              color={activity.isDone ? 'var(--status-good)' : 'var(--series-impl)'}
+              color={activity.isDone || activity.testDone ? 'var(--status-good)' : 'var(--series-impl)'}
               title={
                 analytical
                   ? `Implementação: ${formatShort(analytical.implStart.date)} ${analytical.implStart.hour}h a ${formatShort(analytical.implEnd.date)} ${Math.round(analytical.implEnd.hour * 10) / 10}h`
@@ -716,9 +716,9 @@ function ActivityRow({
             <Bar
               left={testLeft}
               right={testRight}
-              color={activity.isDone ? 'var(--status-good)' : 'var(--series-test)'}
+              color={activity.isDone || activity.testDone ? 'var(--status-good)' : 'var(--series-test)'}
               title={
-                activity.isDone && activity.deliveredDate
+                (activity.isDone || activity.testDone) && activity.deliveredDate
                   ? `Teste: ${formatShort(activity.testWindow!.start)} a ${formatShort(activity.deliveredDate)} (entregue)`
                   : analytical
                     ? `Teste: ${formatShort(analytical.implEnd.date)} ${Math.round(analytical.implEnd.hour * 10) / 10}h a ${formatShort(analytical.testEnd.date)} ${Math.round(analytical.testEnd.hour * 10) / 10}h`
@@ -818,6 +818,7 @@ function Bar({
 function StatusBadge({ activity }: { activity: Activity }) {
   if (activity.isDone) return <Tag color="var(--status-good)">✅ Concluída</Tag>;
   if (activity.notStarted) return <Tag color="var(--text-muted)">◌ Ainda não iniciada</Tag>;
+  if (activity.testDone) return <Tag color="var(--status-good)">📦 Aguardando liberação</Tag>;
   if (activity.isOverdue) return <Tag color="var(--status-critical)">⚠️ Atrasada - {activity.status}</Tag>;
   return <span>{activity.status}</span>;
 }
@@ -983,10 +984,23 @@ function worklogTooltip(entries: Activity['worklogEntries']): string | undefined
 
 const HOURS_PAIR_TITLE = 'Apontado (worklog da subtarefa) / Previsto (a partir do PF e das horas por PF configuradas).';
 
-/** Verde se a Implementação (já atendida) levou menos horas que o previsto; vermelho se levou mais; null se não dá pra comparar. */
-function implCheckColor(activity: Activity): string | null {
-  if (!activity.implDone || activity.implLoggedHours === null || activity.implEstimatedHours === null) return null;
-  return activity.implLoggedHours <= activity.implEstimatedHours ? 'var(--status-good)' : 'var(--status-critical)';
+/** Verde se a fase (já atendida) levou menos horas que o previsto; vermelho se levou mais; null se não dá pra comparar. */
+function hoursCheckColor(done: boolean, logged: number | null, estimated: number | null): string | null {
+  if (!done || logged === null || estimated === null) return null;
+  return logged <= estimated ? 'var(--status-good)' : 'var(--status-critical)';
+}
+
+function HoursWithCheck({ logged, estimated, checkColor, checkTitle }: { logged: number | null; estimated: number | null; checkColor: string | null; checkTitle: string }) {
+  return (
+    <>
+      {formatHoursPair(logged, estimated)}
+      {checkColor && (
+        <span style={{ color: checkColor, marginLeft: 4, fontWeight: 700 }} title={checkTitle}>
+          ✓
+        </span>
+      )}
+    </>
+  );
 }
 
 function SideList({ activity }: { activity: Activity }) {
@@ -994,24 +1008,22 @@ function SideList({ activity }: { activity: Activity }) {
     activity.assertividadePercent !== null
       ? 'Horas apontadas (Implementação + Teste) dividido pelas horas estimadas (PF × horas/PF). 100% = estimativa bateu exatamente com o apontado; abaixo de 100% superestimamos, acima subestimamos.'
       : undefined;
-  const checkColor = implCheckColor(activity);
+  const implCheckColor = hoursCheckColor(activity.implDone, activity.implLoggedHours, activity.implEstimatedHours);
+  const testCheckColor = hoursCheckColor(activity.testDone, activity.testLoggedHours, activity.testEstimatedHours);
   const items: [string, React.ReactNode, string?][] = [
     ['PF', activity.storyPoints !== null ? String(activity.storyPoints) : '—'],
     ['Dev', firstName(activity.developer)],
     ['Tester', activity.tester ? firstName(activity.tester) : '—'],
     [
       'Impl. (h)',
-      <>
-        {formatHoursPair(activity.implLoggedHours, activity.implEstimatedHours)}
-        {checkColor && (
-          <span style={{ color: checkColor, marginLeft: 4, fontWeight: 700 }} title="Implementação atendida">
-            ✓
-          </span>
-        )}
-      </>,
+      <HoursWithCheck logged={activity.implLoggedHours} estimated={activity.implEstimatedHours} checkColor={implCheckColor} checkTitle="Implementação atendida" />,
       HOURS_PAIR_TITLE,
     ],
-    ['Teste (h)', formatHoursPair(activity.testLoggedHours, activity.testEstimatedHours), HOURS_PAIR_TITLE],
+    [
+      'Teste (h)',
+      <HoursWithCheck logged={activity.testLoggedHours} estimated={activity.testEstimatedHours} checkColor={testCheckColor} checkTitle="Teste atendido" />,
+      HOURS_PAIR_TITLE,
+    ],
     ['Assert.', activity.assertividadePercent !== null ? `${Math.round(activity.assertividadePercent)}%` : '—', assertividadeTitle],
   ];
   return (

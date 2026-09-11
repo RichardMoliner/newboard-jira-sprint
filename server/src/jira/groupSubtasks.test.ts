@@ -67,6 +67,36 @@ describe('groupSubtasks', () => {
     expect(implDoneByParent.has('EC-11420')).toBe(false);
   });
 
+  test('flags testDoneByParent true when the Teste subtask is Atendida', () => {
+    const { testDoneByParent } = groupSubtasks([subtask({ type: 'Teste', status: 'Atendida' })]);
+    expect(testDoneByParent.get('EC-11420')).toBe(true);
+  });
+
+  test('flags testDoneByParent false when the Teste subtask is not Atendida', () => {
+    const { testDoneByParent } = groupSubtasks([subtask({ type: 'Teste', status: 'Em andamento' })]);
+    expect(testDoneByParent.get('EC-11420')).toBe(false);
+  });
+
+  test('leaves testDoneByParent unset for a parent with no Teste subtask', () => {
+    const { testDoneByParent } = groupSubtasks([subtask({ type: 'Implementação' })]);
+    expect(testDoneByParent.has('EC-11420')).toBe(false);
+  });
+
+  test('records the Teste subtask updated date (date-only) into testDoneDateByParent', () => {
+    const { testDoneDateByParent } = groupSubtasks([
+      subtask({ type: 'Teste', status: 'Atendida', updated: '2026-09-09T14:17:29.000-0300' }),
+    ]);
+    expect(testDoneDateByParent.get('EC-11420')).toBe('2026-09-09');
+  });
+
+  test('picks the latest updated date across multiple Teste subtasks of the same parent', () => {
+    const { testDoneDateByParent } = groupSubtasks([
+      subtask({ key: 'EC-1', type: 'Teste', updated: '2026-09-05T00:00:00.000-0300' }),
+      subtask({ key: 'EC-2', type: 'Teste', updated: '2026-09-09T00:00:00.000-0300' }),
+    ]);
+    expect(testDoneDateByParent.get('EC-11420')).toBe('2026-09-09');
+  });
+
   test('groups Bug subtasks under their parent key as BugSubtask entries', () => {
     const { bugsByParent } = groupSubtasks([
       subtask({
