@@ -611,26 +611,44 @@ function ActivityRow({
   const bugCount = activity.bugs.length;
   const analytical = analyticalView ? computeAnalyticalWindows(activity, hoursPerPf, hoursPerDay) : null;
 
-  const implLeft = analytical ? xHour(analytical.implStart.date, analytical.implStart.hour) : activity.implWindow && x(activity.implWindow.start);
-  const implRight = analytical ? xHour(analytical.implEnd.date, analytical.implEnd.hour) : activity.implWindow && x(activity.implWindow.end);
-  // O teste "começa de verdade" no primeiro apontamento lançado na subtarefa de Teste — não na
-  // data teórica de fim da Implementação, que raramente bate com quando o tester de fato começou.
+  // Caixa tracejada = janela ESTIMADA (fixa, nunca muda) — a "expectativa".
+  const implBoxLeft = analytical ? xHour(analytical.implStart.date, analytical.implStart.hour) : activity.implWindow && x(activity.implWindow.start);
+  const implBoxRight = analytical ? xHour(analytical.implEnd.date, analytical.implEnd.hour) : activity.implWindow && x(activity.implWindow.end);
+  const testBoxLeft = analytical ? xHour(analytical.implEnd.date, analytical.implEnd.hour) : activity.testWindow && x(activity.testWindow.start);
+  const testBoxRight = analytical ? xHour(analytical.testEnd.date, analytical.testEnd.hour) : activity.testWindow && x(activity.testWindow.end);
+
+  // Preenchimento sólido = progresso REAL ("realizado"): cresce do início real até hoje (ou até a
+  // entrega), passando da caixa quando atrasa — nesse caso a caixa marca onde deveria ter terminado.
   const firstTestWorklogDate = activity.worklogEntries.find((e) => e.subtaskType === 'Teste')?.date ?? null;
-  const testStartDate = firstTestWorklogDate ?? activity.testWindow?.start ?? null;
-  const testLeft = firstTestWorklogDate
-    ? x(firstTestWorklogDate)
-    : analytical
-      ? xHour(analytical.implEnd.date, analytical.implEnd.hour)
-      : activity.testWindow && x(activity.testWindow.start);
-  // Concluída (ou com o teste já atendido): a barra vai até a entrega real, não até o fim da
-  // janela de teste projetada — para tarefas herdadas que ficaram muito tempo paradas, a previsão
-  // original pode estar bem no passado em relação à data em que o trabalho foi de fato entregue.
-  const testRight =
-    (activity.isDone || activity.testDone) && activity.deliveredDate
-      ? x(activity.deliveredDate)
+  const testHasRealProgress = firstTestWorklogDate !== null || activity.testDone || (activity.testLoggedHours ?? 0) > 0;
+
+  const implFillLeft = implBoxLeft;
+  const implFillRight =
+    implBoxLeft === null || implBoxLeft === undefined
+      ? null
       : analytical
-        ? xHour(analytical.testEnd.date, analytical.testEnd.hour)
-        : activity.testWindow && x(activity.testWindow.end);
+        ? implBoxRight
+        : Math.max(
+            firstTestWorklogDate
+              ? x(firstTestWorklogDate)
+              : activity.isDone && activity.deliveredDate
+                ? x(activity.deliveredDate)
+                : todayX,
+            implBoxLeft,
+          );
+
+  const testFillLeft = firstTestWorklogDate ? x(firstTestWorklogDate) : testBoxLeft;
+  const testFillRight =
+    testFillLeft === null || testFillLeft === undefined
+      ? null
+      : analytical
+        ? testBoxRight
+        : !testHasRealProgress
+          ? testFillLeft
+          : (activity.isDone || activity.testDone) && activity.deliveredDate
+            ? x(activity.deliveredDate)
+            : todayX;
+
   const overdueLeft = analytical ? xHour(analytical.testEnd.date, analytical.testEnd.hour) : activity.dueDate !== null ? x(activity.dueDate) : null;
 
   return (
@@ -709,29 +727,47 @@ function ActivityRow({
         </div>
       </div>
       <div style={{ position: 'relative', height: 34, borderBottom: '1px solid var(--gridline)' }}>
-        {implLeft !== null && implLeft !== undefined && implRight !== null && implRight !== undefined && testLeft !== null && testLeft !== undefined && testRight !== null && testRight !== undefined ? (
+        {implBoxLeft !== null && implBoxLeft !== undefined && implBoxRight !== null && implBoxRight !== undefined && testBoxLeft !== null && testBoxLeft !== undefined && testBoxRight !== null && testBoxRight !== undefined ? (
           <>
-            <Bar
-              left={implLeft}
-              right={implRight}
-              color={activity.isDone || activity.testDone ? 'var(--status-good)' : 'var(--series-impl)'}
-              title={
+            <PhaseBar
+              boxLeft={implBoxLeft}
+              boxRight={implBoxRight}
+              fillLeft={implFillLeft!}
+              fillRight={implFillRight!}
+              boxColor="var(--series-impl)"
+              fillColor={activity.isDone || activity.testDone ? 'var(--status-good)' : 'var(--series-impl)'}
+              boxTitle={
                 analytical
-                  ? `Implementação: ${formatShort(analytical.implStart.date)} ${analytical.implStart.hour}h a ${formatShort(analytical.implEnd.date)} ${Math.round(analytical.implEnd.hour * 10) / 10}h`
-                  : `Implementação: ${formatShort(activity.implWindow!.start)} a ${formatShort(activity.implWindow!.end)}`
+                  ? `Implementação (previsto): ${formatShort(analytical.implStart.date)} ${analytical.implStart.hour}h a ${formatShort(analytical.implEnd.date)} ${Math.round(analytical.implEnd.hour * 10) / 10}h`
+                  : `Implementação (previsto): ${formatShort(activity.implWindow!.start)} a ${formatShort(activity.implWindow!.end)}`
               }
+              fillTitle={
+                activity.implLoggedHours !== null
+                  ? `Implementação (realizado): ${formatHoursMinutes(activity.implLoggedHours)} apontadas${activity.implEstimatedHours !== null ? ` de ${formatHoursMinutes(activity.implEstimatedHours)} previstas` : ''}`
+                  : `Em andamento desde ${formatShort(activity.implWindow!.start)}`
+              }
+              markerTitle={`Previsão era terminar a Implementação até ${formatShort(activity.implWindow!.end)}`}
             />
-            <Bar
-              left={testLeft}
-              right={testRight}
-              color={activity.isDone || activity.testDone ? 'var(--status-good)' : 'var(--series-test)'}
-              title={
-                (activity.isDone || activity.testDone) && activity.deliveredDate
-                  ? `Teste: ${formatShort(testStartDate!)} a ${formatShort(activity.deliveredDate)} (entregue)${firstTestWorklogDate ? ' — início real (1º apontamento)' : ''}`
-                  : analytical
-                    ? `Teste: ${formatShort(analytical.implEnd.date)} ${Math.round(analytical.implEnd.hour * 10) / 10}h a ${formatShort(analytical.testEnd.date)} ${Math.round(analytical.testEnd.hour * 10) / 10}h`
-                    : `Teste: ${formatShort(testStartDate!)} a ${formatShort(activity.testWindow!.end)}${firstTestWorklogDate ? ' — início real (1º apontamento)' : ''}`
+            <PhaseBar
+              boxLeft={testBoxLeft}
+              boxRight={testBoxRight}
+              fillLeft={testFillLeft!}
+              fillRight={testFillRight!}
+              boxColor="var(--series-test)"
+              fillColor={activity.isDone || activity.testDone ? 'var(--status-good)' : 'var(--series-test)'}
+              boxTitle={
+                analytical
+                  ? `Teste (previsto): ${formatShort(analytical.implEnd.date)} ${Math.round(analytical.implEnd.hour * 10) / 10}h a ${formatShort(analytical.testEnd.date)} ${Math.round(analytical.testEnd.hour * 10) / 10}h`
+                  : `Teste (previsto): ${formatShort(activity.testWindow!.start)} a ${formatShort(activity.testWindow!.end)}`
               }
+              fillTitle={
+                !testHasRealProgress
+                  ? 'Teste ainda não iniciado'
+                  : activity.testLoggedHours !== null
+                    ? `Teste (realizado): ${formatHoursMinutes(activity.testLoggedHours)} apontadas${activity.testEstimatedHours !== null ? ` de ${formatHoursMinutes(activity.testEstimatedHours)} previstas` : ''}`
+                    : `Em andamento desde ${formatShort(firstTestWorklogDate ?? activity.testWindow!.start)}`
+              }
+              markerTitle={`Previsão era terminar o Teste até ${formatShort(activity.testWindow!.end)}`}
             />
             {activity.isOverdue && overdueLeft !== null && overdueLeft !== undefined && (
               <Bar left={overdueLeft} right={todayX} color="var(--status-critical)" title={`Atrasada desde ${formatShort(activity.dueDate!)}`} />
@@ -820,6 +856,82 @@ function Bar({
         borderRadius: 4,
       }}
     />
+  );
+}
+
+/**
+ * Caixa tracejada = janela estimada (fixa); preenchimento sólido = progresso real, que cresce a
+ * partir do mesmo início e pode passar da caixa quando atrasa — nesse caso aparece uma marca
+ * vertical no fim da caixa, indicando onde a fase deveria ter terminado.
+ */
+function PhaseBar({
+  boxLeft,
+  boxRight,
+  fillLeft,
+  fillRight,
+  boxColor,
+  fillColor,
+  boxTitle,
+  fillTitle,
+  markerTitle,
+}: {
+  boxLeft: number;
+  boxRight: number;
+  fillLeft: number;
+  fillRight: number;
+  boxColor: string;
+  fillColor: string;
+  boxTitle: string;
+  fillTitle: string;
+  markerTitle: string;
+}) {
+  const boxWidth = Math.max(boxRight - boxLeft, 6);
+  const fillWidth = fillRight - fillLeft;
+  const overruns = fillRight > boxRight + 1;
+  return (
+    <>
+      <div
+        title={boxTitle}
+        style={{
+          position: 'absolute',
+          left: boxLeft,
+          width: boxWidth,
+          top: 9,
+          height: 16,
+          border: `1.5px dashed ${boxColor}`,
+          borderRadius: 4,
+          boxSizing: 'border-box',
+          pointerEvents: overruns ? 'none' : undefined,
+        }}
+      />
+      {fillWidth > 0 && (
+        <div
+          title={fillTitle}
+          style={{
+            position: 'absolute',
+            left: fillLeft,
+            width: Math.max(fillWidth, 3),
+            top: 12,
+            height: 10,
+            background: fillColor,
+            borderRadius: 3,
+          }}
+        />
+      )}
+      {overruns && (
+        <div
+          title={markerTitle}
+          style={{
+            position: 'absolute',
+            left: boxRight - 1,
+            top: 4,
+            width: 2,
+            height: 26,
+            background: 'var(--status-critical)',
+          }}
+        />
+      )}
+    </>
   );
 }
 
