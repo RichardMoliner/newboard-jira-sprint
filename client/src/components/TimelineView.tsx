@@ -8,13 +8,6 @@ const LABEL_COL_WIDTH = 460;
 // início do mês atual mesmo quando ele estiver perto do fim do período (poucos dias futuros).
 const RIGHT_SCROLL_BUFFER = 3200;
 
-// Visualização analítica (por hora): janela fixa de expediente exibida, 08h-18h.
-const START_HOUR = 8;
-const HOURS_WINDOW = 10;
-const HOUR_COLUMN_WIDTH = 16;
-// Deve espelhar IMPL_SHARE em server/src/compute/timeline.ts.
-const IMPL_SHARE = 0.7;
-
 const MONTH_ABBREV = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
 function toISODate(date: Date): string {
@@ -83,79 +76,16 @@ function isBusinessDay(dateISO: string): boolean {
   return !isHoliday(dateISO);
 }
 
-function nextBusinessDay(dateISO: string): string {
-  let cursor = addDays(dateISO, 1);
-  while (!isBusinessDay(cursor)) cursor = addDays(cursor, 1);
-  return cursor;
-}
-
-interface HourPoint {
-  date: string;
-  hour: number;
-}
-
-/**
- * Avança `hours` horas produtivas a partir de um ponto (data, hora), respeitando o expediente
- * (08h + `productiveHoursPerDay`) e pulando fins de semana/feriados — usado só na visualização
- * analítica, para posicionar as barras com precisão de hora a partir dos PFs.
- */
-function addProductiveHours(point: HourPoint, hours: number, productiveHoursPerDay: number): HourPoint {
-  let date = point.date;
-  let hour = point.hour;
-  while (!isBusinessDay(date)) {
-    date = addDays(date, 1);
-    hour = START_HOUR;
-  }
-  let remaining = hours;
-  while (remaining > 1e-9) {
-    const capacity = START_HOUR + productiveHoursPerDay - hour;
-    if (capacity <= 0) {
-      date = nextBusinessDay(date);
-      hour = START_HOUR;
-      continue;
-    }
-    const consume = Math.min(capacity, remaining);
-    hour += consume;
-    remaining -= consume;
-  }
-  return { date, hour };
-}
-
-interface AnalyticalWindows {
-  implStart: HourPoint;
-  implEnd: HourPoint;
-  testEnd: HourPoint;
-}
-
-/** Projeta impl/teste com precisão de hora a partir dos PFs, sem o arredondamento em dias inteiros da visão padrão. */
-function computeAnalyticalWindows(activity: Activity, hoursPerPf: number, hoursPerDay: number): AnalyticalWindows | null {
-  if (activity.storyPoints === null) return null;
-  const productiveHoursPerDay = Math.min(hoursPerDay, HOURS_WINDOW);
-  let startDate = activity.startDate;
-  while (!isBusinessDay(startDate)) startDate = addDays(startDate, 1);
-  const implStart: HourPoint = { date: startDate, hour: START_HOUR };
-  const totalHours = activity.storyPoints * hoursPerPf;
-  const implHours = totalHours * IMPL_SHARE;
-  const testHours = totalHours - implHours;
-  const implEnd = addProductiveHours(implStart, implHours, productiveHoursPerDay);
-  const testEnd = addProductiveHours(implEnd, testHours, productiveHoursPerDay);
-  return { implStart, implEnd, testEnd };
-}
-
 export default function TimelineView({
   activities,
   sprints,
   today,
-  hoursPerPf,
-  hoursPerDay,
   sprintFilter,
   onSprintClick,
 }: {
   activities: Activity[];
   sprints: SprintInfo[];
   today: string;
-  hoursPerPf: number;
-  hoursPerDay: number;
   sprintFilter: string[];
   onSprintClick: (id: string, shiftKey: boolean) => void;
 }) {
@@ -163,7 +93,6 @@ export default function TimelineView({
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
   const [dayWidth, setDayWidth] = useState(MIN_COLUMN_WIDTH);
   const [searchQuery, setSearchQuery] = useState('');
-  const [analyticalView, setAnalyticalView] = useState(false);
   const [hideDone, setHideDone] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -181,8 +110,7 @@ export default function TimelineView({
   const currentMonthDays = useMemo(() => days.filter((d) => d.isCurrentMonth), [days]);
 
   // Calcula a largura das colunas para que o mês atual (duração da sprint) preencha bem a tela
-  // disponível, em vez de ficar com colunas estreitas de tamanho fixo em telas largas. Só se
-  // aplica à visão padrão — a analítica usa uma largura de coluna fixa por hora.
+  // disponível, em vez de ficar com colunas estreitas de tamanho fixo em telas largas.
   useLayoutEffect(() => {
     function recompute() {
       const el = scrollRef.current;
@@ -196,7 +124,7 @@ export default function TimelineView({
     return () => window.removeEventListener('resize', recompute);
   }, [currentMonthDays.length]);
 
-  const dayPixelWidth = analyticalView ? HOUR_COLUMN_WIDTH * HOURS_WINDOW : dayWidth;
+  const dayPixelWidth = dayWidth;
   const realTimelineWidth = Math.max(1, days.length) * dayPixelWidth;
   const monthStartX = currentMonthDays[0] ? currentMonthDays[0].index * dayPixelWidth : 0;
   const timelineWidth = Math.max(realTimelineWidth, monthStartX + RIGHT_SCROLL_BUFFER);
@@ -211,7 +139,7 @@ export default function TimelineView({
     });
   }
 
-  /** Posiciona uma data (início do expediente daquele dia) na régua — dia inteiro na visão padrão, primeira hora na analítica. */
+  /** Posiciona uma data na régua (início do dia). */
   function x(dateISO: string): number {
     const exact = dayIndexByDate.get(dateISO);
     if (exact !== undefined) return exact * dayPixelWidth;
@@ -225,35 +153,21 @@ export default function TimelineView({
     return dateISO < minDate ? 0 : (days.length - 1) * dayPixelWidth;
   }
 
-  /** Só usada na visão analítica: posição com precisão de hora dentro do dia. */
-  function xHour(dateISO: string, hour: number): number {
-    return x(dateISO) + (hour - START_HOUR) * HOUR_COLUMN_WIDTH;
-  }
-
-  // Na visão analítica, a linha de "hoje" acompanha (aproximadamente) a hora atual do
-  // computador dentro do expediente exibido; na visão padrão, marca só o dia.
-  const nowHour = new Date().getHours() + new Date().getMinutes() / 60;
-  const todayX = analyticalView ? xHour(today, Math.min(Math.max(nowHour, START_HOUR), START_HOUR + HOURS_WINDOW)) : x(today);
+  const todayX = x(today);
 
   const hasResults = filtered.length > 0;
 
-  // Ao carregar/mudar o período (ou recalcular a largura das colunas, ou trocar de visão),
-  // começa no início do mês atual em vez do dia mais antigo (que pode ser uma tarefa herdada de
-  // meses atrás) — quem quiser ver antes rola para a esquerda. Na visão analítica, começa em hoje
-  // em vez do mês, já que a régua por hora fica muito mais estreita e é o dia atual que interessa.
-  // Também reaplica quando a busca deixa de estar vazia: sem isso, o navegador zera o scrollLeft
-  // sozinho enquanto o empty state (bem mais estreito) está visível, e a posição nunca volta
-  // quando os resultados reaparecem.
+  // Ao carregar/mudar o período (ou recalcular a largura das colunas), começa no início do mês
+  // atual em vez do dia mais antigo (que pode ser uma tarefa herdada de meses atrás) — quem quiser
+  // ver antes rola para a esquerda. Também reaplica quando a busca deixa de estar vazia: sem isso,
+  // o navegador zera o scrollLeft sozinho enquanto o empty state (bem mais estreito) está visível,
+  // e a posição nunca volta quando os resultados reaparecem.
   useEffect(() => {
     if (!hasResults) return;
-    const start = analyticalView
-      ? x(today)
-      : currentMonthDays[0]
-        ? currentMonthDays[0].index * dayPixelWidth
-        : todayX;
+    const start = currentMonthDays[0] ? currentMonthDays[0].index * dayPixelWidth : todayX;
     scrollRef.current?.scrollTo({ left: Math.max(0, start) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minDate, maxDate, dayPixelWidth, hasResults, analyticalView]);
+  }, [minDate, maxDate, dayPixelWidth, hasResults]);
 
   function handleMouseMove(e: React.MouseEvent<HTMLDivElement>) {
     const container = scrollRef.current;
@@ -277,12 +191,10 @@ export default function TimelineView({
 
   const hoverDayIndex = hover ? Math.floor(hover.x / dayPixelWidth) : null;
   const hoverDate = hoverDayIndex !== null ? days[hoverDayIndex]?.date ?? null : null;
-  const hoverHour = analyticalView && hover ? START_HOUR + Math.floor((hover.x % dayPixelWidth) / HOUR_COLUMN_WIDTH) : null;
-  // Largura da régua de destaque: a coluna do dia inteiro na visão padrão, ou só a coluna da hora
-  // na visão analítica — sempre a mesma largura usada para desenhar aquela coluna na régua.
-  const hoverColumnWidth = analyticalView && hoverHour !== null ? HOUR_COLUMN_WIDTH : dayPixelWidth;
-  const hoverColumnLeft =
-    hoverDate !== null ? (analyticalView && hoverHour !== null ? xHour(hoverDate, hoverHour) : x(hoverDate)) : null;
+  // Largura da régua de destaque: a coluna do dia inteiro — mesma largura usada para desenhar
+  // aquela coluna na régua.
+  const hoverColumnWidth = dayPixelWidth;
+  const hoverColumnLeft = hoverDate !== null ? x(hoverDate) : null;
 
   return (
     <div>
@@ -297,12 +209,6 @@ export default function TimelineView({
           />
         ))}
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginLeft: 'auto' }}>
-          <SwitchPill
-            active={analyticalView}
-            onClick={() => setAnalyticalView((v) => !v)}
-            label="Visão analítica (por hora)"
-            title="Mostra a linha do tempo em horas (08h-18h), com as barras posicionadas a partir dos Pontos de Função, sem arredondar para dias inteiros."
-          />
           <SwitchPill active={hideDone} onClick={() => setHideDone((v) => !v)} label="Ocultar concluídas" />
           <div style={{ position: 'relative' }}>
             <input
@@ -394,87 +300,44 @@ export default function TimelineView({
             >
               Atividade
             </div>
-            <div style={{ position: 'relative', height: analyticalView ? 46 : 34, borderBottom: '1px solid var(--gridline)' }}>
-              {analyticalView
-                ? days.map((day) => (
+            <div style={{ position: 'relative', height: 34, borderBottom: '1px solid var(--gridline)' }}>
+              {days.map((day) => (
+                <div
+                  key={day.date}
+                  style={{
+                    position: 'absolute',
+                    left: day.index * dayPixelWidth,
+                    width: dayPixelWidth,
+                    top: 0,
+                    bottom: 0,
+                    borderLeft: day.isMonthStart ? '1px solid var(--baseline)' : undefined,
+                    textAlign: 'center',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: day.date === today || day.isCurrentMonth ? 700 : 400,
+                      color: day.date === today ? 'var(--status-critical)' : day.isCurrentMonth ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      paddingTop: 4,
+                    }}
+                  >
+                    {day.dayOfMonth}
+                  </div>
+                  {day.isMonthStart && (
                     <div
-                      key={day.date}
                       style={{
-                        position: 'absolute',
-                        left: day.index * dayPixelWidth,
-                        width: dayPixelWidth,
-                        top: 0,
-                        bottom: 0,
-                        borderLeft: '1px solid var(--baseline)',
+                        fontSize: 9,
+                        fontWeight: 700,
+                        color: day.isCurrentMonth ? 'var(--series-impl)' : 'var(--text-muted)',
+                        textTransform: 'uppercase',
                       }}
                     >
-                      <div
-                        style={{
-                          fontSize: 9.5,
-                          fontWeight: day.date === today || day.isCurrentMonth ? 700 : 400,
-                          color: day.date === today ? 'var(--status-critical)' : day.isCurrentMonth ? 'var(--text-primary)' : 'var(--text-secondary)',
-                          textAlign: 'center',
-                          paddingTop: 3,
-                        }}
-                      >
-                        {day.dayOfMonth}/{day.monthLabel}
-                      </div>
-                      <div style={{ display: 'flex' }}>
-                        {Array.from({ length: HOURS_WINDOW }, (_, i) => START_HOUR + i).map((hour) => (
-                          <div
-                            key={hour}
-                            style={{
-                              width: HOUR_COLUMN_WIDTH,
-                              textAlign: 'center',
-                              fontSize: 7,
-                              paddingTop: 2,
-                              overflow: 'hidden',
-                              color: 'var(--text-muted)',
-                            }}
-                          >
-                            {hour}
-                          </div>
-                        ))}
-                      </div>
+                      {day.monthLabel}
                     </div>
-                  ))
-                : days.map((day) => (
-                    <div
-                      key={day.date}
-                      style={{
-                        position: 'absolute',
-                        left: day.index * dayPixelWidth,
-                        width: dayPixelWidth,
-                        top: 0,
-                        bottom: 0,
-                        borderLeft: day.isMonthStart ? '1px solid var(--baseline)' : undefined,
-                        textAlign: 'center',
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 10,
-                          fontWeight: day.date === today || day.isCurrentMonth ? 700 : 400,
-                          color: day.date === today ? 'var(--status-critical)' : day.isCurrentMonth ? 'var(--text-primary)' : 'var(--text-secondary)',
-                          paddingTop: 4,
-                        }}
-                      >
-                        {day.dayOfMonth}
-                      </div>
-                      {day.isMonthStart && (
-                        <div
-                          style={{
-                            fontSize: 9,
-                            fontWeight: 700,
-                            color: day.isCurrentMonth ? 'var(--series-impl)' : 'var(--text-muted)',
-                            textTransform: 'uppercase',
-                          }}
-                        >
-                          {day.monthLabel}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 
@@ -502,11 +365,7 @@ export default function TimelineView({
                   key={activity.key}
                   activity={activity}
                   x={x}
-                  xHour={xHour}
                   todayX={todayX}
-                  analyticalView={analyticalView}
-                  hoursPerPf={hoursPerPf}
-                  hoursPerDay={hoursPerDay}
                   bugsExpanded={expandedBugs.has(activity.key)}
                   onToggleBugs={() => toggleIn(setExpandedBugs, activity.key)}
                 />
@@ -514,10 +373,9 @@ export default function TimelineView({
             </div>
           ))}
 
-          {!analyticalView &&
-            days
-              .filter((d) => d.isMonthStart)
-              .map((day) => (
+          {days
+            .filter((d) => d.isMonthStart)
+            .map((day) => (
                 <div
                   key={day.date}
                   style={{
@@ -533,7 +391,7 @@ export default function TimelineView({
               ))}
 
           <div
-            title={analyticalView ? `Agora (${formatShort(today)} ${Math.round(nowHour)}h, aprox.)` : `Hoje (${formatShort(today)})`}
+            title={`Hoje (${formatShort(today)})`}
             style={{
               position: 'absolute',
               top: 0,
@@ -576,7 +434,6 @@ export default function TimelineView({
                 }}
               >
                 {formatShort(hoverDate)}
-                {analyticalView && hoverHour !== null ? ` ${hoverHour}h` : ''}
               </div>
             </>
           )}
@@ -590,32 +447,23 @@ export default function TimelineView({
 function ActivityRow({
   activity,
   x,
-  xHour,
   todayX,
-  analyticalView,
-  hoursPerPf,
-  hoursPerDay,
   bugsExpanded,
   onToggleBugs,
 }: {
   activity: Activity;
   x: (d: string) => number;
-  xHour: (d: string, hour: number) => number;
   todayX: number;
-  analyticalView: boolean;
-  hoursPerPf: number;
-  hoursPerDay: number;
   bugsExpanded: boolean;
   onToggleBugs: () => void;
 }) {
   const bugCount = activity.bugs.length;
-  const analytical = analyticalView ? computeAnalyticalWindows(activity, hoursPerPf, hoursPerDay) : null;
 
   // Caixa tracejada = janela ESTIMADA (fixa, nunca muda) — a "expectativa".
-  const implBoxLeft = analytical ? xHour(analytical.implStart.date, analytical.implStart.hour) : activity.implWindow && x(activity.implWindow.start);
-  const implBoxRight = analytical ? xHour(analytical.implEnd.date, analytical.implEnd.hour) : activity.implWindow && x(activity.implWindow.end);
-  const testBoxLeft = analytical ? xHour(analytical.implEnd.date, analytical.implEnd.hour) : activity.testWindow && x(activity.testWindow.start);
-  const testBoxRight = analytical ? xHour(analytical.testEnd.date, analytical.testEnd.hour) : activity.testWindow && x(activity.testWindow.end);
+  const implBoxLeft = activity.implWindow && x(activity.implWindow.start);
+  const implBoxRight = activity.implWindow && x(activity.implWindow.end);
+  const testBoxLeft = activity.testWindow && x(activity.testWindow.start);
+  const testBoxRight = activity.testWindow && x(activity.testWindow.end);
 
   // Preenchimento sólido = progresso REAL ("realizado"): cresce do início real até hoje (ou até a
   // entrega), passando da caixa quando atrasa — nesse caso a caixa marca onde deveria ter terminado.
@@ -626,30 +474,26 @@ function ActivityRow({
   const implFillRight =
     implBoxLeft === null || implBoxLeft === undefined
       ? null
-      : analytical
-        ? implBoxRight
-        : Math.max(
-            firstTestWorklogDate
-              ? x(firstTestWorklogDate)
-              : activity.isDone && activity.deliveredDate
-                ? x(activity.deliveredDate)
-                : todayX,
-            implBoxLeft,
-          );
+      : Math.max(
+          firstTestWorklogDate
+            ? x(firstTestWorklogDate)
+            : activity.isDone && activity.deliveredDate
+              ? x(activity.deliveredDate)
+              : todayX,
+          implBoxLeft,
+        );
 
   const testFillLeft = firstTestWorklogDate ? x(firstTestWorklogDate) : testBoxLeft;
   const testFillRight =
     testFillLeft === null || testFillLeft === undefined
       ? null
-      : analytical
-        ? testBoxRight
-        : !testHasRealProgress
-          ? testFillLeft
-          : (activity.isDone || activity.testDone) && activity.deliveredDate
-            ? x(activity.deliveredDate)
-            : todayX;
+      : !testHasRealProgress
+        ? testFillLeft
+        : (activity.isDone || activity.testDone) && activity.deliveredDate
+          ? x(activity.deliveredDate)
+          : todayX;
 
-  const overdueLeft = analytical ? xHour(analytical.testEnd.date, analytical.testEnd.hour) : activity.dueDate !== null ? x(activity.dueDate) : null;
+  const overdueLeft = activity.dueDate !== null ? x(activity.dueDate) : null;
 
   return (
     <>
@@ -736,11 +580,7 @@ function ActivityRow({
               fillRight={implFillRight!}
               boxColor="var(--series-impl)"
               fillColor={activity.isDone || activity.testDone ? 'var(--status-good)' : 'var(--series-impl)'}
-              boxTitle={
-                analytical
-                  ? `Implementação (previsto): ${formatShort(analytical.implStart.date)} ${analytical.implStart.hour}h a ${formatShort(analytical.implEnd.date)} ${Math.round(analytical.implEnd.hour * 10) / 10}h`
-                  : `Implementação (previsto): ${formatShort(activity.implWindow!.start)} a ${formatShort(activity.implWindow!.end)}`
-              }
+              boxTitle={`Implementação (previsto): ${formatShort(activity.implWindow!.start)} a ${formatShort(activity.implWindow!.end)}`}
               fillTitle={
                 activity.implLoggedHours !== null
                   ? `Implementação (realizado): ${formatHoursMinutes(activity.implLoggedHours)} apontadas${activity.implEstimatedHours !== null ? ` de ${formatHoursMinutes(activity.implEstimatedHours)} previstas` : ''}`
@@ -755,11 +595,7 @@ function ActivityRow({
               fillRight={testFillRight!}
               boxColor="var(--series-test)"
               fillColor={activity.isDone || activity.testDone ? 'var(--status-good)' : 'var(--series-test)'}
-              boxTitle={
-                analytical
-                  ? `Teste (previsto): ${formatShort(analytical.implEnd.date)} ${Math.round(analytical.implEnd.hour * 10) / 10}h a ${formatShort(analytical.testEnd.date)} ${Math.round(analytical.testEnd.hour * 10) / 10}h`
-                  : `Teste (previsto): ${formatShort(activity.testWindow!.start)} a ${formatShort(activity.testWindow!.end)}`
-              }
+              boxTitle={`Teste (previsto): ${formatShort(activity.testWindow!.start)} a ${formatShort(activity.testWindow!.end)}`}
               fillTitle={
                 !testHasRealProgress
                   ? 'Teste ainda não iniciado'
