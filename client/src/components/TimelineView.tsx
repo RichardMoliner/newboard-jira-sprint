@@ -613,7 +613,15 @@ function ActivityRow({
 
   const implLeft = analytical ? xHour(analytical.implStart.date, analytical.implStart.hour) : activity.implWindow && x(activity.implWindow.start);
   const implRight = analytical ? xHour(analytical.implEnd.date, analytical.implEnd.hour) : activity.implWindow && x(activity.implWindow.end);
-  const testLeft = analytical ? xHour(analytical.implEnd.date, analytical.implEnd.hour) : activity.testWindow && x(activity.testWindow.start);
+  // O teste "começa de verdade" no primeiro apontamento lançado na subtarefa de Teste — não na
+  // data teórica de fim da Implementação, que raramente bate com quando o tester de fato começou.
+  const firstTestWorklogDate = activity.worklogEntries.find((e) => e.subtaskType === 'Teste')?.date ?? null;
+  const testStartDate = firstTestWorklogDate ?? activity.testWindow?.start ?? null;
+  const testLeft = firstTestWorklogDate
+    ? x(firstTestWorklogDate)
+    : analytical
+      ? xHour(analytical.implEnd.date, analytical.implEnd.hour)
+      : activity.testWindow && x(activity.testWindow.start);
   // Concluída (ou com o teste já atendido): a barra vai até a entrega real, não até o fim da
   // janela de teste projetada — para tarefas herdadas que ficaram muito tempo paradas, a previsão
   // original pode estar bem no passado em relação à data em que o trabalho foi de fato entregue.
@@ -719,10 +727,10 @@ function ActivityRow({
               color={activity.isDone || activity.testDone ? 'var(--status-good)' : 'var(--series-test)'}
               title={
                 (activity.isDone || activity.testDone) && activity.deliveredDate
-                  ? `Teste: ${formatShort(activity.testWindow!.start)} a ${formatShort(activity.deliveredDate)} (entregue)`
+                  ? `Teste: ${formatShort(testStartDate!)} a ${formatShort(activity.deliveredDate)} (entregue)${firstTestWorklogDate ? ' — início real (1º apontamento)' : ''}`
                   : analytical
                     ? `Teste: ${formatShort(analytical.implEnd.date)} ${Math.round(analytical.implEnd.hour * 10) / 10}h a ${formatShort(analytical.testEnd.date)} ${Math.round(analytical.testEnd.hour * 10) / 10}h`
-                    : `Teste: ${formatShort(activity.testWindow!.start)} a ${formatShort(activity.testWindow!.end)}`
+                    : `Teste: ${formatShort(testStartDate!)} a ${formatShort(activity.testWindow!.end)}${firstTestWorklogDate ? ' — início real (1º apontamento)' : ''}`
               }
             />
             {activity.isOverdue && overdueLeft !== null && overdueLeft !== undefined && (
