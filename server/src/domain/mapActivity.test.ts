@@ -200,7 +200,7 @@ describe('mapActivity', () => {
     expect(activity.isOverdue).toBe(false);
   });
 
-  test('overrides status to "Em testes" when the Implementação subtask is done but the story is not', () => {
+  test('overrides status to "Ag. início dos testes" when the Implementação subtask is done but the Teste subtask has no worklog yet', () => {
     const activity = mapActivity({
       story: baseStory({ status: 'Em andamento', statusCategory: 'Em andamento' }),
       sprint,
@@ -210,7 +210,35 @@ describe('mapActivity', () => {
       baseUrl: 'https://desenv.betha.com.br',
       today: '2026-09-08',
     });
+    expect(activity.status).toBe('Ag. início dos testes');
+  });
+
+  test('overrides status to "Em testes" once the Teste subtask has a worklog entry', () => {
+    const activity = mapActivity({
+      story: baseStory({ status: 'Em andamento', statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implDone: true,
+      worklogEntries: [{ subtaskType: 'Teste', author: 'Luana de Souza Bez Batti', date: '2026-09-08', hours: 1, comment: null }],
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
     expect(activity.status).toBe('Em testes');
+  });
+
+  test('ignores Implementação worklog entries when deciding between "Ag. início dos testes" and "Em testes"', () => {
+    const activity = mapActivity({
+      story: baseStory({ status: 'Em andamento', statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implDone: true,
+      worklogEntries: [{ subtaskType: 'Implementação', author: 'Fulano', date: '2026-09-05', hours: 4, comment: null }],
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.status).toBe('Ag. início dos testes');
   });
 
   test('keeps the original story status when the Implementação subtask is not done', () => {

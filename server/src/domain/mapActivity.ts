@@ -97,9 +97,21 @@ export function mapActivity(params: {
   // Sem subtarefa de Implementação ainda e não concluída: `startDate` é só a data de criação da
   // story, não um início real — não dá pra projetar prazo nem considerar herdada a partir dela.
   const notStarted = !isDone && implStartDate === null;
+  // Implementação atendida mas o teste ainda não tem nenhum apontamento: o teste ainda não começou
+  // de fato, então fica "aguardando início" em vez de "em testes".
+  const hasTestWorklog = worklogEntries.some((entry) => entry.subtaskType === 'Teste');
   // Progressão do status conforme as subtarefas avançam, quando o status do Jira ainda não reflete isso:
-  // Teste atendida -> aguardando liberação; só Implementação atendida -> em testes; senão, status real.
-  const status = isDone ? story.status : testDone ? 'Aguardando liberação' : implDone ? 'Em testes' : story.status;
+  // Teste atendida -> aguardando liberação; Implementação atendida com apontamento de teste -> em
+  // testes; Implementação atendida sem apontamento de teste ainda -> aguardando início dos testes.
+  const status = isDone
+    ? story.status
+    : testDone
+      ? 'Aguardando liberação'
+      : implDone
+        ? hasTestWorklog
+          ? 'Em testes'
+          : 'Ag. início dos testes'
+        : story.status;
 
   const timeline =
     !notStarted && story.storyPoints !== null ? computeTimeline(story.storyPoints, startDate, hoursPerPf, hoursPerDay) : null;
