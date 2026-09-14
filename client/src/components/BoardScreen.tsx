@@ -88,6 +88,7 @@ export default function BoardScreen({
               activities={data.activities}
               sprints={data.sprints}
               today={data.today}
+              hoursPerDay={data.hoursPerDay}
               sprintFilter={sprintFilter}
               onSprintClick={handleSprintClick}
             />
