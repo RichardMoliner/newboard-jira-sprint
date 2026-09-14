@@ -673,7 +673,7 @@ function ActivityRow({
           <SideList activity={activity} />
         </div>
       </div>
-      <div className="timeline-row-bars" style={{ position: 'relative', height: hasBothWindows ? BARS_ROW_HEIGHT : 34, borderBottom: '1px solid var(--gridline)' }}>
+      <div className="timeline-row-bars" style={{ position: 'relative', minHeight: hasBothWindows ? BARS_ROW_HEIGHT : 34, borderBottom: '1px solid var(--gridline)' }}>
         {hasBothWindows ? (
           <>
             <PhaseBar
@@ -1175,7 +1175,10 @@ function computeDailyHours(activity: Activity): { implHoursByDate: Map<string, n
 /** Bloco sólido único (sem quebra por dia) — usado quando o dia a dia deixou de ser relevante. */
 function renderSimpleFill(left: number, right: number, color: string, title: string, top: number): React.ReactNode {
   const width = right - left;
-  if (width <= 0) return null;
+  // Início e fim no mesmo dia (ex.: Implementação e Teste começaram no mesmo dia) ainda precisam
+  // aparecer como um traço mínimo — só não desenha se a fase nem chegou a existir (largura negativa
+  // não deveria acontecer, mas por segurança).
+  if (width < 0) return null;
   return <div title={title} style={{ position: 'absolute', left, width: Math.max(width, 3), top, height: 10, background: color, borderRadius: 3 }} />;
 }
 
