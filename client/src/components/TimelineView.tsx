@@ -483,8 +483,24 @@ function ActivityRow({
   // Caixa tracejada = janela ESTIMADA (fixa, nunca muda) — a "expectativa".
   const implBoxLeft = activity.implWindow && x(activity.implWindow.start);
   const implBoxRight = activity.implWindow && x(activity.implWindow.end);
-  const testBoxLeft = activity.testWindow && x(activity.testWindow.start);
-  const testBoxRight = activity.testWindow && x(activity.testWindow.end);
+
+  // Implementação ainda aberta e já passou da própria estimativa: a caixa do Teste (calculada de
+  // forma sequencial, logo após a Implementação teórica) fica "no passado" — parece que o Teste
+  // deveria ter começado antes mesmo da Implementação terminar. Nesse caso, projeta o início do
+  // Teste pra amanhã (mantendo a duração estimada), só para exibição — não mexe no prazo/KPIs.
+  const implRunningLate = !activity.implDone && activity.implWindow !== null && today > activity.implWindow.end;
+  let projectedTestStart = activity.testWindow?.start ?? null;
+  let projectedTestEnd = activity.testWindow?.end ?? null;
+  if (implRunningLate && activity.testWindow) {
+    const earliestStart = nextBusinessDay(today);
+    if (earliestStart > activity.testWindow.start) {
+      const durationDays = countBusinessDaysInclusive(activity.testWindow.start, activity.testWindow.end);
+      projectedTestStart = earliestStart;
+      projectedTestEnd = addBusinessDays(earliestStart, durationDays - 1);
+    }
+  }
+  const testBoxLeft = projectedTestStart ? x(projectedTestStart) : null;
+  const testBoxRight = projectedTestEnd ? x(projectedTestEnd) : null;
   const hasBothWindows =
     implBoxLeft !== null && implBoxLeft !== undefined && implBoxRight !== null && implBoxRight !== undefined &&
     testBoxLeft !== null && testBoxLeft !== undefined && testBoxRight !== null && testBoxRight !== undefined;
@@ -675,9 +691,13 @@ function ActivityRow({
               boxRight={testBoxRight!}
               fillRight={testFillRight!}
               boxColor="var(--series-test)"
-              boxTitle={`Teste (previsto): ${formatShort(activity.testWindow!.start)} a ${formatShort(activity.testWindow!.end)}`}
+              boxTitle={
+                implRunningLate && projectedTestStart !== activity.testWindow!.start
+                  ? `Teste (projeção, Implementação atrasada): ${formatShort(projectedTestStart!)} a ${formatShort(projectedTestEnd!)}`
+                  : `Teste (previsto): ${formatShort(projectedTestStart!)} a ${formatShort(projectedTestEnd!)}`
+              }
               bandTop={TEST_BAND_TOP}
-              markerTitle={`Previsão era terminar o Teste até ${formatShort(activity.testWindow!.end)}`}
+              markerTitle={`Previsão era terminar o Teste até ${formatShort(projectedTestEnd!)}`}
               fillCells={testFillCells}
             />
           </>
@@ -1086,6 +1106,32 @@ function addDays(iso: string, days: number): string {
   const date = new Date(`${iso}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function nextBusinessDay(dateISO: string): string {
+  let cursor = addDays(dateISO, 1);
+  while (!isBusinessDay(cursor)) cursor = addDays(cursor, 1);
+  return cursor;
+}
+
+function addBusinessDays(dateISO: string, count: number): string {
+  let cursor = dateISO;
+  let added = 0;
+  while (added < count) {
+    cursor = addDays(cursor, 1);
+    if (isBusinessDay(cursor)) added++;
+  }
+  return cursor;
+}
+
+function countBusinessDaysInclusive(startISO: string, endISO: string): number {
+  let count = 0;
+  let cursor = startISO;
+  while (cursor <= endISO) {
+    if (isBusinessDay(cursor)) count++;
+    cursor = addDays(cursor, 1);
+  }
+  return count;
 }
 
 function formatShort(iso: string): string {
