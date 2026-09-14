@@ -37,6 +37,8 @@ export interface GroupedSubtasks {
   /** Todos os apontamentos (Implementação + Teste), por atividade pai, ordenados por data. */
   worklogEntriesByParent: Map<string, WorklogEntry[]>;
   bugsByParent: Map<string, BugSubtask[]>;
+  /** Responsável (assignee) da subtarefa "Teste" — usado como testador de fallback quando o campo "testador" da story ainda não foi preenchido. */
+  testerByParent: Map<string, string>;
 }
 
 function dateOnly(isoDateTime: string): string {
@@ -65,6 +67,7 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
   const testLoggedSecondsByParent = new Map<string, number>();
   const worklogEntriesByParent = new Map<string, WorklogEntry[]>();
   const bugsByParent = new Map<string, BugSubtask[]>();
+  const testerByParent = new Map<string, string>();
 
   function addWorklogs(subtask: RawSubtask, parentKey: string, subtaskType: 'Implementação' | 'Teste', secondsByParent: Map<string, number>) {
     const entries = subtask.worklog?.worklogs ?? [];
@@ -115,6 +118,9 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
         testUpdatedByParent.set(parentKey, updatedDate);
       }
       addWorklogs(subtask, parentKey, 'Teste', testLoggedSecondsByParent);
+      if (subtask.assignee) {
+        testerByParent.set(parentKey, subtask.assignee);
+      }
     }
 
     if (subtask.type === 'Bug') {
@@ -181,5 +187,6 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
     testLoggedHoursByParent,
     worklogEntriesByParent,
     bugsByParent,
+    testerByParent,
   };
 }

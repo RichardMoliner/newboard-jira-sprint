@@ -71,6 +71,7 @@ export async function fetchBoardData(
     testLoggedHoursByParent,
     worklogEntriesByParent,
     bugsByParent,
+    testerByParent,
   } = groupSubtasks(subtasks);
 
   const storyDetails = await mapWithConcurrency(storyHits, GET_ISSUE_CONCURRENCY, async (hit) => {
@@ -103,7 +104,8 @@ export async function fetchBoardData(
           ...story,
           desenvolvedor: story.desenvolvedor ?? null,
           assignee: story.assignee ?? null,
-          testador: story.testador ?? null,
+          // Sem o campo "testador" preenchido na story, usa o responsável pela subtarefa de Teste.
+          testador: story.testador ?? testerByParent.get(story.key) ?? null,
           storyPoints: story.storyPoints ?? null,
         },
         sprint,

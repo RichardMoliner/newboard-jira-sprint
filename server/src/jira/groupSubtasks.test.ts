@@ -80,6 +80,21 @@ describe('groupSubtasks', () => {
     expect(implDoneDateByParent.get('EC-11420')).toBe('2026-09-05');
   });
 
+  test('records the Teste subtask assignee into testerByParent', () => {
+    const { testerByParent } = groupSubtasks([subtask({ type: 'Teste', assignee: 'Renata Serafin Martinello' })]);
+    expect(testerByParent.get('EC-11420')).toBe('Renata Serafin Martinello');
+  });
+
+  test('leaves testerByParent unset when the Teste subtask has no assignee', () => {
+    const { testerByParent } = groupSubtasks([subtask({ type: 'Teste', assignee: null })]);
+    expect(testerByParent.has('EC-11420')).toBe(false);
+  });
+
+  test('leaves testerByParent unset for a parent with no Teste subtask', () => {
+    const { testerByParent } = groupSubtasks([subtask({ type: 'Implementação' })]);
+    expect(testerByParent.has('EC-11420')).toBe(false);
+  });
+
   test('flags testDoneByParent true when the Teste subtask is Atendida', () => {
     const { testDoneByParent } = groupSubtasks([subtask({ type: 'Teste', status: 'Atendida' })]);
     expect(testDoneByParent.get('EC-11420')).toBe(true);
