@@ -501,8 +501,9 @@ function ActivityRow({
   const overdueLeft = activity.dueDate !== null ? x(activity.dueDate) : null;
 
   return (
-    <>
+    <div className="timeline-row" style={{ display: 'contents' }}>
       <div
+        className="timeline-row-info"
         style={{
           position: 'sticky',
           left: 0,
@@ -581,7 +582,7 @@ function ActivityRow({
           <SideList activity={activity} />
         </div>
       </div>
-      <div style={{ position: 'relative', height: 34, borderBottom: '1px solid var(--gridline)' }}>
+      <div className="timeline-row-bars" style={{ position: 'relative', height: 34, borderBottom: '1px solid var(--gridline)' }}>
         {implBoxLeft !== null && implBoxLeft !== undefined && implBoxRight !== null && implBoxRight !== undefined && testBoxLeft !== null && testBoxLeft !== undefined && testBoxRight !== null && testBoxRight !== undefined ? (
           <>
             <PhaseBar
@@ -635,7 +636,7 @@ function ActivityRow({
         [...activity.bugs]
           .sort((a, b) => Number(isResolvedBug(b.status)) - Number(isResolvedBug(a.status)))
           .map((bug) => <BugRow key={bug.key} bug={bug} x={x} />)}
-    </>
+    </div>
   );
 }
 
@@ -655,7 +656,7 @@ function BugRow({ bug, x }: { bug: Activity['bugs'][number]; x: (d: string) => n
   const textColor = isResolved ? 'var(--status-good)' : 'var(--text-muted)';
   return (
     <>
-      <div style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--page-plane)', padding: '5px 14px 5px 34px', borderBottom: '1px solid var(--gridline)', borderRight: '1px solid var(--gridline)', fontSize: 10.5, color: isResolved ? 'var(--status-good)' : 'var(--text-secondary)' }}>
+      <div className="timeline-row-info" style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--page-plane)', padding: '5px 14px 5px 34px', borderBottom: '1px solid var(--gridline)', borderRight: '1px solid var(--gridline)', fontSize: 10.5, color: isResolved ? 'var(--status-good)' : 'var(--text-secondary)' }}>
         <div>
           <span style={{ color: textColor, fontWeight: 700, marginRight: 4 }}>{bug.key}</span>
           {bug.title}
@@ -665,7 +666,7 @@ function BugRow({ bug, x }: { bug: Activity['bugs'][number]; x: (d: string) => n
           {isResolved && ` em ${formatShort(bug.endDate)}`}
         </div>
       </div>
-      <div style={{ position: 'relative', height: 24, borderBottom: '1px solid var(--gridline)', background: 'var(--page-plane)' }}>
+      <div className="timeline-row-bars" style={{ position: 'relative', height: 24, borderBottom: '1px solid var(--gridline)', background: 'var(--page-plane)' }}>
         <Bar left={x(bug.startDate)} right={x(bug.endDate)} color={isResolved ? 'var(--status-good)' : 'var(--series-bug)'} height={8} top={8} title={`${bug.key}: ${formatShort(bug.startDate)} a ${formatShort(bug.endDate)}`} />
       </div>
     </>

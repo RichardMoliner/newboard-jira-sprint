@@ -88,3 +88,11 @@ body {
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
+
+/* Faixa de destaque ao passar o mouse sobre uma tarefa na linha do tempo — ajuda a acompanhar a
+   linha da tarefa mesmo quando as barras estão longe da coluna fixa (útil na daily). O !important é
+   necessário para sobrepor o `background` definido inline nas colunas fixas (sticky). */
+.timeline-row:hover > .timeline-row-info,
+.timeline-row:hover > .timeline-row-bars {
+  background-color: color-mix(in srgb, var(--series-impl) 12%, var(--surface-1)) !important;
+}
