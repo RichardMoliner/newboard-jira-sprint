@@ -470,22 +470,25 @@ function ActivityRow({
   // Preenchimento sólido = progresso REAL ("realizado"): cresce do início real até hoje (ou até a
   // entrega), passando da caixa quando atrasa — nesse caso a caixa marca onde deveria ter terminado.
   const firstTestWorklogDate = activity.worklogEntries.find((e) => e.subtaskType === 'Teste')?.date ?? null;
-  const testHasRealProgress = firstTestWorklogDate !== null || activity.testDone || (activity.testLoggedHours ?? 0) > 0;
+  // Sem apontamento ainda na subtarefa de Teste, mas já em "Em testes": usa a data de conclusão da
+  // Implementação como sinal real de início do teste, em vez de esperar o primeiro apontamento.
+  const realTestStartDate = firstTestWorklogDate ?? activity.testStartDate;
+  const testHasRealProgress = realTestStartDate !== null || activity.testDone || (activity.testLoggedHours ?? 0) > 0;
 
   const implFillLeft = implBoxLeft;
   const implFillRight =
     implBoxLeft === null || implBoxLeft === undefined
       ? null
       : Math.max(
-          firstTestWorklogDate
-            ? x(firstTestWorklogDate)
+          realTestStartDate
+            ? x(realTestStartDate)
             : activity.isDone && activity.deliveredDate
               ? x(activity.deliveredDate)
               : todayX,
           implBoxLeft,
         );
 
-  const testFillLeft = firstTestWorklogDate ? x(firstTestWorklogDate) : testBoxLeft;
+  const testFillLeft = realTestStartDate ? x(realTestStartDate) : testBoxLeft;
   const testFillRight =
     testFillLeft === null || testFillLeft === undefined
       ? null
@@ -529,6 +532,12 @@ function ActivityRow({
                 <span>
                   <span style={{ color: 'var(--text-muted)' }}>Início: </span>
                   {formatShort(activity.startDate)}
+                </span>
+              )}
+              {activity.testStartDate && (
+                <span>
+                  <span style={{ color: 'var(--text-muted)' }}>Início do teste: </span>
+                  {formatShort(activity.testStartDate)}
                 </span>
               )}
               {(activity.isDone || activity.testDone) && activity.deliveredDate ? (
@@ -603,7 +612,7 @@ function ActivityRow({
                   ? 'Teste ainda não iniciado'
                   : activity.testLoggedHours !== null
                     ? `Teste (realizado): ${formatHoursMinutes(activity.testLoggedHours)} apontadas${activity.testEstimatedHours !== null ? ` de ${formatHoursMinutes(activity.testEstimatedHours)} previstas` : ''}`
-                    : `Em andamento desde ${formatShort(firstTestWorklogDate ?? activity.testWindow!.start)}`
+                    : `Em andamento desde ${formatShort(realTestStartDate ?? activity.testWindow!.start)}`
               }
               markerTitle={`Previsão era terminar o Teste até ${formatShort(activity.testWindow!.end)}`}
             />

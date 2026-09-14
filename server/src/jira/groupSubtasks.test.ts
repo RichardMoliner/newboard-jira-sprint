@@ -67,6 +67,19 @@ describe('groupSubtasks', () => {
     expect(implDoneByParent.has('EC-11420')).toBe(false);
   });
 
+  test('records the Implementação subtask updated date (date-only) into implDoneDateByParent', () => {
+    const { implDoneDateByParent } = groupSubtasks([subtask({ updated: '2026-09-05T14:17:29.000-0300' })]);
+    expect(implDoneDateByParent.get('EC-11420')).toBe('2026-09-05');
+  });
+
+  test('picks the latest updated date across multiple Implementação subtasks of the same parent', () => {
+    const { implDoneDateByParent } = groupSubtasks([
+      subtask({ key: 'EC-1', updated: '2026-09-02T00:00:00.000-0300' }),
+      subtask({ key: 'EC-2', updated: '2026-09-05T00:00:00.000-0300' }),
+    ]);
+    expect(implDoneDateByParent.get('EC-11420')).toBe('2026-09-05');
+  });
+
   test('flags testDoneByParent true when the Teste subtask is Atendida', () => {
     const { testDoneByParent } = groupSubtasks([subtask({ type: 'Teste', status: 'Atendida' })]);
     expect(testDoneByParent.get('EC-11420')).toBe(true);

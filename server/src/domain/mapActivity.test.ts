@@ -226,6 +226,52 @@ describe('mapActivity', () => {
     expect(activity.status).toBe('Em andamento');
   });
 
+  test('exposes implDoneDate as testStartDate while the status is "Em testes"', () => {
+    const activity = mapActivity({
+      story: baseStory({ status: 'Em andamento', statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implDone: true,
+      implDoneDate: '2026-09-05',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.status).toBe('Em testes');
+    expect(activity.testStartDate).toBe('2026-09-05');
+  });
+
+  test('leaves testStartDate null when the Implementação subtask is not done', () => {
+    const activity = mapActivity({
+      story: baseStory({ status: 'Em andamento', statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implDone: false,
+      implDoneDate: '2026-09-05',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.testStartDate).toBeNull();
+  });
+
+  test('leaves testStartDate null once "Aguardando liberação" or the story itself is done', () => {
+    const activity = mapActivity({
+      story: baseStory({ status: 'Em andamento', statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implDone: true,
+      implDoneDate: '2026-09-05',
+      testDone: true,
+      testDoneDate: '2026-09-08',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.status).toBe('Aguardando liberação');
+    expect(activity.testStartDate).toBeNull();
+  });
+
   test('keeps the original story status once the story itself is done, even if implDone is true', () => {
     const activity = mapActivity({
       story: baseStory({ status: 'Atendida', statusCategory: 'Concluído' }),
