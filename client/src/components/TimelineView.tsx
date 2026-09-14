@@ -561,7 +561,6 @@ function ActivityRow({
             endDate: implFillEndDate!,
             hoursByDate: implHoursByDate,
             hoursPerDay,
-            today,
             x,
             dayPixelWidth,
             color: implFillColor,
@@ -584,7 +583,6 @@ function ActivityRow({
           endDate: testFillEndDate!,
           hoursByDate: testHoursByDate,
           hoursPerDay,
-          today,
           x,
           dayPixelWidth,
           color: testFillColor,
@@ -1183,19 +1181,17 @@ function renderSimpleFill(left: number, right: number, color: string, title: str
 }
 
 /**
- * Monta o preenchimento da barra dia a dia (só dias úteis), como uma mini barra de progresso por
- * dia: cada dia vale 100% da jornada configurada (hoursPerDay), e a LARGURA preenchida (não a
- * opacidade) é proporcional ao apontado naquele dia — dia sem nenhum apontamento fica só com o
- * contorno tracejado (0% preenchido). O hover mostra a data e, quando o gap é menor que 1 dia
- * (apontamento parcial), quantas horas faltaram. O dia de hoje sem apontamento ainda não conta como
- * gap, já que o dia não terminou.
+ * Monta o preenchimento da barra dia a dia (só dias úteis, incluindo hoje), como uma mini barra de
+ * progresso por dia: cada dia vale 100% da jornada configurada (hoursPerDay), e a LARGURA
+ * preenchida (não a opacidade) é proporcional ao apontado naquele dia — dia sem nenhum apontamento
+ * fica só com o contorno tracejado (0% preenchido). O hover mostra a data e, quando o gap é menor
+ * que 1 dia (apontamento parcial), quantas horas faltaram.
  */
 function buildDailyFillCells({
   startDate,
   endDate,
   hoursByDate,
   hoursPerDay,
-  today,
   x,
   dayPixelWidth,
   color,
@@ -1205,7 +1201,6 @@ function buildDailyFillCells({
   endDate: string;
   hoursByDate: Map<string, number>;
   hoursPerDay: number;
-  today: string;
   x: (d: string) => number;
   dayPixelWidth: number;
   color: string;
@@ -1214,7 +1209,7 @@ function buildDailyFillCells({
   const cells: React.ReactNode[] = [];
   let cursor = startDate;
   while (cursor <= endDate) {
-    if (isBusinessDay(cursor) && !(cursor === today && (hoursByDate.get(cursor) ?? 0) <= 0)) {
+    if (isBusinessDay(cursor)) {
       const hours = hoursByDate.get(cursor) ?? 0;
       const isGap = hours <= 0;
       const ratio = hoursPerDay > 0 ? Math.min(1, hours / hoursPerDay) : hours > 0 ? 1 : 0;
