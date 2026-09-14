@@ -518,8 +518,11 @@ function ActivityRow({
   // um bloco sólido único com o total apontado, como antes.
   const isFullyDone = activity.isDone || activity.testDone;
   const { implHoursByDate, testHoursByDate } = computeDailyHours(activity);
-  const implFillColor = isFullyDone ? 'var(--status-good)' : 'var(--series-impl)';
-  const testFillColor = isFullyDone ? 'var(--status-good)' : 'var(--series-test)';
+  // Atrasada: cada fase mostra sua própria barra vermelha, preenchendo dia a dia pelos
+  // apontamentos do mesmo jeito que quando está em dia — em vez de uma faixa vermelha única por
+  // cima de tudo.
+  const implFillColor = isFullyDone ? 'var(--status-good)' : activity.isOverdue ? 'var(--status-critical)' : 'var(--series-impl)';
+  const testFillColor = isFullyDone ? 'var(--status-good)' : activity.isOverdue ? 'var(--status-critical)' : 'var(--series-test)';
   const implFillCells =
     !activity.implWindow || implFillRight === null
       ? []
@@ -567,8 +570,6 @@ function ActivityRow({
           color: testFillColor,
           top: TEST_BAND_TOP + 6,
         });
-
-  const overdueLeft = activity.dueDate !== null ? x(activity.dueDate) : null;
 
   return (
     <div className="timeline-row" style={{ display: 'contents' }}>
@@ -675,16 +676,6 @@ function ActivityRow({
               markerTitle={`Previsão era terminar o Teste até ${formatShort(activity.testWindow!.end)}`}
               fillCells={testFillCells}
             />
-            {activity.isOverdue && overdueLeft !== null && overdueLeft !== undefined && (
-              <Bar
-                left={overdueLeft}
-                right={todayX}
-                color="var(--status-critical)"
-                title={`Atrasada desde ${formatShort(activity.dueDate!)}`}
-                top={2}
-                height={BARS_ROW_HEIGHT - 4}
-              />
-            )}
           </>
         ) : activity.notStarted ? (
           <span style={{ position: 'absolute', left: 4, top: 10, fontSize: 10, color: 'var(--text-muted)' }}>
