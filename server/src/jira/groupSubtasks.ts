@@ -25,8 +25,6 @@ export interface GroupedSubtasks {
   implStartByParent: Map<string, string>;
   /** True quando a(s) subtarefa(s) "Implementação" da atividade pai estão todas "Atendida". */
   implDoneByParent: Map<string, boolean>;
-  /** Data (YYYY-MM-DD) mais recente de atualização das subtarefas "Implementação" — usada como data real de início do teste enquanto o status é "Em testes". */
-  implDoneDateByParent: Map<string, string>;
   /** True quando a(s) subtarefa(s) "Teste" da atividade pai estão todas "Atendida". */
   testDoneByParent: Map<string, boolean>;
   /** Data (YYYY-MM-DD) mais recente de atualização das subtarefas "Teste" já atendidas — usada como data de entrega quando a story ainda não foi formalmente concluída. */
@@ -59,7 +57,6 @@ function isResolvedStatus(status: string): boolean {
 /** Agrupa subtarefas (Implementação/Teste/Bug) buscadas em lote pela atividade (Story) pai. */
 export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
   const implStartByParent = new Map<string, string>();
-  const implUpdatedByParent = new Map<string, string>();
   const implStatusesByParent = new Map<string, string[]>();
   const testStatusesByParent = new Map<string, string[]>();
   const testUpdatedByParent = new Map<string, string>();
@@ -100,11 +97,6 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
       const statuses = implStatusesByParent.get(parentKey) ?? [];
       statuses.push(subtask.status);
       implStatusesByParent.set(parentKey, statuses);
-      const implUpdatedDate = dateOnly(subtask.updated);
-      const currentImplUpdated = implUpdatedByParent.get(parentKey);
-      if (!currentImplUpdated || implUpdatedDate > currentImplUpdated) {
-        implUpdatedByParent.set(parentKey, implUpdatedDate);
-      }
       addWorklogs(subtask, parentKey, 'Implementação', implLoggedSecondsByParent);
     }
 
@@ -180,7 +172,6 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
   return {
     implStartByParent,
     implDoneByParent,
-    implDoneDateByParent: implUpdatedByParent,
     testDoneByParent,
     testDoneDateByParent: testUpdatedByParent,
     implLoggedHoursByParent,

@@ -61,7 +61,6 @@ export function mapActivity(params: {
   sprint: ParsedSprint;
   implStartDate: string | null;
   implDone?: boolean;
-  implDoneDate?: string | null;
   testDone?: boolean;
   testDoneDate?: string | null;
   implLoggedHours?: number | null;
@@ -78,7 +77,6 @@ export function mapActivity(params: {
     sprint,
     implStartDate,
     implDone = false,
-    implDoneDate = null,
     testDone = false,
     testDoneDate = null,
     implLoggedHours = null,
@@ -102,9 +100,6 @@ export function mapActivity(params: {
   // Progressão do status conforme as subtarefas avançam, quando o status do Jira ainda não reflete isso:
   // Teste atendida -> aguardando liberação; só Implementação atendida -> em testes; senão, status real.
   const status = isDone ? story.status : testDone ? 'Aguardando liberação' : implDone ? 'Em testes' : story.status;
-  // Data real de início do teste: enquanto não há apontamento na subtarefa de Teste, usamos a data
-  // em que a Implementação foi concluída como sinal de que o teste já começou de fato.
-  const testStartDate = status === 'Em testes' ? implDoneDate : null;
 
   const timeline =
     !notStarted && story.storyPoints !== null ? computeTimeline(story.storyPoints, startDate, hoursPerPf, hoursPerDay) : null;
@@ -156,7 +151,6 @@ export function mapActivity(params: {
     notStarted,
     implDone,
     testDone,
-    testStartDate,
     implWindow: timeline?.impl ?? null,
     testWindow: timeline?.test ?? null,
     implEstimatedHours,

@@ -42,7 +42,6 @@ export interface Activity {
   notStarted: boolean;
   implDone: boolean;
   testDone: boolean;
-  testStartDate: string | null;
   implWindow: TimelineWindow | null;
   testWindow: TimelineWindow | null;
   implEstimatedHours: number | null;

@@ -24,7 +24,6 @@ function activity(overrides: Partial<Activity>): Activity {
     notStarted: false,
     implDone: false,
     testDone: false,
-    testStartDate: null,
     implWindow: null,
     testWindow: null,
     implEstimatedHours: null,

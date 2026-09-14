@@ -48,8 +48,6 @@ export interface Activity {
   implDone: boolean;
   /** True quando a(s) subtarefa(s) de Teste já estão "Atendida" (independente do status geral da story). */
   testDone: boolean;
-  /** Data real de início do teste (status "Em testes"): data em que a Implementação foi concluída, usada como sinal de início antes de haver apontamento na subtarefa de Teste; null fora desse status. */
-  testStartDate: string | null;
   implWindow: TimelineWindow | null;
   testWindow: TimelineWindow | null;
   /** Horas úteis previstas para implementação/teste (dias úteis da janela × horas/dia); null sem estimativa. */
