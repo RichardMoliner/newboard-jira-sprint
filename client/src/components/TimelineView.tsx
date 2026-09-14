@@ -4,6 +4,14 @@ import type { Activity, SprintInfo } from '../types.js';
 const MIN_COLUMN_WIDTH = 28;
 const MAX_COLUMN_WIDTH = 96;
 const LABEL_COL_WIDTH = 460;
+// Implementação e Teste ficam em faixas separadas dentro da linha da atividade, para dar pra ver
+// apontamentos em paralelo (ex.: bug corrigido enquanto o teste já está rolando) sem uma barra
+// tampar a outra.
+const PHASE_BAND_HEIGHT = 22;
+const PHASE_BAND_GAP = 2;
+const BARS_ROW_HEIGHT = PHASE_BAND_HEIGHT * 2 + PHASE_BAND_GAP;
+const IMPL_BAND_TOP = 0;
+const TEST_BAND_TOP = PHASE_BAND_HEIGHT + PHASE_BAND_GAP;
 // Espaço em branco reservado após o último dia real, para garantir que dê para rolar até o
 // início do mês atual mesmo quando ele estiver perto do fim do período (poucos dias futuros).
 const RIGHT_SCROLL_BUFFER = 3200;
@@ -477,6 +485,9 @@ function ActivityRow({
   const implBoxRight = activity.implWindow && x(activity.implWindow.end);
   const testBoxLeft = activity.testWindow && x(activity.testWindow.start);
   const testBoxRight = activity.testWindow && x(activity.testWindow.end);
+  const hasBothWindows =
+    implBoxLeft !== null && implBoxLeft !== undefined && implBoxRight !== null && implBoxRight !== undefined &&
+    testBoxLeft !== null && testBoxLeft !== undefined && testBoxRight !== null && testBoxRight !== undefined;
 
   // Preenchimento = progresso REAL ("realizado"), dia a dia conforme os apontamentos — dá pra ver
   // exatamente em quais dias o dev/tester trabalhou e onde ficaram os gaps (dias úteis sem
@@ -503,35 +514,59 @@ function ActivityRow({
     : testFillStartDate;
   const testFillRight = testFillEndDate ? x(testFillEndDate) : null;
 
+  // Uma vez concluída (Implementação + Teste), o dia a dia com gaps deixa de ser útil — mostra só
+  // um bloco sólido único com o total apontado, como antes.
+  const isFullyDone = activity.isDone || activity.testDone;
   const { implHoursByDate, testHoursByDate } = computeDailyHours(activity);
-  const implFillColor = activity.isDone || activity.testDone ? 'var(--status-good)' : 'var(--series-impl)';
-  const testFillColor = activity.isDone || activity.testDone ? 'var(--status-good)' : 'var(--series-test)';
+  const implFillColor = isFullyDone ? 'var(--status-good)' : 'var(--series-impl)';
+  const testFillColor = isFullyDone ? 'var(--status-good)' : 'var(--series-test)';
   const implFillCells =
-    activity.implWindow && implFillEndDate
-      ? buildDailyFillCells({
-          startDate: activity.implWindow.start,
-          endDate: implFillEndDate,
-          hoursByDate: implHoursByDate,
-          hoursPerDay,
-          today,
-          x,
-          dayPixelWidth,
-          color: implFillColor,
-        })
-      : [];
-  const testFillCells =
-    testHasRealProgress && testFillStartDate && testFillEndDate
-      ? buildDailyFillCells({
+    !activity.implWindow || implFillRight === null
+      ? []
+      : isFullyDone
+        ? renderSimpleFill(
+            implBoxLeft!,
+            implFillRight,
+            implFillColor,
+            activity.implLoggedHours !== null
+              ? `Implementação (realizado): ${formatHoursMinutes(activity.implLoggedHours)} apontadas${activity.implEstimatedHours !== null ? ` de ${formatHoursMinutes(activity.implEstimatedHours)} previstas` : ''}`
+              : `Em andamento desde ${formatShort(activity.implWindow.start)}`,
+            IMPL_BAND_TOP + 6,
+          )
+        : buildDailyFillCells({
+            startDate: activity.implWindow.start,
+            endDate: implFillEndDate!,
+            hoursByDate: implHoursByDate,
+            hoursPerDay,
+            today,
+            x,
+            dayPixelWidth,
+            color: implFillColor,
+            top: IMPL_BAND_TOP + 6,
+          });
+  const testFillCells = !testHasRealProgress || !testFillStartDate || testFillRight === null
+    ? []
+    : isFullyDone
+      ? renderSimpleFill(
+          x(testFillStartDate),
+          testFillRight,
+          testFillColor,
+          activity.testLoggedHours !== null
+            ? `Teste (realizado): ${formatHoursMinutes(activity.testLoggedHours)} apontadas${activity.testEstimatedHours !== null ? ` de ${formatHoursMinutes(activity.testEstimatedHours)} previstas` : ''}`
+            : `Em andamento desde ${formatShort(testFillStartDate)}`,
+          TEST_BAND_TOP + 6,
+        )
+      : buildDailyFillCells({
           startDate: testFillStartDate,
-          endDate: testFillEndDate,
+          endDate: testFillEndDate!,
           hoursByDate: testHoursByDate,
           hoursPerDay,
           today,
           x,
           dayPixelWidth,
           color: testFillColor,
-        })
-      : [];
+          top: TEST_BAND_TOP + 6,
+        });
 
   const overdueLeft = activity.dueDate !== null ? x(activity.dueDate) : null;
 
@@ -617,29 +652,38 @@ function ActivityRow({
           <SideList activity={activity} />
         </div>
       </div>
-      <div className="timeline-row-bars" style={{ position: 'relative', height: 34, borderBottom: '1px solid var(--gridline)' }}>
-        {implBoxLeft !== null && implBoxLeft !== undefined && implBoxRight !== null && implBoxRight !== undefined && testBoxLeft !== null && testBoxLeft !== undefined && testBoxRight !== null && testBoxRight !== undefined ? (
+      <div className="timeline-row-bars" style={{ position: 'relative', height: hasBothWindows ? BARS_ROW_HEIGHT : 34, borderBottom: '1px solid var(--gridline)' }}>
+        {hasBothWindows ? (
           <>
             <PhaseBar
-              boxLeft={implBoxLeft}
-              boxRight={implBoxRight}
+              boxLeft={implBoxLeft!}
+              boxRight={implBoxRight!}
               fillRight={implFillRight!}
               boxColor="var(--series-impl)"
               boxTitle={`Implementação (previsto): ${formatShort(activity.implWindow!.start)} a ${formatShort(activity.implWindow!.end)}`}
               markerTitle={`Previsão era terminar a Implementação até ${formatShort(activity.implWindow!.end)}`}
               fillCells={implFillCells}
+              bandTop={IMPL_BAND_TOP}
             />
             <PhaseBar
-              boxLeft={testBoxLeft}
-              boxRight={testBoxRight}
+              boxLeft={testBoxLeft!}
+              boxRight={testBoxRight!}
               fillRight={testFillRight!}
               boxColor="var(--series-test)"
               boxTitle={`Teste (previsto): ${formatShort(activity.testWindow!.start)} a ${formatShort(activity.testWindow!.end)}`}
+              bandTop={TEST_BAND_TOP}
               markerTitle={`Previsão era terminar o Teste até ${formatShort(activity.testWindow!.end)}`}
               fillCells={testFillCells}
             />
             {activity.isOverdue && overdueLeft !== null && overdueLeft !== undefined && (
-              <Bar left={overdueLeft} right={todayX} color="var(--status-critical)" title={`Atrasada desde ${formatShort(activity.dueDate!)}`} />
+              <Bar
+                left={overdueLeft}
+                right={todayX}
+                color="var(--status-critical)"
+                title={`Atrasada desde ${formatShort(activity.dueDate!)}`}
+                top={2}
+                height={BARS_ROW_HEIGHT - 4}
+              />
             )}
           </>
         ) : activity.notStarted ? (
@@ -732,7 +776,8 @@ function Bar({
  * Caixa tracejada = janela estimada (fixa); preenchimento = progresso real, dia a dia conforme os
  * apontamentos (ver buildDailyFillCells), que cresce a partir do mesmo início e pode passar da
  * caixa quando atrasa — nesse caso aparece uma marca vertical no fim da caixa, indicando onde a
- * fase deveria ter terminado.
+ * fase deveria ter terminado. `bandTop` posiciona a faixa (Implementação/Teste ficam em faixas
+ * separadas dentro da linha, para não uma tampar a outra quando há apontamentos em paralelo).
  */
 function PhaseBar({
   boxLeft,
@@ -742,6 +787,7 @@ function PhaseBar({
   boxTitle,
   markerTitle,
   fillCells,
+  bandTop,
 }: {
   boxLeft: number;
   boxRight: number;
@@ -750,6 +796,7 @@ function PhaseBar({
   boxTitle: string;
   markerTitle: string;
   fillCells: React.ReactNode;
+  bandTop: number;
 }) {
   const boxWidth = Math.max(boxRight - boxLeft, 6);
   const overruns = fillRight > boxRight + 1;
@@ -761,7 +808,7 @@ function PhaseBar({
           position: 'absolute',
           left: boxLeft,
           width: boxWidth,
-          top: 9,
+          top: bandTop + 3,
           height: 16,
           border: `1.5px dashed ${boxColor}`,
           borderRadius: 4,
@@ -776,9 +823,9 @@ function PhaseBar({
           style={{
             position: 'absolute',
             left: boxRight - 1,
-            top: 4,
+            top: bandTop + 1,
             width: 2,
-            height: 26,
+            height: PHASE_BAND_HEIGHT - 2,
             background: 'var(--status-critical)',
           }}
         />
@@ -1084,12 +1131,20 @@ function computeDailyHours(activity: Activity): { implHoursByDate: Map<string, n
   return { implHoursByDate, testHoursByDate };
 }
 
+/** Bloco sólido único (sem quebra por dia) — usado quando o dia a dia deixou de ser relevante. */
+function renderSimpleFill(left: number, right: number, color: string, title: string, top: number): React.ReactNode {
+  const width = right - left;
+  if (width <= 0) return null;
+  return <div title={title} style={{ position: 'absolute', left, width: Math.max(width, 3), top, height: 10, background: color, borderRadius: 3 }} />;
+}
+
 /**
- * Monta o preenchimento da barra dia a dia (só dias úteis): a opacidade de cada dia é proporcional
- * ao % de horas apontadas em relação à jornada configurada (hoursPerDay) — cheio quando bate ou
- * passa a jornada, e sem nenhum apontamento vira um "gap" (contorno tracejado). O hover mostra a
- * data e, quando o gap é menor que 1 dia (apontamento parcial), quantas horas faltaram. O dia de
- * hoje sem apontamento ainda não conta como gap, já que o dia não terminou.
+ * Monta o preenchimento da barra dia a dia (só dias úteis), como uma mini barra de progresso por
+ * dia: cada dia vale 100% da jornada configurada (hoursPerDay), e a LARGURA preenchida (não a
+ * opacidade) é proporcional ao apontado naquele dia — dia sem nenhum apontamento fica só com o
+ * contorno tracejado (0% preenchido). O hover mostra a data e, quando o gap é menor que 1 dia
+ * (apontamento parcial), quantas horas faltaram. O dia de hoje sem apontamento ainda não conta como
+ * gap, já que o dia não terminou.
  */
 function buildDailyFillCells({
   startDate,
@@ -1100,6 +1155,7 @@ function buildDailyFillCells({
   x,
   dayPixelWidth,
   color,
+  top,
 }: {
   startDate: string;
   endDate: string;
@@ -1109,6 +1165,7 @@ function buildDailyFillCells({
   x: (d: string) => number;
   dayPixelWidth: number;
   color: string;
+  top: number;
 }): React.ReactNode[] {
   const cells: React.ReactNode[] = [];
   let cursor = startDate;
@@ -1117,26 +1174,26 @@ function buildDailyFillCells({
       const hours = hoursByDate.get(cursor) ?? 0;
       const isGap = hours <= 0;
       const ratio = hoursPerDay > 0 ? Math.min(1, hours / hoursPerDay) : hours > 0 ? 1 : 0;
+      const isFull = ratio >= 1;
       const gapHours = Math.max(0, hoursPerDay - hours);
       const title = isGap
         ? `Sem apontamento em ${formatShort(cursor)}`
-        : ratio >= 1
+        : isFull
           ? `${formatHoursMinutes(hours)} apontadas em ${formatShort(cursor)}`
           : `${formatHoursMinutes(hours)} apontadas em ${formatShort(cursor)} (gap de ${formatHoursMinutes(gapHours)})`;
+      const innerWidth = Math.max(0, dayPixelWidth - 2);
       cells.push(
-        <div key={cursor} title={title} style={{ position: 'absolute', left: x(cursor), width: dayPixelWidth, top: 12, height: 10 }}>
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              margin: '0 1px',
-              borderRadius: 3,
-              boxSizing: 'border-box',
-              background: isGap ? 'transparent' : color,
-              opacity: isGap ? 1 : Math.max(0.2, ratio),
-              border: isGap ? `1.5px dashed ${color}` : undefined,
-            }}
-          />
+        <div key={cursor} title={title} style={{ position: 'absolute', left: x(cursor), width: dayPixelWidth, top, height: 10 }}>
+          {isFull ? (
+            <div style={{ position: 'absolute', inset: 0, margin: '0 1px', borderRadius: 3, boxSizing: 'border-box', background: color }} />
+          ) : (
+            <>
+              <div style={{ position: 'absolute', inset: 0, margin: '0 1px', borderRadius: 3, boxSizing: 'border-box', border: `1.5px dashed ${color}` }} />
+              {ratio > 0 && (
+                <div style={{ position: 'absolute', top: 1, bottom: 1, left: 1, width: ratio * innerWidth, borderRadius: 2, background: color }} />
+              )}
+            </>
+          )}
         </div>,
       );
     }
