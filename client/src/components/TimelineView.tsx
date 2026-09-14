@@ -514,19 +514,23 @@ function ActivityRow({
     : testFillStartDate;
   const testFillRight = testFillEndDate ? x(testFillEndDate) : null;
 
-  // Uma vez concluída (Implementação + Teste), o dia a dia com gaps deixa de ser útil — mostra só
-  // um bloco sólido único com o total apontado, como antes.
-  const isFullyDone = activity.isDone || activity.testDone;
+  // Uma vez que a PRÓPRIA fase está concluída, o dia a dia com gaps deixa de ser útil pra ela —
+  // mostra só um bloco sólido único com o total apontado. Isso é por fase: a Implementação pode
+  // fechar bem antes do Teste (ou vice-versa), e não faz sentido continuar marcando "gap" nos dias
+  // de espera de uma fase que o próprio dev/tester já entregou.
+  const implPhaseDone = activity.implDone || activity.isDone;
+  const testPhaseDone = activity.testDone || activity.isDone;
   const { implHoursByDate, testHoursByDate } = computeDailyHours(activity);
-  // Atrasada: cada fase mostra sua própria barra vermelha, preenchendo dia a dia pelos
-  // apontamentos do mesmo jeito que quando está em dia — em vez de uma faixa vermelha única por
-  // cima de tudo.
-  const implFillColor = isFullyDone ? 'var(--status-good)' : activity.isOverdue ? 'var(--status-critical)' : 'var(--series-impl)';
-  const testFillColor = isFullyDone ? 'var(--status-good)' : activity.isOverdue ? 'var(--status-critical)' : 'var(--series-test)';
+  // Atrasada: cada fase ainda em aberto mostra sua própria barra vermelha, preenchendo dia a dia
+  // pelos apontamentos do mesmo jeito que quando está em dia — em vez de uma faixa vermelha única
+  // por cima de tudo. Uma fase já concluída fica verde mesmo que a tarefa como um todo esteja
+  // atrasada por causa da outra fase.
+  const implFillColor = implPhaseDone ? 'var(--status-good)' : activity.isOverdue ? 'var(--status-critical)' : 'var(--series-impl)';
+  const testFillColor = testPhaseDone ? 'var(--status-good)' : activity.isOverdue ? 'var(--status-critical)' : 'var(--series-test)';
   const implFillCells =
     !activity.implWindow || implFillRight === null
       ? []
-      : isFullyDone
+      : implPhaseDone
         ? renderSimpleFill(
             implBoxLeft!,
             implFillRight,
@@ -549,7 +553,7 @@ function ActivityRow({
           });
   const testFillCells = !testHasRealProgress || !testFillStartDate || testFillRight === null
     ? []
-    : isFullyDone
+    : testPhaseDone
       ? renderSimpleFill(
           x(testFillStartDate),
           testFillRight,
