@@ -39,6 +39,55 @@ describe('groupSubtasks', () => {
     expect(implStartByParent.size).toBe(0);
   });
 
+  test('uses the date of the first Implementação worklog as the start date, instead of the subtask creation date', () => {
+    const { implStartByParent } = groupSubtasks([
+      subtask({
+        created: '2026-08-04T00:00:00.000-0300',
+        worklog: { worklogs: [{ author: { displayName: 'Fulano' }, started: '2026-09-11T00:00:00.000-0300', timeSpentSeconds: 3600 }] },
+      }),
+    ]);
+    expect(implStartByParent.get('EC-11420')).toBe('2026-09-11');
+  });
+
+  test('picks the earliest Implementação worklog date when there is more than one', () => {
+    const { implStartByParent } = groupSubtasks([
+      subtask({
+        worklog: {
+          worklogs: [
+            { author: { displayName: 'Fulano' }, started: '2026-09-11T00:00:00.000-0300', timeSpentSeconds: 3600 },
+            { author: { displayName: 'Fulano' }, started: '2026-09-04T00:00:00.000-0300', timeSpentSeconds: 3600 },
+          ],
+        },
+      }),
+    ]);
+    expect(implStartByParent.get('EC-11420')).toBe('2026-09-04');
+  });
+
+  test('picks the earliest Implementação worklog date across multiple subtasks of the same parent', () => {
+    const { implStartByParent } = groupSubtasks([
+      subtask({ key: 'EC-1', worklog: { worklogs: [{ author: { displayName: 'A' }, started: '2026-09-11T00:00:00.000-0300', timeSpentSeconds: 3600 }] } }),
+      subtask({ key: 'EC-2', worklog: { worklogs: [{ author: { displayName: 'B' }, started: '2026-09-08T00:00:00.000-0300', timeSpentSeconds: 3600 }] } }),
+    ]);
+    expect(implStartByParent.get('EC-11420')).toBe('2026-09-08');
+  });
+
+  test('falls back to the subtask creation date while there is no Implementação worklog yet', () => {
+    const { implStartByParent } = groupSubtasks([subtask({ created: '2026-08-04T00:00:00.000-0300', worklog: { worklogs: [] } })]);
+    expect(implStartByParent.get('EC-11420')).toBe('2026-08-04');
+  });
+
+  test('ignores Teste/Bug worklogs when picking the Implementação start date', () => {
+    const { implStartByParent } = groupSubtasks([
+      subtask({ key: 'EC-1', type: 'Implementação', created: '2026-08-04T00:00:00.000-0300' }),
+      subtask({
+        key: 'EC-2',
+        type: 'Teste',
+        worklog: { worklogs: [{ author: { displayName: 'Renata' }, started: '2026-08-05T00:00:00.000-0300', timeSpentSeconds: 3600 }] },
+      }),
+    ]);
+    expect(implStartByParent.get('EC-11420')).toBe('2026-08-04');
+  });
+
   test('flags implDoneByParent true when the Implementação subtask is Atendida', () => {
     const { implDoneByParent } = groupSubtasks([subtask({ status: 'Atendida' })]);
     expect(implDoneByParent.get('EC-11420')).toBe(true);
@@ -136,6 +185,53 @@ describe('groupSubtasks', () => {
         worklogEntries: [],
       },
     ]);
+  });
+
+  test('ignores a worklog entry of 5 minutes or less entirely, both from the hour total and from worklogEntries', () => {
+    const { implLoggedHoursByParent, worklogEntriesByParent } = groupSubtasks([
+      subtask({
+        worklog: { worklogs: [{ author: { displayName: 'Fulano' }, started: '2026-09-08T00:00:00.000-0300', timeSpentSeconds: 300 }] },
+      }),
+    ]);
+    expect(implLoggedHoursByParent.get('EC-11420')).toBe(0);
+    expect(worklogEntriesByParent.get('EC-11420') ?? []).toEqual([]);
+  });
+
+  test('keeps a worklog entry of more than 5 minutes', () => {
+    const { implLoggedHoursByParent, worklogEntriesByParent } = groupSubtasks([
+      subtask({
+        worklog: { worklogs: [{ author: { displayName: 'Fulano' }, started: '2026-09-08T00:00:00.000-0300', timeSpentSeconds: 301 }] },
+      }),
+    ]);
+    expect(implLoggedHoursByParent.get('EC-11420')).toBeCloseTo(301 / 3600);
+    expect(worklogEntriesByParent.get('EC-11420')).toHaveLength(1);
+  });
+
+  test('ignores a negligible worklog when picking the Implementação start date, using the next real one instead', () => {
+    const { implStartByParent } = groupSubtasks([
+      subtask({
+        created: '2026-08-04T00:00:00.000-0300',
+        worklog: {
+          worklogs: [
+            { author: { displayName: 'Fulano' }, started: '2026-09-04T00:00:00.000-0300', timeSpentSeconds: 300 },
+            { author: { displayName: 'Fulano' }, started: '2026-09-11T00:00:00.000-0300', timeSpentSeconds: 3600 },
+          ],
+        },
+      }),
+    ]);
+    expect(implStartByParent.get('EC-11420')).toBe('2026-09-11');
+  });
+
+  test('ignores a negligible Bug worklog entry too', () => {
+    const { worklogEntriesByParent, bugsByParent } = groupSubtasks([
+      subtask({
+        key: 'EC-1983',
+        type: 'Bug',
+        worklog: { worklogs: [{ author: { displayName: 'Fulano' }, started: '2026-09-08T00:00:00.000-0300', timeSpentSeconds: 200 }] },
+      }),
+    ]);
+    expect(worklogEntriesByParent.get('EC-11420') ?? []).toEqual([]);
+    expect(bugsByParent.get('EC-11420')?.[0].worklogEntries).toEqual([]);
   });
 
   test('returns an empty bugs array for a parent with no bugs', () => {

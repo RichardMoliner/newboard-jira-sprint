@@ -21,7 +21,11 @@ export interface RawSubtask {
 }
 
 export interface GroupedSubtasks {
-  /** Data (YYYY-MM-DD) de criação da subtarefa "Implementação" mais antiga de cada atividade pai. */
+  /**
+   * Data (YYYY-MM-DD) de início real da Implementação de cada atividade pai: o primeiro apontamento
+   * de horas numa subtarefa "Implementação", ou — enquanto não há nenhum apontamento ainda — a data
+   * de criação da subtarefa "Implementação" mais antiga, como estimativa provisória.
+   */
   implStartByParent: Map<string, string>;
   /** True quando a(s) subtarefa(s) "Implementação" da atividade pai estão todas "Atendida". */
   implDoneByParent: Map<string, boolean>;
@@ -54,6 +58,16 @@ function isResolvedStatus(status: string): boolean {
   return normalize(status) === 'atendida';
 }
 
+/**
+ * Apontamentos de 5 minutos ou menos são ruído (ex.: clique acidental no botão de log de horas do
+ * Jira) — não contam para hora nenhuma nem entram na timeline, em nenhuma subtarefa.
+ */
+const NEGLIGIBLE_WORKLOG_SECONDS = 5 * 60;
+
+function isNegligibleWorklog(worklog: RawWorklogEntry): boolean {
+  return worklog.timeSpentSeconds <= NEGLIGIBLE_WORKLOG_SECONDS;
+}
+
 /** Agrupa subtarefas (Implementação/Teste/Bug) buscadas em lote pela atividade (Story) pai. */
 export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
   const implStartByParent = new Map<string, string>();
@@ -67,7 +81,7 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
   const testerByParent = new Map<string, string>();
 
   function addWorklogs(subtask: RawSubtask, parentKey: string, subtaskType: 'Implementação' | 'Teste', secondsByParent: Map<string, number>) {
-    const entries = subtask.worklog?.worklogs ?? [];
+    const entries = (subtask.worklog?.worklogs ?? []).filter((worklog) => !isNegligibleWorklog(worklog));
     let totalSeconds = secondsByParent.get(parentKey) ?? 0;
     const list = worklogEntriesByParent.get(parentKey) ?? [];
     for (const worklog of entries) {
@@ -116,13 +130,15 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
     }
 
     if (subtask.type === 'Bug') {
-      const bugWorklogEntries: WorklogEntry[] = (subtask.worklog?.worklogs ?? []).map((worklog) => ({
-        subtaskType: 'Bug' as const,
-        author: worklog.author.displayName,
-        date: dateOnly(worklog.started),
-        hours: worklog.timeSpentSeconds / 3600,
-        comment: worklog.comment ?? null,
-      }));
+      const bugWorklogEntries: WorklogEntry[] = (subtask.worklog?.worklogs ?? [])
+        .filter((worklog) => !isNegligibleWorklog(worklog))
+        .map((worklog) => ({
+          subtaskType: 'Bug' as const,
+          author: worklog.author.displayName,
+          date: dateOnly(worklog.started),
+          hours: worklog.timeSpentSeconds / 3600,
+          comment: worklog.comment ?? null,
+        }));
 
       const bug: BugSubtask = {
         key: subtask.key,
@@ -167,6 +183,16 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
 
   for (const list of worklogEntriesByParent.values()) {
     list.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  // O início real do trabalho é o primeiro apontamento de horas na Implementação, não a data de
+  // criação da subtarefa — ela costuma ser criada bem antes de alguém de fato começar a codar.
+  // Enquanto não há nenhum apontamento ainda, mantém a data de criação como estimativa provisória.
+  for (const [parentKey, list] of worklogEntriesByParent) {
+    const firstImplWorklogDate = list.find((entry) => entry.subtaskType === 'Implementação')?.date;
+    if (firstImplWorklogDate) {
+      implStartByParent.set(parentKey, firstImplWorklogDate);
+    }
   }
 
   return {
