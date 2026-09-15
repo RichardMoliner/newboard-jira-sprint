@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { Activity, SprintInfo } from '../types.js';
+import type { Activity, SprintInfo, TimelineWindow, WorklogEntry } from '../types.js';
 
 const MIN_COLUMN_WIDTH = 28;
 const MAX_COLUMN_WIDTH = 96;
@@ -484,21 +484,25 @@ function ActivityRow({
   const implBoxLeft = activity.implWindow && x(activity.implWindow.start);
   const implBoxRight = activity.implWindow && x(activity.implWindow.end);
 
-  // Implementação ainda aberta e já passou da própria estimativa: a caixa do Teste (calculada de
-  // forma sequencial, logo após a Implementação teórica) fica "no passado" — parece que o Teste
-  // deveria ter começado antes mesmo da Implementação terminar. Nesse caso, projeta o início do
-  // Teste pra amanhã (mantendo a duração estimada), só para exibição — não mexe no prazo/KPIs.
-  const implRunningLate = !activity.implDone && activity.implWindow !== null && today > activity.implWindow.end;
-  let projectedTestStart = activity.testWindow?.start ?? null;
-  let projectedTestEnd = activity.testWindow?.end ?? null;
-  if (implRunningLate && activity.testWindow) {
-    const earliestStart = nextBusinessDay(today);
-    if (earliestStart > activity.testWindow.start) {
-      const durationDays = countBusinessDaysInclusive(activity.testWindow.start, activity.testWindow.end);
-      projectedTestStart = earliestStart;
-      projectedTestEnd = addBusinessDays(earliestStart, durationDays - 1);
-    }
-  }
+  // Uma vez que a PRÓPRIA fase está concluída, o dia a dia com gaps deixa de ser útil pra ela —
+  // mostra só um bloco sólido único com o total apontado. Isso é por fase: a Implementação pode
+  // fechar bem antes do Teste (ou vice-versa), e não faz sentido continuar marcando "gap" nos dias
+  // de espera de uma fase que o próprio dev/tester já entregou.
+  const implPhaseDone = activity.implDone || activity.isDone;
+  const testPhaseDone = activity.testDone || activity.isDone;
+  const { implHoursByDate, testHoursByDate } = computeDailyHours(activity);
+
+  // Início real do teste = data do primeiro apontamento de horas na subtarefa de Teste — a data de
+  // criação da subtarefa (ou de conclusão da Implementação) não indica que o teste começou de fato.
+  const firstTestWorklogDate = activity.worklogEntries.find((e) => e.subtaskType === 'Teste')?.date ?? null;
+  const testHasLoggedHours = firstTestWorklogDate !== null || (activity.testLoggedHours ?? 0) > 0;
+  const testHasRealProgress = testHasLoggedHours || activity.testDone;
+
+  const projectedTestWindow = projectTestWindow({ testWindow: activity.testWindow, testHasRealProgress, implPhaseDone, today });
+  const projectedTestStart = projectedTestWindow?.start ?? null;
+  const projectedTestEnd = projectedTestWindow?.end ?? null;
+  const testWindowIsProjected =
+    activity.testWindow !== null && projectedTestStart !== null && projectedTestStart !== activity.testWindow.start;
   const testBoxLeft = projectedTestStart ? x(projectedTestStart) : null;
   const testBoxRight = projectedTestEnd ? x(projectedTestEnd) : null;
   const hasBothWindows =
@@ -509,34 +513,38 @@ function ActivityRow({
   // exatamente em quais dias o dev/tester trabalhou e onde ficaram os gaps (dias úteis sem
   // apontamento). Cresce do início real até hoje (ou até a entrega), passando da caixa quando
   // atrasa — nesse caso a caixa marca onde deveria ter terminado.
-  // Início real do teste = data do primeiro apontamento de horas na subtarefa de Teste — a data de
-  // criação da subtarefa (ou de conclusão da Implementação) não indica que o teste começou de fato.
-  const firstTestWorklogDate = activity.worklogEntries.find((e) => e.subtaskType === 'Teste')?.date ?? null;
-  const testHasRealProgress = firstTestWorklogDate !== null || activity.testDone || (activity.testLoggedHours ?? 0) > 0;
+  const lastImplWorklogDate = lastWorklogDate(activity.worklogEntries, 'Implementação');
+  const implFillEndDate = computeImplFillEndDate({
+    implWindow: activity.implWindow,
+    implPhaseDone,
+    lastImplWorklogDate,
+    firstTestWorklogDate,
+    isDone: activity.isDone,
+    deliveredDate: activity.deliveredDate,
+    today,
+  });
+  // Bloco sólido (fase concluída): o último dia real de trabalho pode ter sido parcial (ex.: 4h de
+  // uma jornada de 6h30) — sem esse acréscimo proporcional, esse dia simplesmente desaparecia da
+  // barra (o traço vai até o INÍCIO do dia, não o fim).
+  const implFillRight = implFillEndDate
+    ? x(implFillEndDate) + (implPhaseDone ? dayFillRatio(implHoursByDate.get(implFillEndDate) ?? 0, hoursPerDay) * dayPixelWidth : 0)
+    : null;
 
-  const implFillEndDate =
-    activity.implWindow &&
-    maxDateStr(
-      firstTestWorklogDate ?? (activity.isDone && activity.deliveredDate ? activity.deliveredDate : today),
-      activity.implWindow.start,
-    );
-  const implFillRight = implFillEndDate ? x(implFillEndDate) : null;
-
-  const testFillStartDate = firstTestWorklogDate ?? (activity.testWindow ? activity.testWindow.start : null);
-  const testFillEndDate = testHasRealProgress
-    ? (activity.isDone || activity.testDone) && activity.deliveredDate
-      ? activity.deliveredDate
-      : today
-    : testFillStartDate;
-  const testFillRight = testFillEndDate ? x(testFillEndDate) : null;
-
-  // Uma vez que a PRÓPRIA fase está concluída, o dia a dia com gaps deixa de ser útil pra ela —
-  // mostra só um bloco sólido único com o total apontado. Isso é por fase: a Implementação pode
-  // fechar bem antes do Teste (ou vice-versa), e não faz sentido continuar marcando "gap" nos dias
-  // de espera de uma fase que o próprio dev/tester já entregou.
-  const implPhaseDone = activity.implDone || activity.isDone;
-  const testPhaseDone = activity.testDone || activity.isDone;
-  const { implHoursByDate, testHoursByDate } = computeDailyHours(activity);
+  const testFillRange = computeTestFillRange({
+    testWindow: activity.testWindow,
+    firstTestWorklogDate,
+    testHasLoggedHours,
+    testPhaseDone,
+    isDone: activity.isDone,
+    testDone: activity.testDone,
+    deliveredDate: activity.deliveredDate,
+    today,
+  });
+  const testFillStartDate = testFillRange?.start ?? null;
+  const testFillEndDate = testFillRange?.end ?? null;
+  const testFillRight = testFillEndDate
+    ? x(testFillEndDate) + (testPhaseDone ? dayFillRatio(testHoursByDate.get(testFillEndDate) ?? 0, hoursPerDay) * dayPixelWidth : 0)
+    : null;
   // Atrasada: cada fase ainda em aberto mostra sua própria barra vermelha, preenchendo dia a dia
   // pelos apontamentos do mesmo jeito que quando está em dia — em vez de uma faixa vermelha única
   // por cima de tudo. Uma fase já concluída fica verde mesmo que a tarefa como um todo esteja
@@ -690,8 +698,8 @@ function ActivityRow({
               fillRight={testFillRight!}
               boxColor="var(--series-test)"
               boxTitle={
-                implRunningLate && projectedTestStart !== activity.testWindow!.start
-                  ? `Teste (projeção, Implementação atrasada): ${formatShort(projectedTestStart!)} a ${formatShort(projectedTestEnd!)}`
+                testWindowIsProjected
+                  ? `Teste (projeção, ainda não iniciado): ${formatShort(projectedTestStart!)} a ${formatShort(projectedTestEnd!)}`
                   : `Teste (previsto): ${formatShort(projectedTestStart!)} a ${formatShort(projectedTestEnd!)}`
               }
               bandTop={TEST_BAND_TOP}
@@ -1106,10 +1114,16 @@ function addDays(iso: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function nextBusinessDay(dateISO: string): string {
-  let cursor = addDays(dateISO, 1);
+/** A própria data, se já for dia útil, senão o próximo dia útil — usada como "o mais cedo possível a partir de hoje". */
+function ceilToBusinessDay(dateISO: string): string {
+  let cursor = dateISO;
   while (!isBusinessDay(cursor)) cursor = addDays(cursor, 1);
   return cursor;
+}
+
+/** O próximo dia útil, estritamente depois da data informada (nunca a própria data). */
+function nextBusinessDay(dateISO: string): string {
+  return ceilToBusinessDay(addDays(dateISO, 1));
 }
 
 function addBusinessDays(dateISO: string, count: number): string {
@@ -1132,6 +1146,44 @@ function countBusinessDaysInclusive(startISO: string, endISO: string): number {
   return count;
 }
 
+/**
+ * Teste sem nenhum apontamento real ainda e a janela prevista já ficou no passado: reprojeta o
+ * início pra frente, preservando a mesma duração em dias úteis — só para exibição, não mexe em
+ * prazo/KPIs. O "mais cedo possível" depende de a Implementação já estar concluída: se estiver
+ * (só falta o Teste começar), o Teste pode começar HOJE; se a Implementação ainda está aberta
+ * (atrasada), o Teste só poderia começar a partir de AMANHÃ, já que hoje ainda é dia de
+ * Implementação. Sempre pulando fim de semana/feriado.
+ */
+export function projectTestWindow({
+  testWindow,
+  testHasRealProgress,
+  implPhaseDone,
+  today,
+}: {
+  testWindow: TimelineWindow | null;
+  testHasRealProgress: boolean;
+  implPhaseDone: boolean;
+  today: string;
+}): TimelineWindow | null {
+  if (!testWindow) return null;
+  if (testHasRealProgress) return testWindow;
+  const earliestStart = implPhaseDone ? ceilToBusinessDay(today) : nextBusinessDay(today);
+  if (earliestStart <= testWindow.start) return testWindow;
+  const durationDays = countBusinessDaysInclusive(testWindow.start, testWindow.end);
+  return { start: earliestStart, end: addBusinessDays(earliestStart, durationDays - 1) };
+}
+
+/** Data do apontamento mais recente de um tipo de subtarefa (Implementação/Teste/Bug), ou null se não houver nenhum. */
+export function lastWorklogDate(entries: WorklogEntry[], type: WorklogEntry['subtaskType']): string | null {
+  let last: string | null = null;
+  for (const entry of entries) {
+    if (entry.subtaskType === type && (last === null || entry.date > last)) {
+      last = entry.date;
+    }
+  }
+  return last;
+}
+
 function formatShort(iso: string): string {
   const [, m, d] = iso.split('-');
   return `${d}/${m}`;
@@ -1139,6 +1191,77 @@ function formatShort(iso: string): string {
 
 function maxDateStr(a: string, b: string): string {
   return a > b ? a : b;
+}
+
+/**
+ * Fim do preenchimento da barra de Implementação: uma vez que a fase está concluída, para no
+ * último apontamento real dela — não em "hoje", senão a barra continuaria crescendo mesmo depois
+ * que o trabalho já acabou, só porque o Teste ainda não começou. Enquanto ainda está em andamento,
+ * continua crescendo até hoje (ou até o início real do Teste / a entrega, o que vier primeiro).
+ */
+export function computeImplFillEndDate({
+  implWindow,
+  implPhaseDone,
+  lastImplWorklogDate,
+  firstTestWorklogDate,
+  isDone,
+  deliveredDate,
+  today,
+}: {
+  implWindow: TimelineWindow | null;
+  implPhaseDone: boolean;
+  lastImplWorklogDate: string | null;
+  firstTestWorklogDate: string | null;
+  isDone: boolean;
+  deliveredDate: string | null;
+  today: string;
+}): string | null {
+  if (!implWindow) return null;
+  const candidate = implPhaseDone
+    ? (lastImplWorklogDate ?? implWindow.start)
+    : (firstTestWorklogDate ?? (isDone && deliveredDate ? deliveredDate : today));
+  return maxDateStr(candidate, implWindow.start);
+}
+
+/**
+ * Faixa de preenchimento da barra de Teste. Quando a subtarefa de Teste é dada como "Atendida" sem
+ * NENHUMA hora realmente apontada (ninguém logou tempo nela), não há como saber quando o trabalho
+ * aconteceu de fato — em vez de desenhar um bloco enorme do início previsto (semanas atrás) até a
+ * entrega, como se aquele período todo fosse teste, colapsa num único ponto na data de entrega (um
+ * traço mínimo), do mesmo jeito que a Implementação já faz quando está concluída sem apontamento.
+ */
+export function computeTestFillRange({
+  testWindow,
+  firstTestWorklogDate,
+  testHasLoggedHours,
+  testPhaseDone,
+  isDone,
+  testDone,
+  deliveredDate,
+  today,
+}: {
+  testWindow: TimelineWindow | null;
+  firstTestWorklogDate: string | null;
+  testHasLoggedHours: boolean;
+  testPhaseDone: boolean;
+  isDone: boolean;
+  testDone: boolean;
+  deliveredDate: string | null;
+  today: string;
+}): TimelineWindow | null {
+  const testHasRealProgress = testHasLoggedHours || testDone;
+  if (!testHasRealProgress) {
+    const start = testWindow?.start ?? null;
+    return start ? { start, end: start } : null;
+  }
+  if (testHasLoggedHours) {
+    const start = firstTestWorklogDate ?? testWindow?.start ?? null;
+    if (!start) return null;
+    const end = (isDone || testDone) && deliveredDate ? deliveredDate : today;
+    return { start, end };
+  }
+  const anchor = deliveredDate ?? testWindow?.start ?? null;
+  return anchor ? { start: anchor, end: anchor } : null;
 }
 
 function normalize(text: string): string {
@@ -1168,6 +1291,11 @@ function computeDailyHours(activity: Activity): { implHoursByDate: Map<string, n
     bucket.set(entry.date, (bucket.get(entry.date) ?? 0) + entry.hours);
   }
   return { implHoursByDate, testHoursByDate };
+}
+
+/** Fração do dia (0 a 1) coberta pelas horas apontadas, dado o tamanho da jornada configurada. */
+export function dayFillRatio(hours: number, hoursPerDay: number): number {
+  return hoursPerDay > 0 ? Math.min(1, hours / hoursPerDay) : hours > 0 ? 1 : 0;
 }
 
 /** Bloco sólido único (sem quebra por dia) — usado quando o dia a dia deixou de ser relevante. */
@@ -1212,7 +1340,7 @@ function buildDailyFillCells({
     if (isBusinessDay(cursor)) {
       const hours = hoursByDate.get(cursor) ?? 0;
       const isGap = hours <= 0;
-      const ratio = hoursPerDay > 0 ? Math.min(1, hours / hoursPerDay) : hours > 0 ? 1 : 0;
+      const ratio = dayFillRatio(hours, hoursPerDay);
       const isFull = ratio >= 1;
       const gapHours = Math.max(0, hoursPerDay - hours);
       const title = isGap
