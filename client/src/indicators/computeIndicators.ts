@@ -44,6 +44,10 @@ export interface RealizedProductivity {
    * mais tempo que o previsto).
    */
   accuracyPercent: number | null;
+  /** Mesma % de assertividade, somando também as horas apontadas em bugs (esforço real total). */
+  accuracyWithBugsPercent: number | null;
+  /** % do total Implementação + Teste que foi de fato Teste, nas tarefas concluídas — compara com o assumedTestSharePercent (hoje fixo em 30%) usado para projetar a janela prevista. Bugs ficam de fora dessa conta. */
+  testSharePercent: number | null;
   sampleSize: number;
 }
 
@@ -53,16 +57,23 @@ export interface RealizedProductivity {
  * "vivo" — muda conforme mais tarefas são concluídas e mais apontamentos são lançados.
  */
 export function computeRealizedProductivity(activities: Activity[], hoursPerPf: number): RealizedProductivity {
+  // Implementação + Teste "Atendida" (testDone) já é trabalho funcionalmente concluído, mesmo que
+  // a story ainda esteja só "Aguardando liberação" — não faz sentido esperar o fechamento formal
+  // pra contar horas que já são reais.
   const eligible = activities.filter(
-    (a) => a.isDone && a.storyPoints !== null && a.storyPoints > 0 && (a.implLoggedHours !== null || a.testLoggedHours !== null),
+    (a) => (a.isDone || a.testDone) && a.storyPoints !== null && a.storyPoints > 0 && (a.implLoggedHours !== null || a.testLoggedHours !== null),
   );
   const totalStoryPoints = sum(eligible.map((a) => a.storyPoints ?? 0));
+  const totalTestHours = sum(eligible.map((a) => a.testLoggedHours ?? 0));
   const totalLoggedHours = sum(eligible.map((a) => (a.implLoggedHours ?? 0) + (a.testLoggedHours ?? 0)));
+  const totalLoggedHoursWithBugs = totalLoggedHours + sum(eligible.map((a) => a.bugsLoggedHours ?? 0));
   const totalEstimatedHours = totalStoryPoints * hoursPerPf;
 
   return {
     hoursPerPf: totalStoryPoints > 0 ? totalLoggedHours / totalStoryPoints : null,
     accuracyPercent: totalEstimatedHours > 0 ? (totalLoggedHours / totalEstimatedHours) * 100 : null,
+    accuracyWithBugsPercent: totalEstimatedHours > 0 ? (totalLoggedHoursWithBugs / totalEstimatedHours) * 100 : null,
+    testSharePercent: totalLoggedHours > 0 ? (totalTestHours / totalLoggedHours) * 100 : null,
     sampleSize: eligible.length,
   };
 }

@@ -1,6 +1,7 @@
 import { addBusinessDays } from './businessDays.js';
 
-const IMPL_SHARE = 0.7;
+/** Fração do prazo total (dias úteis) reservada para Implementação ao projetar a janela prevista; o restante (1 - IMPL_SHARE) vai para Teste. */
+export const IMPL_SHARE = 0.7;
 
 /** Horas produtivas por dia padrão, usada quando a vertical não configurou o próprio valor. */
 export const DEFAULT_HOURS_PER_DAY = 8;

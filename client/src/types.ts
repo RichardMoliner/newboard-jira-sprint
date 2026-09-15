@@ -36,6 +36,7 @@ export interface Activity {
   deliveredDate: string | null;
   deliveredOnTime: boolean | null;
   assertividadePercent: number | null;
+  assertividadeComBugsPercent: number | null;
   status: string;
   isDone: boolean;
   isOverdue: boolean;
@@ -48,6 +49,7 @@ export interface Activity {
   testEstimatedHours: number | null;
   implLoggedHours: number | null;
   testLoggedHours: number | null;
+  bugsLoggedHours: number | null;
   worklogEntries: WorklogEntry[];
   bugs: BugSubtask[];
 }
@@ -65,6 +67,8 @@ export interface BoardDataResponse {
   vertical: string;
   hoursPerPf: number;
   hoursPerDay: number;
+  /** % do tempo total (Implementação + Teste) assumido como Teste ao projetar a janela prevista (hoje fixo em 30%). */
+  assumedTestSharePercent: number;
   sprints: SprintInfo[];
   activities: Activity[];
 }

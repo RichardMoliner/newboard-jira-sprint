@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { mapActivity, type RawStory } from './mapActivity.js';
 import type { ParsedSprint } from '../jira/parseSprintField.js';
+import type { BugSubtask } from './types.js';
 
 const sprint: ParsedSprint = {
   id: '7590',
@@ -22,6 +23,19 @@ function baseStory(overrides: Partial<RawStory> = {}): RawStory {
     testador: 'Luana de Souza Bez Batti',
     created: '2026-07-08T10:26:04.000-0300',
     updated: '2026-09-08T16:37:55.000-0300',
+    ...overrides,
+  };
+}
+
+function bug(overrides: Partial<BugSubtask> = {}): BugSubtask {
+  return {
+    key: 'EC-11983',
+    title: 'Bug de exemplo',
+    developer: 'Guilherme Henrique Gibim de Mello',
+    status: 'Atendida',
+    startDate: '2026-08-27',
+    endDate: '2026-09-08',
+    worklogEntries: [],
     ...overrides,
   };
 }
@@ -545,6 +559,67 @@ describe('mapActivity', () => {
     expect(activity.assertividadePercent).toBeCloseTo(16);
   });
 
+  test('keeps assertividadePercent based on Implementação + Teste only, excluding bug hours', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Concluído', status: 'Atendida' }),
+      sprint,
+      implStartDate: '2026-09-04',
+      implLoggedHours: 5,
+      testLoggedHours: 3,
+      bugs: [bug({ worklogEntries: [{ subtaskType: 'Bug', author: 'Fulano', date: '2026-08-28', hours: 12, comment: null }] })],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+      hoursPerPf: 5,
+    });
+    // estimado: 50h; apontado (sem bugs): 5h + 3h = 8h -> 8/50 = 16%, igual ao teste sem bugs acima
+    expect(activity.assertividadePercent).toBeCloseTo(16);
+  });
+
+  test('computes assertividadeComBugsPercent including Implementação + Teste + Bugs', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Concluído', status: 'Atendida' }),
+      sprint,
+      implStartDate: '2026-09-04',
+      implLoggedHours: 5,
+      testLoggedHours: 3,
+      bugs: [bug({ worklogEntries: [{ subtaskType: 'Bug', author: 'Fulano', date: '2026-08-28', hours: 12, comment: null }] })],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+      hoursPerPf: 5,
+    });
+    // estimado: 50h; apontado (com bugs): 5h + 3h + 12h = 20h -> 20/50 = 40%
+    expect(activity.assertividadeComBugsPercent).toBeCloseTo(40);
+  });
+
+  test('assertividadeComBugsPercent equals assertividadePercent when the activity has no bugs', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Concluído', status: 'Atendida' }),
+      sprint,
+      implStartDate: '2026-09-04',
+      implLoggedHours: 5,
+      testLoggedHours: 3,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+      hoursPerPf: 5,
+    });
+    expect(activity.assertividadeComBugsPercent).toBeCloseTo(activity.assertividadePercent!);
+  });
+
+  test('leaves assertividadeComBugsPercent null for activities not done yet, even with bug hours', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Em andamento', status: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-09-04',
+      implLoggedHours: 5,
+      bugs: [bug({ worklogEntries: [{ subtaskType: 'Bug', author: 'Fulano', date: '2026-08-28', hours: 12, comment: null }] })],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+      hoursPerPf: 5,
+    });
+    expect(activity.assertividadeComBugsPercent).toBeNull();
+  });
+
   test('sums implLoggedHours and testLoggedHours even when only one of them has data', () => {
     const activity = mapActivity({
       story: baseStory({ storyPoints: 10, statusCategory: 'Concluído', status: 'Atendida' }),
@@ -601,6 +676,43 @@ describe('mapActivity', () => {
     expect(activity.assertividadePercent).toBeNull();
   });
 
+  // Implementação + Teste "Atendida" já é trabalho funcionalmente concluído — não devia esperar o
+  // fechamento formal da story (status "Aguardando liberação") pra entrar na assertividade.
+  test('computes assertividadePercent for an activity awaiting release (testDone), even though the story itself is not formally closed', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Em andamento', status: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-09-04',
+      implLoggedHours: 5,
+      testLoggedHours: 3,
+      testDone: true,
+      testDoneDate: '2026-09-08',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+      hoursPerPf: 5,
+    });
+    expect(activity.isDone).toBe(false);
+    expect(activity.assertividadePercent).toBeCloseTo(16);
+  });
+
+  test('computes assertividadeComBugsPercent for an activity awaiting release (testDone) too', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Em andamento', status: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-09-04',
+      implLoggedHours: 5,
+      testLoggedHours: 3,
+      testDone: true,
+      testDoneDate: '2026-09-08',
+      bugs: [bug({ worklogEntries: [{ subtaskType: 'Bug', author: 'Fulano', date: '2026-08-28', hours: 12, comment: null }] })],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+      hoursPerPf: 5,
+    });
+    expect(activity.assertividadeComBugsPercent).toBeCloseTo(40);
+  });
+
   test('leaves assertividadePercent null when there is no estimate', () => {
     const activity = mapActivity({
       story: baseStory({ storyPoints: null, statusCategory: 'Concluído', status: 'Atendida' }),
@@ -640,7 +752,7 @@ describe('mapActivity', () => {
     expect(activity.bugs).toEqual(bugs);
   });
 
-  test('sums bug worklog hours logged by someone other than the tester into implLoggedHours', () => {
+  test('does not fold bug worklog hours into implLoggedHours — they show separately as bugsLoggedHours', () => {
     const bugs = [
       {
         key: 'EC-11983',
@@ -663,11 +775,12 @@ describe('mapActivity', () => {
       baseUrl: 'https://desenv.betha.com.br',
       today: '2026-09-08',
     });
-    expect(activity.implLoggedHours).toBeCloseTo(7); // 5h da Implementação + 2h do bug
+    expect(activity.implLoggedHours).toBe(5);
     expect(activity.testLoggedHours).toBeNull();
+    expect(activity.bugsLoggedHours).toBeCloseTo(2);
   });
 
-  test('sums bug worklog hours logged by the tester into testLoggedHours', () => {
+  test('does not fold bug worklog hours into testLoggedHours either', () => {
     const bugs = [
       {
         key: 'EC-11983',
@@ -688,34 +801,12 @@ describe('mapActivity', () => {
       baseUrl: 'https://desenv.betha.com.br',
       today: '2026-09-08',
     });
-    expect(activity.testLoggedHours).toBeCloseTo(4.5); // 3h do Teste + 1.5h do bug
+    expect(activity.testLoggedHours).toBe(3);
     expect(activity.implLoggedHours).toBeNull();
+    expect(activity.bugsLoggedHours).toBeCloseTo(1.5);
   });
 
-  test('matches the tester name case/accent-insensitively when classifying bug worklogs', () => {
-    const bugs = [
-      {
-        key: 'EC-11983',
-        title: 'Bug X',
-        developer: 'Fulano',
-        status: 'Em correção',
-        startDate: '2026-08-27',
-        endDate: '2026-09-03',
-        worklogEntries: [{ subtaskType: 'Bug' as const, author: 'LUANA DE SOUZA BEZ BATTI', date: '2026-08-28', hours: 1, comment: null }],
-      },
-    ];
-    const activity = mapActivity({
-      story: baseStory(),
-      sprint,
-      implStartDate: '2026-08-04',
-      bugs,
-      baseUrl: 'https://desenv.betha.com.br',
-      today: '2026-09-08',
-    });
-    expect(activity.testLoggedHours).toBeCloseTo(1);
-  });
-
-  test('starts implLoggedHours/testLoggedHours from bug worklogs alone, even with no Implementação/Teste subtask yet', () => {
+  test('leaves implLoggedHours/testLoggedHours null when there is no subtask yet, even with bug worklogs', () => {
     const bugs = [
       {
         key: 'EC-11983',
@@ -735,7 +826,9 @@ describe('mapActivity', () => {
       baseUrl: 'https://desenv.betha.com.br',
       today: '2026-09-08',
     });
-    expect(activity.implLoggedHours).toBeCloseTo(2);
+    expect(activity.implLoggedHours).toBeNull();
+    expect(activity.testLoggedHours).toBeNull();
+    expect(activity.bugsLoggedHours).toBeCloseTo(2);
   });
 
   test('falls back to the story assignee when there is no Implementação subtask to fill "desenvolvedor"', () => {
@@ -772,5 +865,53 @@ describe('mapActivity', () => {
       today: '2026-09-08',
     });
     expect(activity.tester).toBeNull();
+  });
+
+  test('leaves bugsLoggedHours null when the activity has no bugs', () => {
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.bugsLoggedHours).toBeNull();
+  });
+
+  test('sums every worklog entry across all bugs into bugsLoggedHours, regardless of who logged it', () => {
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [
+        bug({
+          key: 'EC-11983',
+          worklogEntries: [
+            { subtaskType: 'Bug', author: 'Guilherme Henrique Gibim de Mello', date: '2026-08-28', hours: 2, comment: null },
+            { subtaskType: 'Bug', author: 'Luana de Souza Bez Batti', date: '2026-08-29', hours: 1.5, comment: null },
+          ],
+        }),
+        bug({
+          key: 'EC-11984',
+          worklogEntries: [{ subtaskType: 'Bug', author: 'Guilherme Henrique Gibim de Mello', date: '2026-09-01', hours: 3, comment: null }],
+        }),
+      ],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.bugsLoggedHours).toBeCloseTo(6.5);
+  });
+
+  test('reports 0 (not null) bugsLoggedHours when the activity has bugs but none has a worklog yet', () => {
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [bug({ worklogEntries: [] })],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.bugsLoggedHours).toBe(0);
   });
 });

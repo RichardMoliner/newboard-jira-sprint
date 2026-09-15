@@ -35,25 +35,15 @@ function isDoneStatusCategory(statusCategory: string): boolean {
   return normalize(statusCategory) === 'concluido';
 }
 
-/**
- * Soma os apontamentos lançados nos bugs da atividade nas horas de Implementação/Teste: quem
- * apontou é comparado com o tester da story — apontamentos do tester contam como Teste, os de
- * qualquer outra pessoa (dev incluído) contam como Implementação.
- */
-function sumBugWorklogHours(bugs: BugSubtask[], testerName: string | null): { implHours: number; testHours: number } {
-  const normalizedTester = testerName !== null ? normalize(testerName) : null;
-  let implHours = 0;
-  let testHours = 0;
+/** Soma todos os apontamentos lançados nos bugs da atividade, de qualquer pessoa. */
+function sumBugWorklogHours(bugs: BugSubtask[]): number {
+  let total = 0;
   for (const bug of bugs) {
     for (const entry of bug.worklogEntries) {
-      if (normalizedTester !== null && normalize(entry.author) === normalizedTester) {
-        testHours += entry.hours;
-      } else {
-        implHours += entry.hours;
-      }
+      total += entry.hours;
     }
   }
-  return { implHours, testHours };
+  return total;
 }
 
 export function mapActivity(params: {
@@ -121,23 +111,27 @@ export function mapActivity(params: {
   const implEstimatedHours = timeline ? businessDaysBetween(timeline.impl.start, timeline.impl.end) * hoursPerDay : null;
   const testEstimatedHours = timeline ? businessDaysBetween(timeline.test.start, timeline.test.end) * hoursPerDay : null;
 
-  // Apontamentos nos bugs somam nas horas de Implementação/Teste da atividade — refletem o
-  // trabalho real de corrigir/validar os bugs encontrados, não só o das subtarefas principais.
-  const { implHours: bugImplHours, testHours: bugTestHours } = sumBugWorklogHours(bugs, story.testador);
-  const combinedImplLoggedHours =
-    implLoggedHours !== null || bugImplHours > 0 ? (implLoggedHours ?? 0) + bugImplHours : null;
-  const combinedTestLoggedHours =
-    testLoggedHours !== null || bugTestHours > 0 ? (testLoggedHours ?? 0) + bugTestHours : null;
+  // Apontamentos em bugs contam à parte (campo "Bugs (h)") — não entram nas horas de
+  // Implementação/Teste, que mostram só o que foi apontado na própria subtarefa.
+  const bugsLoggedHours = bugs.length > 0 ? sumBugWorklogHours(bugs) : null;
 
-  // Assertividade compara o estimado (PF × horas/PF) com o realmente apontado (Implementação +
-  // Teste + bugs) — só faz sentido depois que a story está concluída (apontamento fechado).
-  const totalLoggedHours =
-    combinedImplLoggedHours !== null || combinedTestLoggedHours !== null
-      ? (combinedImplLoggedHours ?? 0) + (combinedTestLoggedHours ?? 0)
-      : null;
+  // Duas assertividades: uma só com o trabalho planejado (Implementação + Teste, contra a
+  // estimativa original) e outra somando também os bugs (esforço real total, incluindo correções
+  // não previstas na estimativa). Consideram o trabalho funcionalmente concluído — Teste já
+  // "Atendida" — mesmo que a story ainda não tenha sido formalmente fechada (só aguardando
+  // liberação): não faz sentido esperar esse trâmite pra contar horas que já são reais.
+  const functionallyDone = isDone || testDone;
+  const totalLoggedHoursNoBugs =
+    implLoggedHours !== null || testLoggedHours !== null ? (implLoggedHours ?? 0) + (testLoggedHours ?? 0) : null;
+  const totalLoggedHoursWithBugs =
+    totalLoggedHoursNoBugs !== null || bugsLoggedHours !== null ? (totalLoggedHoursNoBugs ?? 0) + (bugsLoggedHours ?? 0) : null;
   const assertividadePercent =
-    isDone && story.storyPoints !== null && totalLoggedHours !== null
-      ? computeAccuracyPercent(story.storyPoints * hoursPerPf, totalLoggedHours)
+    functionallyDone && story.storyPoints !== null && totalLoggedHoursNoBugs !== null
+      ? computeAccuracyPercent(story.storyPoints * hoursPerPf, totalLoggedHoursNoBugs)
+      : null;
+  const assertividadeComBugsPercent =
+    functionallyDone && story.storyPoints !== null && totalLoggedHoursWithBugs !== null
+      ? computeAccuracyPercent(story.storyPoints * hoursPerPf, totalLoggedHoursWithBugs)
       : null;
 
   return {
@@ -155,6 +149,7 @@ export function mapActivity(params: {
     deliveredDate,
     deliveredOnTime: isDeliveredOnTime(deliveredDate, dueDate),
     assertividadePercent,
+    assertividadeComBugsPercent,
     status,
     isDone,
     // Uma vez que os testes já foram atendidos, a tarefa não está mais "atrasada" de fato — só
@@ -167,8 +162,9 @@ export function mapActivity(params: {
     testWindow: timeline?.test ?? null,
     implEstimatedHours,
     testEstimatedHours,
-    implLoggedHours: combinedImplLoggedHours,
-    testLoggedHours: combinedTestLoggedHours,
+    implLoggedHours,
+    testLoggedHours,
+    bugsLoggedHours,
     worklogEntries,
     bugs,
   };

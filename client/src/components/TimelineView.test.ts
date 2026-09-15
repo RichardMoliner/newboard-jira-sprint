@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { computeImplFillEndDate, computeTestFillRange, dayFillRatio, lastWorklogDate, projectTestWindow } from './TimelineView.js';
-import type { WorklogEntry } from '../types.js';
+import { computeDailyHours, computeImplFillEndDate, computeTestFillRange, dayFillRatio, lastWorklogDate, projectTestWindow } from './TimelineView.js';
+import type { Activity, WorklogEntry } from '../types.js';
 
 function entry(overrides: Partial<WorklogEntry>): WorklogEntry {
   return {
@@ -9,6 +9,42 @@ function entry(overrides: Partial<WorklogEntry>): WorklogEntry {
     date: '2026-09-10',
     hours: 4,
     comment: null,
+    ...overrides,
+  };
+}
+
+function activity(overrides: Partial<Activity> = {}): Activity {
+  return {
+    key: 'EC-1',
+    url: 'https://desenv.betha.com.br/browse/EC-1',
+    title: 'Atividade',
+    sprintId: '7590',
+    sprintName: 'ALM S09 2026 Edital',
+    isCarried: false,
+    developer: 'Fulano',
+    tester: 'Ciclana',
+    storyPoints: 5,
+    startDate: '2026-09-03',
+    dueDate: '2026-09-10',
+    deliveredDate: null,
+    deliveredOnTime: null,
+    assertividadePercent: null,
+    assertividadeComBugsPercent: null,
+    status: 'Em andamento',
+    isDone: false,
+    isOverdue: false,
+    notStarted: false,
+    implDone: false,
+    testDone: false,
+    implWindow: null,
+    testWindow: null,
+    implEstimatedHours: null,
+    testEstimatedHours: null,
+    implLoggedHours: null,
+    testLoggedHours: null,
+    bugsLoggedHours: null,
+    worklogEntries: [],
+    bugs: [],
     ...overrides,
   };
 }
@@ -124,6 +160,49 @@ describe('computeImplFillEndDate', () => {
         today: '2026-09-15',
       }),
     ).toBe(implWindow.start);
+  });
+});
+
+describe('computeDailyHours', () => {
+  test('buckets Implementação and Teste worklog entries by date into their own maps', () => {
+    const { implHoursByDate, testHoursByDate } = computeDailyHours(
+      activity({
+        worklogEntries: [
+          entry({ subtaskType: 'Implementação', date: '2026-09-08', hours: 4 }),
+          entry({ subtaskType: 'Teste', date: '2026-09-09', hours: 2 }),
+        ],
+      }),
+    );
+    expect(implHoursByDate.get('2026-09-08')).toBe(4);
+    expect(testHoursByDate.get('2026-09-09')).toBe(2);
+  });
+
+  // Apontamentos em bugs agora contam à parte (campo "Bugs (h)"), não entram mais nem em
+  // Implementação nem em Teste — nem mesmo os do próprio tester, que antes contavam como Teste.
+  test('excludes Bug worklog entries entirely, regardless of who logged them', () => {
+    const { implHoursByDate, testHoursByDate } = computeDailyHours(
+      activity({
+        tester: 'Ciclana',
+        worklogEntries: [
+          entry({ subtaskType: 'Bug', author: 'Fulano', date: '2026-09-08', hours: 2 }),
+          entry({ subtaskType: 'Bug', author: 'Ciclana', date: '2026-09-08', hours: 1.5 }),
+        ],
+      }),
+    );
+    expect(implHoursByDate.get('2026-09-08')).toBeUndefined();
+    expect(testHoursByDate.get('2026-09-08')).toBeUndefined();
+  });
+
+  test('sums multiple entries of the same subtask type on the same date', () => {
+    const { implHoursByDate } = computeDailyHours(
+      activity({
+        worklogEntries: [
+          entry({ subtaskType: 'Implementação', author: 'Fulano', date: '2026-09-08', hours: 2 }),
+          entry({ subtaskType: 'Implementação', author: 'Beltrano', date: '2026-09-08', hours: 3 }),
+        ],
+      }),
+    );
+    expect(implHoursByDate.get('2026-09-08')).toBe(5);
   });
 });
 

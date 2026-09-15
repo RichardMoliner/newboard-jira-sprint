@@ -18,6 +18,7 @@ function activity(overrides: Partial<Activity>): Activity {
     deliveredDate: null,
     deliveredOnTime: null,
     assertividadePercent: null,
+    assertividadeComBugsPercent: null,
     status: 'Em andamento',
     isDone: false,
     isOverdue: false,
@@ -30,6 +31,7 @@ function activity(overrides: Partial<Activity>): Activity {
     testEstimatedHours: null,
     implLoggedHours: null,
     testLoggedHours: null,
+    bugsLoggedHours: null,
     worklogEntries: [],
     bugs: [],
     ...overrides,
@@ -156,6 +158,44 @@ describe('computeRealizedProductivity', () => {
     expect(result.hoursPerPf).toBeNull();
     expect(result.accuracyPercent).toBeNull();
     expect(result.sampleSize).toBe(0);
+  });
+
+  test('accuracyWithBugsPercent equals accuracyPercent when there are no bug hours', () => {
+    const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 50, testLoggedHours: 14 })];
+    const result = computeRealizedProductivity(activities, 5);
+    expect(result.accuracyWithBugsPercent).toBeCloseTo(result.accuracyPercent!);
+  });
+
+  test('accuracyWithBugsPercent adds bug hours on top of Implementação + Teste', () => {
+    const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 50, testLoggedHours: 14, bugsLoggedHours: 16 })];
+    // estimado: 10 PF x 5h/PF = 50h; apontado com bugs: 50h + 14h + 16h = 80h -> 80/50 = 160%
+    const result = computeRealizedProductivity(activities, 5);
+    expect(result.accuracyPercent).toBeCloseTo(128); // sem bugs, igual ao teste acima
+    expect(result.accuracyWithBugsPercent).toBeCloseTo(160);
+  });
+
+  test('testSharePercent computes the share of Teste hours out of Implementação + Teste, ignoring bugs', () => {
+    const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 70, testLoggedHours: 30, bugsLoggedHours: 100 })];
+    // 30h de Teste em 100h de Impl+Teste (bugs de fora) -> 30%
+    const result = computeRealizedProductivity(activities, 5);
+    expect(result.testSharePercent).toBeCloseTo(30);
+  });
+
+  test('leaves testSharePercent null when there are no eligible activities', () => {
+    const activities = [activity({ key: 'A', isDone: false, storyPoints: 5, implLoggedHours: 10 })];
+    const result = computeRealizedProductivity(activities, 5);
+    expect(result.testSharePercent).toBeNull();
+  });
+
+  // Implementação + Teste "Atendida" (status "Aguardando liberação") já é trabalho funcionalmente
+  // concluído — não devia esperar o fechamento formal da story (isDone) pra entrar nos indicadores.
+  test('includes an activity awaiting release (testDone) even though the story itself is not formally closed', () => {
+    const activities = [
+      activity({ key: 'A', isDone: false, testDone: true, storyPoints: 10, implLoggedHours: 40, testLoggedHours: 10 }),
+    ];
+    const result = computeRealizedProductivity(activities, 5);
+    expect(result.sampleSize).toBe(1);
+    expect(result.hoursPerPf).toBeCloseTo(5);
   });
 });
 

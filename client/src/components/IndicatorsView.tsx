@@ -18,6 +18,7 @@ export default function IndicatorsView({
   sprintFilter,
   onSprintClick,
   hoursPerPf,
+  assumedTestSharePercent,
 }: {
   activities: Activity[];
   sprints: SprintInfo[];
@@ -25,6 +26,7 @@ export default function IndicatorsView({
   sprintFilter: string[];
   onSprintClick: (id: string, shiftKey: boolean) => void;
   hoursPerPf: number;
+  assumedTestSharePercent: number;
 }) {
   const filtered = useMemo(
     () => (sprintFilter.length === 0 ? activities : activities.filter((a) => sprintFilter.includes(a.sprintId))),
@@ -107,16 +109,38 @@ export default function IndicatorsView({
               ? `${realizedProductivity.sampleSize} concluída${realizedProductivity.sampleSize > 1 ? 's' : ''}`
               : 'sem concluídas'
           }
+          accent={accuracyAccent(realizedProductivity.accuracyPercent)}
+          title="Total de horas apontadas (worklog de Implementação + Teste) dividido pelo total de horas estimadas (PF × horas/PF) nas tarefas concluídas. 100% = a estimativa bateu exatamente com o apontado. Abaixo de 100%, superestimamos (levou menos tempo que o previsto); acima de 100%, subestimamos (levou mais tempo que o previsto). Atualiza sozinho conforme mais tarefas são concluídas."
+        />
+        <Kpi
+          label="% de Assertividade (c/ bugs)"
+          value={realizedProductivity.accuracyWithBugsPercent !== null ? `${realizedProductivity.accuracyWithBugsPercent.toFixed(0)}%` : '—'}
+          suffix={
+            realizedProductivity.sampleSize > 0
+              ? `${realizedProductivity.sampleSize} concluída${realizedProductivity.sampleSize > 1 ? 's' : ''}`
+              : 'sem concluídas'
+          }
+          accent={accuracyAccent(realizedProductivity.accuracyWithBugsPercent)}
+          title="Mesma % de Assertividade acima, mas somando também as horas apontadas em bugs — reflete o esforço real total, incluindo correções encontradas durante o teste que não entraram na estimativa original."
+        />
+        <Kpi
+          label="% de Teste"
+          value={realizedProductivity.testSharePercent !== null ? `${realizedProductivity.testSharePercent.toFixed(0)}%` : '—'}
+          suffix={
+            realizedProductivity.sampleSize > 0
+              ? `${realizedProductivity.sampleSize} concluída${realizedProductivity.sampleSize > 1 ? 's' : ''} · estimado ${assumedTestSharePercent.toFixed(0)}%`
+              : 'sem concluídas'
+          }
           accent={
-            realizedProductivity.accuracyPercent === null
+            realizedProductivity.testSharePercent === null
               ? undefined
-              : Math.abs(realizedProductivity.accuracyPercent - 100) <= 10
+              : Math.abs(realizedProductivity.testSharePercent - assumedTestSharePercent) <= 5
                 ? 'var(--status-good)'
-                : Math.abs(realizedProductivity.accuracyPercent - 100) <= 30
+                : Math.abs(realizedProductivity.testSharePercent - assumedTestSharePercent) <= 15
                   ? 'var(--status-warning)'
                   : 'var(--status-critical)'
           }
-          title="Total de horas apontadas (worklog de Implementação + Teste) dividido pelo total de horas estimadas (PF × horas/PF) nas tarefas concluídas. 100% = a estimativa bateu exatamente com o apontado. Abaixo de 100%, superestimamos (levou menos tempo que o previsto); acima de 100%, subestimamos (levou mais tempo que o previsto). Atualiza sozinho conforme mais tarefas são concluídas."
+          title="Quanto do tempo total (Implementação + Teste apontados) foi de fato Teste, nas tarefas concluídas — bugs ficam de fora dessa conta. Compara com o percentual assumido hoje (fixo) ao projetar a janela prevista de Teste, pra ver se essa suposição bate com a realidade. Atualiza sozinho conforme mais tarefas são concluídas."
         />
       </div>
 
@@ -224,6 +248,15 @@ export default function IndicatorsView({
       </Section>
     </div>
   );
+}
+
+/** Verde perto de 100% (bateu a estimativa), amarelo moderadamente longe, vermelho muito longe. */
+function accuracyAccent(accuracyPercent: number | null): string | undefined {
+  if (accuracyPercent === null) return undefined;
+  const distance = Math.abs(accuracyPercent - 100);
+  if (distance <= 10) return 'var(--status-good)';
+  if (distance <= 30) return 'var(--status-warning)';
+  return 'var(--status-critical)';
 }
 
 function Kpi({

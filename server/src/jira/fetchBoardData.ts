@@ -5,7 +5,7 @@ import { groupSubtasks, type RawSubtask } from './groupSubtasks.js';
 import { parseSprintField } from './parseSprintField.js';
 import { mapActivity, type RawStory } from '../domain/mapActivity.js';
 import type { Activity, BoardDataResponse, SprintInfo } from '../domain/types.js';
-import { DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY } from '../compute/timeline.js';
+import { DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY, IMPL_SHARE } from '../compute/timeline.js';
 
 const GET_ISSUE_CONCURRENCY = 6;
 
@@ -132,6 +132,7 @@ export async function fetchBoardData(
     vertical,
     hoursPerPf: hoursPerPf ?? DEFAULT_HOURS_PER_PF,
     hoursPerDay: hoursPerDay ?? DEFAULT_HOURS_PER_DAY,
+    assumedTestSharePercent: (1 - IMPL_SHARE) * 100,
     sprints: [...sprints.values()].sort((a, b) => a.name.localeCompare(b.name)),
     activities,
   };

@@ -106,6 +106,7 @@ export default function BoardScreen({
                 sprints={data.sprints}
                 today={data.today}
                 hoursPerPf={data.hoursPerPf}
+                assumedTestSharePercent={data.assumedTestSharePercent}
                 sprintFilter={sprintFilter}
                 onSprintClick={handleSprintClick}
               />

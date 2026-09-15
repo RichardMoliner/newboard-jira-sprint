@@ -1085,25 +1085,14 @@ function checkIndicator(color: string | null, title: string): React.ReactNode {
   );
 }
 
-/** Enquanto a tarefa ainda está aberta e tem bugs, mostra um 🐛 no lugar do check — a implementação
- * pode até estar "atendida", mas ainda há bugs em aberto pra resolver. */
-function implIndicator(activity: Activity): React.ReactNode {
-  if (!activity.isDone && activity.bugs.length > 0) {
-    const count = activity.bugs.length;
-    return (
-      <span style={{ marginLeft: 4 }} title={`${count} bug${count > 1 ? 's' : ''} nesta tarefa`}>
-        🐛
-      </span>
-    );
-  }
-  return checkIndicator(hoursCheckColor(activity.implDone, activity.implLoggedHours, activity.implEstimatedHours), 'Implementação atendida');
-}
-
 function SideList({ activity }: { activity: Activity }) {
   const assertividadeTitle =
     activity.assertividadePercent !== null
       ? 'Horas apontadas (Implementação + Teste) dividido pelas horas estimadas (PF × horas/PF). 100% = estimativa bateu exatamente com o apontado; abaixo de 100% superestimamos, acima subestimamos.'
       : undefined;
+  const assertividadeComBugsTitle =
+    'Mesma % de Assertividade, somando também as horas apontadas em bugs — esforço real total, incluindo correções fora da estimativa original.';
+  const implCheckColor = hoursCheckColor(activity.implDone, activity.implLoggedHours, activity.implEstimatedHours);
   const testCheckColor = hoursCheckColor(activity.testDone, activity.testLoggedHours, activity.testEstimatedHours);
   const items: [string, React.ReactNode, string?][] = [
     ['PF', activity.storyPoints !== null ? String(activity.storyPoints) : '—'],
@@ -1111,7 +1100,7 @@ function SideList({ activity }: { activity: Activity }) {
     ['Tester', activity.tester ? firstName(activity.tester) : '—'],
     [
       'Impl. (h)',
-      <HoursWithCheck logged={activity.implLoggedHours} estimated={activity.implEstimatedHours} indicator={implIndicator(activity)} />,
+      <HoursWithCheck logged={activity.implLoggedHours} estimated={activity.implEstimatedHours} indicator={checkIndicator(implCheckColor, 'Implementação atendida')} />,
       HOURS_PAIR_TITLE,
     ],
     [
@@ -1119,7 +1108,25 @@ function SideList({ activity }: { activity: Activity }) {
       <HoursWithCheck logged={activity.testLoggedHours} estimated={activity.testEstimatedHours} indicator={checkIndicator(testCheckColor, 'Teste atendido')} />,
       HOURS_PAIR_TITLE,
     ],
+    ...(activity.bugsLoggedHours !== null
+      ? ([
+          [
+            'Bugs (h)',
+            formatHoursMinutes(activity.bugsLoggedHours),
+            'Soma de todos os apontamentos (worklog) lançados nos bugs desta atividade, de qualquer pessoa.',
+          ] as [string, React.ReactNode, string?],
+        ])
+      : []),
     ['Assert.', activity.assertividadePercent !== null ? `${Math.round(activity.assertividadePercent)}%` : '—', assertividadeTitle],
+    ...(activity.bugs.length > 0
+      ? ([
+          [
+            'Assert. c/ bugs',
+            activity.assertividadeComBugsPercent !== null ? `${Math.round(activity.assertividadeComBugsPercent)}%` : '—',
+            assertividadeComBugsTitle,
+          ] as [string, React.ReactNode, string?],
+        ])
+      : []),
   ];
   return (
     <dl style={{ width: 150, flexShrink: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10.5, color: 'var(--text-secondary)' }}>
@@ -1301,30 +1308,17 @@ export function computeTestFillRange({
   return anchor ? { start: anchor, end: anchor } : null;
 }
 
-function normalize(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase();
-}
-
 /**
- * Soma os apontamentos por dia, separados em Implementação/Teste — apontamentos em bugs entram na
- * mesma conta do servidor: do tester contam como Teste, de qualquer outra pessoa como Implementação.
+ * Soma os apontamentos por dia, separados em Implementação/Teste. Apontamentos em Bug ficam de
+ * fora — contam à parte, no campo "Bugs (h)", não inflam mais o preenchimento das barras de
+ * Implementação/Teste.
  */
-function computeDailyHours(activity: Activity): { implHoursByDate: Map<string, number>; testHoursByDate: Map<string, number> } {
+export function computeDailyHours(activity: Activity): { implHoursByDate: Map<string, number>; testHoursByDate: Map<string, number> } {
   const implHoursByDate = new Map<string, number>();
   const testHoursByDate = new Map<string, number>();
-  const normalizedTester = activity.tester !== null ? normalize(activity.tester) : null;
   for (const entry of activity.worklogEntries) {
-    let bucket: Map<string, number>;
-    if (entry.subtaskType === 'Implementação') {
-      bucket = implHoursByDate;
-    } else if (entry.subtaskType === 'Teste') {
-      bucket = testHoursByDate;
-    } else {
-      bucket = normalizedTester !== null && normalize(entry.author) === normalizedTester ? testHoursByDate : implHoursByDate;
-    }
+    if (entry.subtaskType !== 'Implementação' && entry.subtaskType !== 'Teste') continue;
+    const bucket = entry.subtaskType === 'Implementação' ? implHoursByDate : testHoursByDate;
     bucket.set(entry.date, (bucket.get(entry.date) ?? 0) + entry.hours);
   }
   return { implHoursByDate, testHoursByDate };

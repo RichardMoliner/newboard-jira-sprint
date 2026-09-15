@@ -39,6 +39,8 @@ export interface Activity {
   deliveredOnTime: boolean | null;
   /** % de assertividade: horas apontadas (Implementação + Teste) vs. horas estimadas (PF × horas/PF); null até a tarefa ser concluída ou sem apontamento algum. */
   assertividadePercent: number | null;
+  /** Mesma % de assertividade, mas somando também as horas apontadas em bugs (esforço real total, incluindo correções fora da estimativa original). */
+  assertividadeComBugsPercent: number | null;
   status: string;
   isDone: boolean;
   isOverdue: boolean;
@@ -56,6 +58,8 @@ export interface Activity {
   /** Horas realmente apontadas (worklog) nas subtarefas de Implementação/Teste; null quando a subtarefa ainda não existe. */
   implLoggedHours: number | null;
   testLoggedHours: number | null;
+  /** Soma de todos os apontamentos em bugs da atividade (sem separar por quem apontou); null quando não há bugs. */
+  bugsLoggedHours: number | null;
   /** Todos os apontamentos das subtarefas de Implementação/Teste, para exibir no tooltip da atividade. */
   worklogEntries: WorklogEntry[];
   bugs: BugSubtask[];
@@ -75,6 +79,8 @@ export interface BoardDataResponse {
   /** Produtividade usada nas previsões desta resposta — para a visualização analítica (por hora) no client. */
   hoursPerPf: number;
   hoursPerDay: number;
+  /** % do tempo total (Implementação + Teste) assumido como Teste ao projetar a janela prevista (hoje fixo em 30%). */
+  assumedTestSharePercent: number;
   sprints: SprintInfo[];
   activities: Activity[];
 }
