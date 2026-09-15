@@ -209,72 +209,95 @@ export default function TimelineView({
   const hoverColumnLeft = hoverDate !== null ? x(hoverDate) : null;
 
   return (
-    <div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
-        <FilterPill label="Todas as sprints" active={sprintFilter.length === 0} onClick={() => onSprintClick('all', false)} />
-        {sprints.map((s) => (
-          <FilterPill
-            key={s.id}
-            label={s.name}
-            active={sprintFilter.includes(s.id)}
-            onClick={(e) => onSprintClick(s.id, e.shiftKey)}
-          />
-        ))}
-        <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginLeft: 'auto' }}>
-          <SwitchPill active={hideDone} onClick={() => setHideDone((v) => !v)} label="Ocultar concluídas" />
-          <div style={{ position: 'relative' }}>
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por tarefa ou responsável..."
-              style={{
-                padding: `6px ${searchQuery ? 28 : 12}px 6px 12px`,
-                fontSize: 11.5,
-                borderRadius: 20,
-                border: '1px solid var(--baseline)',
-                background: 'var(--surface-1)',
-                color: 'var(--text-primary)',
-                fontFamily: 'inherit',
-                minWidth: 220,
-              }}
+    // Um único painel contínuo (sem gap entre as partes) do topo até o fim da tela: filtros +
+    // legenda ficam fixos aqui em cima, encostados na régua de dias — só a tabela por baixo rola,
+    // aproveitando o máximo de altura possível.
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        border: '1px solid var(--gridline)',
+        borderRadius: 10,
+        background: 'var(--surface-1)',
+        overflow: 'hidden',
+      }}
+    >
+      <div style={{ padding: '12px 14px 0', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <FilterPill label="Todas as sprints" active={sprintFilter.length === 0} onClick={() => onSprintClick('all', false)} />
+          {sprints.map((s) => (
+            <FilterPill
+              key={s.id}
+              label={s.name}
+              active={sprintFilter.includes(s.id)}
+              onClick={(e) => onSprintClick(s.id, e.shiftKey)}
             />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                aria-label="Limpar busca"
+          ))}
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginLeft: 'auto' }}>
+            <SwitchPill active={hideDone} onClick={() => setHideDone((v) => !v)} label="Ocultar concluídas" />
+            <div style={{ position: 'relative' }}>
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar por tarefa ou responsável..."
                 style={{
-                  position: 'absolute',
-                  right: 8,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--text-muted)',
-                  fontSize: 15,
-                  lineHeight: 1,
-                  padding: 2,
+                  padding: `6px ${searchQuery ? 28 : 12}px 6px 12px`,
+                  fontSize: 11.5,
+                  borderRadius: 20,
+                  border: '1px solid var(--baseline)',
+                  background: 'var(--surface-1)',
+                  color: 'var(--text-primary)',
+                  fontFamily: 'inherit',
+                  minWidth: 220,
                 }}
-              >
-                ×
-              </button>
-            )}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Limpar busca"
+                  style={{
+                    position: 'absolute',
+                    right: 8,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--text-muted)',
+                    fontSize: 15,
+                    lineHeight: 1,
+                    padding: 2,
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
           </div>
         </div>
+
+        <p style={{ fontSize: 10.5, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+          Segure <strong>Shift</strong> e clique para combinar várias sprints no filtro.
+        </p>
       </div>
 
-      <p style={{ fontSize: 10.5, color: 'var(--text-muted)', margin: '0 0 14px' }}>
-        Segure <strong>Shift</strong> e clique para combinar várias sprints no filtro.
-      </p>
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--gridline)', flexShrink: 0 }}>
+        <Legend />
+      </div>
 
-      <Legend />
-
-      <div ref={scrollRef} style={{ border: '1px solid var(--gridline)', borderRadius: 10, background: 'var(--surface-1)', overflowX: 'auto' }}>
+      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {filtered.length === 0 ? (
           <EmptyState searchQuery={searchQuery} onClearSearch={() => setSearchQuery('')} />
         ) : (
         <div
-          style={{ position: 'relative', width: LABEL_COL_WIDTH + timelineWidth }}
+          style={{
+            position: 'relative',
+            display: 'grid',
+            gridTemplateColumns: `${LABEL_COL_WIDTH}px ${timelineWidth}px`,
+            width: LABEL_COL_WIDTH + timelineWidth,
+          }}
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHover(null)}
         >
@@ -293,10 +316,16 @@ export default function TimelineView({
             />
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: `${LABEL_COL_WIDTH}px ${timelineWidth}px` }}>
+          {/* `display: contents` — expõe as duas células diretamente como itens do grid unificado
+              acima (linha inteira da timeline), em vez de criar um mini-grid isolado só pra elas.
+              Isso é o que dá "espaço" pro cabeçalho ficar sticky por toda a rolagem: um grid do
+              tamanho de uma linha só (34px) não tem onde o sticky "flutuar" ao rolar milhares de
+              pixels de conteúdo abaixo dele. */}
+          <div style={{ display: 'contents' }}>
             <div
               style={{
                 position: 'sticky',
+                top: 0,
                 left: 0,
                 zIndex: 3,
                 background: 'var(--surface-1)',
@@ -312,7 +341,7 @@ export default function TimelineView({
             >
               Atividade
             </div>
-            <div style={{ position: 'relative', height: 34, borderBottom: '1px solid var(--gridline)' }}>
+            <div style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-1)', height: 34, borderBottom: '1px solid var(--gridline)' }}>
               {days.map((day) => (
                 <div
                   key={day.date}
@@ -354,7 +383,7 @@ export default function TimelineView({
           </div>
 
           {grouped.map(([developer, items]) => (
-            <div key={developer} style={{ display: 'grid', gridTemplateColumns: `${LABEL_COL_WIDTH}px ${timelineWidth}px` }}>
+            <div key={developer} style={{ display: 'contents' }}>
               <div
                 style={{
                   position: 'sticky',
@@ -679,43 +708,51 @@ function ActivityRow({
           <SideList activity={activity} />
         </div>
       </div>
-      <div className="timeline-row-bars" style={{ position: 'relative', minHeight: hasBothWindows ? BARS_ROW_HEIGHT : 34, borderBottom: '1px solid var(--gridline)' }}>
-        {hasBothWindows ? (
-          <>
-            <PhaseBar
-              boxLeft={implBoxLeft!}
-              boxRight={implBoxRight!}
-              fillRight={implFillRight!}
-              boxColor="var(--series-impl)"
-              boxTitle={`Implementação (previsto): ${formatShort(activity.implWindow!.start)} a ${formatShort(activity.implWindow!.end)}`}
-              markerTitle={`Previsão era terminar a Implementação até ${formatShort(activity.implWindow!.end)}`}
-              fillCells={implFillCells}
-              bandTop={IMPL_BAND_TOP}
-            />
-            <PhaseBar
-              boxLeft={testBoxLeft!}
-              boxRight={testBoxRight!}
-              fillRight={testFillRight!}
-              boxColor="var(--series-test)"
-              boxTitle={
-                testWindowIsProjected
-                  ? `Teste (projeção, ainda não iniciado): ${formatShort(projectedTestStart!)} a ${formatShort(projectedTestEnd!)}`
-                  : `Teste (previsto): ${formatShort(projectedTestStart!)} a ${formatShort(projectedTestEnd!)}`
-              }
-              bandTop={TEST_BAND_TOP}
-              markerTitle={`Previsão era terminar o Teste até ${formatShort(projectedTestEnd!)}`}
-              fillCells={testFillCells}
-            />
-          </>
-        ) : activity.notStarted ? (
-          <span style={{ position: 'absolute', left: 4, top: 10, fontSize: 10, color: 'var(--text-muted)' }}>
-            ainda não iniciada
-          </span>
-        ) : (
-          <span style={{ position: 'absolute', left: x(activity.startDate) + 4, top: 10, fontSize: 10, color: 'var(--text-muted)' }}>
-            sem estimativa
-          </span>
-        )}
+      <div
+        className="timeline-row-bars"
+        style={{ display: 'flex', alignItems: 'center', minHeight: hasBothWindows ? BARS_ROW_HEIGHT : 34, borderBottom: '1px solid var(--gridline)' }}
+      >
+        {/* Altura fixa igual à das barras + `align-items: center` no pai: quando a linha fica mais
+            alta que as barras (puxada pela coluna de info, que tem mais texto), esse bloco fica
+            centralizado em vez de grudado no topo com um vão vazio embaixo. */}
+        <div style={{ position: 'relative', width: '100%', height: hasBothWindows ? BARS_ROW_HEIGHT : 34 }}>
+          {hasBothWindows ? (
+            <>
+              <PhaseBar
+                boxLeft={implBoxLeft!}
+                boxRight={implBoxRight!}
+                fillRight={implFillRight!}
+                boxColor="var(--series-impl)"
+                boxTitle={`Implementação (previsto): ${formatShort(activity.implWindow!.start)} a ${formatShort(activity.implWindow!.end)}`}
+                markerTitle={`Previsão era terminar a Implementação até ${formatShort(activity.implWindow!.end)}`}
+                fillCells={implFillCells}
+                bandTop={IMPL_BAND_TOP}
+              />
+              <PhaseBar
+                boxLeft={testBoxLeft!}
+                boxRight={testBoxRight!}
+                fillRight={testFillRight!}
+                boxColor="var(--series-test)"
+                boxTitle={
+                  testWindowIsProjected
+                    ? `Teste (projeção, ainda não iniciado): ${formatShort(projectedTestStart!)} a ${formatShort(projectedTestEnd!)}`
+                    : `Teste (previsto): ${formatShort(projectedTestStart!)} a ${formatShort(projectedTestEnd!)}`
+                }
+                bandTop={TEST_BAND_TOP}
+                markerTitle={`Previsão era terminar o Teste até ${formatShort(projectedTestEnd!)}`}
+                fillCells={testFillCells}
+              />
+            </>
+          ) : activity.notStarted ? (
+            <span style={{ position: 'absolute', left: 4, top: 10, fontSize: 10, color: 'var(--text-muted)' }}>
+              ainda não iniciada
+            </span>
+          ) : (
+            <span style={{ position: 'absolute', left: x(activity.startDate) + 4, top: 10, fontSize: 10, color: 'var(--text-muted)' }}>
+              sem estimativa
+            </span>
+          )}
+        </div>
       </div>
 
       {bugsExpanded &&

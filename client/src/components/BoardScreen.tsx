@@ -31,8 +31,10 @@ export default function BoardScreen({
   }
 
   return (
-    <div style={{ padding: '24px 32px 60px' }}>
-      <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20 }}>
+    <div style={{ height: '100vh', boxSizing: 'border-box', padding: '24px 32px 0', display: 'flex', flexDirection: 'column' }}>
+      <header
+        style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20, flexShrink: 0 }}
+      >
         <h1 style={{ fontSize: 20, margin: 0 }}>Painel de acompanhamento — {vertical}</h1>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -68,6 +70,7 @@ export default function BoardScreen({
             padding: '10px 14px',
             fontSize: 13,
             marginBottom: 16,
+            flexShrink: 0,
           }}
         >
           {error}
@@ -78,29 +81,35 @@ export default function BoardScreen({
 
       {data && (
         <>
-          <nav style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--gridline)', marginBottom: 20 }}>
+          <nav style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--gridline)', marginBottom: 20, flexShrink: 0 }}>
             <TabButton active={tab === 'timeline'} onClick={() => setTab('timeline')} label="Linha do tempo" />
             <TabButton active={tab === 'indicators'} onClick={() => setTab('indicators')} label="Indicadores" />
           </nav>
 
           {tab === 'timeline' ? (
-            <TimelineView
-              activities={data.activities}
-              sprints={data.sprints}
-              today={data.today}
-              hoursPerDay={data.hoursPerDay}
-              sprintFilter={sprintFilter}
-              onSprintClick={handleSprintClick}
-            />
+            // Só a timeline ganha altura contida com scroll próprio (cabeçalho fixo dentro dela) —
+            // os Indicadores continuam no fluxo normal, a página inteira rola como antes.
+            <div style={{ flex: 1, minHeight: 0, paddingBottom: 24 }}>
+              <TimelineView
+                activities={data.activities}
+                sprints={data.sprints}
+                today={data.today}
+                hoursPerDay={data.hoursPerDay}
+                sprintFilter={sprintFilter}
+                onSprintClick={handleSprintClick}
+              />
+            </div>
           ) : (
-            <IndicatorsView
-              activities={data.activities}
-              sprints={data.sprints}
-              today={data.today}
-              hoursPerPf={data.hoursPerPf}
-              sprintFilter={sprintFilter}
-              onSprintClick={handleSprintClick}
-            />
+            <div style={{ paddingBottom: 60, overflow: 'auto' }}>
+              <IndicatorsView
+                activities={data.activities}
+                sprints={data.sprints}
+                today={data.today}
+                hoursPerPf={data.hoursPerPf}
+                sprintFilter={sprintFilter}
+                onSprintClick={handleSprintClick}
+              />
+            </div>
           )}
         </>
       )}
