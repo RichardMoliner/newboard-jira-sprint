@@ -142,6 +142,27 @@ export default function TimelineView({
   const timelineWidth = Math.max(realTimelineWidth, monthStartX + RIGHT_SCROLL_BUFFER);
 
   const grouped = useMemo(() => groupByDeveloper(filtered), [filtered]);
+  // Disponibilidade é uma propriedade da PESSOA, não do filtro de sprint/busca ativo no momento —
+  // usa todas as atividades (todas as sprints), senão um dev alocado numa tarefa de outra sprint
+  // aparece como "disponível" só porque essa tarefa está fora do filtro atual.
+  const byDeveloperAcrossAllSprints = useMemo(() => new Map(groupByDeveloper(activities)), [activities]);
+  const devsWorkingOnBugs = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of activities) {
+      for (const bug of a.bugs) {
+        if (bug.developer && !isResolvedBug(bug.status)) set.add(bug.developer);
+      }
+    }
+    return set;
+  }, [activities]);
+  const availableDevs = useMemo(
+    () =>
+      [...byDeveloperAcrossAllSprints.entries()]
+        .filter(([developer, items]) => isDeveloperAvailable(items) && !devsWorkingOnBugs.has(developer))
+        .map(([developer]) => developer)
+        .sort((a, b) => a.localeCompare(b)),
+    [byDeveloperAcrossAllSprints, devsWorkingOnBugs],
+  );
 
   function toggleIn(setter: typeof setExpandedBugs, key: string) {
     setter((prev) => {
@@ -285,6 +306,12 @@ export default function TimelineView({
 
       <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--gridline)', flexShrink: 0 }}>
         <Legend />
+        {availableDevs.length > 0 && (
+          <p style={{ margin: '8px 0 0', fontSize: 10.5, color: 'var(--text-secondary)' }}>
+            <span style={{ marginRight: 4 }}>⚠️</span>
+            <strong>Devs disponíveis:</strong> {availableDevs.join(', ')}
+          </p>
+        )}
       </div>
 
       <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
@@ -382,7 +409,10 @@ export default function TimelineView({
             </div>
           </div>
 
-          {grouped.map(([developer, items]) => (
+          {grouped.map(([developer, items]) => {
+            const available = isDeveloperAvailable(byDeveloperAcrossAllSprints.get(developer) ?? []);
+            const workingOnBugs = available && devsWorkingOnBugs.has(developer);
+            return (
             <div key={developer} style={{ display: 'contents' }}>
               <div
                 style={{
@@ -396,9 +426,19 @@ export default function TimelineView({
                   padding: '5px 14px',
                   borderBottom: '1px solid var(--gridline)',
                   borderRight: '1px solid var(--gridline)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
                 }}
               >
                 {developer}
+                {available && (
+                  <Tag color={workingOnBugs ? 'var(--series-bug)' : 'var(--status-good)'}>
+                    {workingOnBugs
+                      ? '✓ Atuando em bugs'
+                      : '✓ Disponível'}
+                  </Tag>
+                )}
               </div>
               <div style={{ background: 'color-mix(in srgb, var(--series-impl) 12%, var(--surface-1))', borderBottom: '1px solid var(--gridline)' }} />
               {items.map((activity) => (
@@ -415,7 +455,8 @@ export default function TimelineView({
                 />
               ))}
             </div>
-          ))}
+            );
+          })}
 
           {days
             .filter((d) => d.isMonthStart)
@@ -1484,4 +1525,14 @@ function groupByDeveloper(activities: Activity[]): [string, Activity[]][] {
     );
   }
   return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+}
+
+/** True quando o dev não tem mais nada por implementar entre as atividades listadas — Implementação atendida (ou a story inteira concluída) em todas. Não considera o Teste: esperar o teste não ocupa o dev. */
+export function isDeveloperAvailable(activities: Activity[]): boolean {
+  return activities.length > 0 && activities.every((a) => a.implDone || a.isDone);
+}
+
+/** True quando há algum bug ainda aberto (não "Atendida") atribuído a esse dev, em qualquer uma das atividades informadas — não só nas que estão "no nome dele". */
+export function isWorkingOnBugs(developerName: string, activities: Activity[]): boolean {
+  return activities.some((a) => a.bugs.some((bug) => bug.developer === developerName && !isResolvedBug(bug.status)));
 }

@@ -5,10 +5,12 @@ import {
   computeTestFillRange,
   dayFillRatio,
   formatConsumedPercent,
+  isDeveloperAvailable,
+  isWorkingOnBugs,
   lastWorklogDate,
   projectTestWindow,
 } from './TimelineView.js';
-import type { Activity, WorklogEntry } from '../types.js';
+import type { Activity, BugSubtask, WorklogEntry } from '../types.js';
 
 function entry(overrides: Partial<WorklogEntry>): WorklogEntry {
   return {
@@ -53,6 +55,19 @@ function activity(overrides: Partial<Activity> = {}): Activity {
     bugsLoggedHours: null,
     worklogEntries: [],
     bugs: [],
+    ...overrides,
+  };
+}
+
+function bug(overrides: Partial<BugSubtask> = {}): BugSubtask {
+  return {
+    key: 'EC-1983',
+    title: 'Bug de exemplo',
+    developer: 'Fulano',
+    status: 'Em correção',
+    startDate: '2026-08-27',
+    endDate: '2026-09-08',
+    worklogEntries: [],
     ...overrides,
   };
 }
@@ -419,5 +434,50 @@ describe('computeTestFillRange', () => {
         today: '2026-09-15',
       }),
     ).toEqual({ start: '2026-08-26', end: '2026-08-26' });
+  });
+});
+
+describe('isDeveloperAvailable', () => {
+  test('true when every activity has its Implementação done', () => {
+    expect(isDeveloperAvailable([activity({ implDone: true }), activity({ implDone: true, isDone: true })])).toBe(true);
+  });
+
+  test('true via isDone even when implDone is false (e.g. a legacy/edge-case record)', () => {
+    expect(isDeveloperAvailable([activity({ implDone: false, isDone: true })])).toBe(true);
+  });
+
+  test('false when any activity still has Implementação open', () => {
+    expect(isDeveloperAvailable([activity({ implDone: true }), activity({ implDone: false })])).toBe(false);
+  });
+
+  test('false for an empty list — no activities means nothing to confirm as done', () => {
+    expect(isDeveloperAvailable([])).toBe(false);
+  });
+});
+
+describe('isWorkingOnBugs', () => {
+  test('true when an unresolved bug is assigned to the developer, in any activity', () => {
+    const activities = [activity({ bugs: [bug({ developer: 'Fulano', status: 'Em correção' })] })];
+    expect(isWorkingOnBugs('Fulano', activities)).toBe(true);
+  });
+
+  test('false when the developer has no bugs at all', () => {
+    const activities = [activity({ bugs: [] })];
+    expect(isWorkingOnBugs('Fulano', activities)).toBe(false);
+  });
+
+  test('false when the developer\'s bugs are all resolved (Atendida)', () => {
+    const activities = [activity({ bugs: [bug({ developer: 'Fulano', status: 'Atendida' })] })];
+    expect(isWorkingOnBugs('Fulano', activities)).toBe(false);
+  });
+
+  test('false when the unresolved bug belongs to someone else', () => {
+    const activities = [activity({ bugs: [bug({ developer: 'Beltrano', status: 'Em correção' })] })];
+    expect(isWorkingOnBugs('Fulano', activities)).toBe(false);
+  });
+
+  test('finds a bug on an activity that is not even "owned" by this developer — scans across all given activities', () => {
+    const activities = [activity({ developer: 'Beltrano', bugs: [bug({ developer: 'Fulano', status: 'Em correção' })] })];
+    expect(isWorkingOnBugs('Fulano', activities)).toBe(true);
   });
 });
