@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'vitest';
-import { computeDailyHours, computeImplFillEndDate, computeTestFillRange, dayFillRatio, lastWorklogDate, projectTestWindow } from './TimelineView.js';
+import {
+  computeDailyHours,
+  computeImplFillEndDate,
+  computeTestFillRange,
+  dayFillRatio,
+  formatConsumedPercent,
+  lastWorklogDate,
+  projectTestWindow,
+} from './TimelineView.js';
 import type { Activity, WorklogEntry } from '../types.js';
 
 function entry(overrides: Partial<WorklogEntry>): WorklogEntry {
@@ -203,6 +211,32 @@ describe('computeDailyHours', () => {
       }),
     );
     expect(implHoursByDate.get('2026-09-08')).toBe(5);
+  });
+});
+
+describe('formatConsumedPercent', () => {
+  test('formats the ratio of logged to estimated hours, rounded, as a percentage', () => {
+    expect(formatConsumedPercent(33 + 19 / 60, 45.5)).toBe('73%');
+  });
+
+  test('can exceed 100% when more was logged than estimated', () => {
+    expect(formatConsumedPercent(50, 40)).toBe('125%');
+  });
+
+  test('returns null when nothing was logged yet', () => {
+    expect(formatConsumedPercent(null, 45.5)).toBeNull();
+  });
+
+  test('returns null when there is no estimate', () => {
+    expect(formatConsumedPercent(10, null)).toBeNull();
+  });
+
+  test('returns null when the estimate is zero, to avoid dividing by zero', () => {
+    expect(formatConsumedPercent(10, 0)).toBeNull();
+  });
+
+  test('returns 0% when logged is zero but there is an estimate — live from day one, no need to wait for completion', () => {
+    expect(formatConsumedPercent(0, 45.5)).toBe('0%');
   });
 });
 

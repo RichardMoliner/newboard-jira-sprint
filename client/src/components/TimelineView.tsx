@@ -3,7 +3,7 @@ import type { Activity, SprintInfo, TimelineWindow, WorklogEntry } from '../type
 
 const MIN_COLUMN_WIDTH = 28;
 const MAX_COLUMN_WIDTH = 96;
-const LABEL_COL_WIDTH = 460;
+const LABEL_COL_WIDTH = 500;
 // Implementação e Teste ficam em faixas separadas dentro da linha da atividade, para dar pra ver
 // apontamentos em paralelo (ex.: bug corrigido enquanto o teste já está rolando) sem uma barra
 // tampar a outra.
@@ -1059,7 +1059,8 @@ function worklogTooltip(entries: Activity['worklogEntries']): string | undefined
   return `Apontamentos:\n${lines.join('\n')}`;
 }
 
-const HOURS_PAIR_TITLE = 'Apontado (worklog da subtarefa) / Previsto (a partir do PF e das horas por PF configuradas).';
+const HOURS_PAIR_TITLE =
+  'Apontado (worklog da subtarefa) / Previsto (a partir do PF e das horas por PF configuradas). Entre parênteses, o % consumido (apontado sobre previsto) — atualiza dia a dia, não precisa a tarefa terminar.';
 
 /** Verde se a fase (já atendida) levou menos horas que o previsto; vermelho se levou mais; null se não dá pra comparar. */
 function hoursCheckColor(done: boolean, logged: number | null, estimated: number | null): string | null {
@@ -1067,10 +1068,20 @@ function hoursCheckColor(done: boolean, logged: number | null, estimated: number
   return logged <= estimated ? 'var(--status-good)' : 'var(--status-critical)';
 }
 
+/** % do previsto já consumido (apontado / previsto) — "vivo", disponível desde o primeiro apontamento, não só quando a fase termina. Null sem apontamento ou sem previsto pra comparar. */
+export function formatConsumedPercent(logged: number | null, estimated: number | null): string | null {
+  if (logged === null || estimated === null || estimated <= 0) return null;
+  return `${Math.round((logged / estimated) * 100)}%`;
+}
+
 function HoursWithCheck({ logged, estimated, indicator }: { logged: number | null; estimated: number | null; indicator: React.ReactNode }) {
+  const consumedPercent = formatConsumedPercent(logged, estimated);
   return (
     <>
       {formatHoursPair(logged, estimated)}
+      {consumedPercent && (
+        <span style={{ marginLeft: 4, color: 'var(--text-muted)', fontWeight: 400 }}>({consumedPercent})</span>
+      )}
       {indicator}
     </>
   );
@@ -1129,7 +1140,7 @@ function SideList({ activity }: { activity: Activity }) {
       : []),
   ];
   return (
-    <dl style={{ width: 150, flexShrink: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10.5, color: 'var(--text-secondary)' }}>
+    <dl style={{ width: 190, flexShrink: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10.5, color: 'var(--text-secondary)' }}>
       {items.map(([label, value, title]) => (
         <div key={label} title={title} style={{ display: 'flex', gap: 4, overflow: 'hidden', cursor: title ? 'help' : undefined }}>
           <dt style={{ margin: 0, color: 'var(--text-muted)', flexShrink: 0 }}>{label}:</dt>
