@@ -393,7 +393,7 @@ describe('mapActivity', () => {
     expect(activity.deliveredDate).toBeNull();
   });
 
-  test('computes implEstimatedHours/testEstimatedHours from the projected windows', () => {
+  test('computes implEstimatedHours/testEstimatedHours as the exact 70/30 split of the PF-based estimate', () => {
     const activity = mapActivity({
       story: baseStory({ storyPoints: 10 }),
       sprint,
@@ -404,9 +404,10 @@ describe('mapActivity', () => {
       hoursPerPf: 5,
       hoursPerDay: 8,
     });
-    // pfPerDay = 8/5 = 1.6; totalBusinessDays = ceil(10/1.6) = 7; implSteps = round(7*0.7) = 5; testSteps = 2
-    expect(activity.implEstimatedHours).toBeCloseTo(5 * 8);
-    expect(activity.testEstimatedHours).toBeCloseTo(2 * 8);
+    // estimativa total: 10 PF x 5h/PF = 50h -> split exato: 35h Impl, 15h Teste (não deriva da
+    // janela em dias arredondados, que teria dado 5/2 dias x 8h = 40h/16h).
+    expect(activity.implEstimatedHours).toBeCloseTo(35);
+    expect(activity.testEstimatedHours).toBeCloseTo(15);
   });
 
   test('leaves implEstimatedHours/testEstimatedHours null when there is no timeline (no estimate)', () => {

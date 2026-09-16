@@ -1,6 +1,5 @@
 import { computeTimeline, DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY } from '../compute/timeline.js';
 import { isCarried, isOverdue, isDeliveredOnTime } from '../compute/status.js';
-import { businessDaysBetween } from '../compute/businessDays.js';
 import { computeAccuracyPercent } from '../compute/accuracy.js';
 import type { ParsedSprint } from '../jira/parseSprintField.js';
 import type { Activity, BugSubtask, WorklogEntry } from './types.js';
@@ -106,10 +105,10 @@ export function mapActivity(params: {
   const timeline =
     !notStarted && story.storyPoints !== null ? computeTimeline(story.storyPoints, startDate, hoursPerPf, hoursPerDay) : null;
   const dueDate = timeline?.test.end ?? null;
-  // Horas úteis previstas por fase (dias úteis da janela × horas produtivas/dia) — mesma conta já
-  // usada no tooltip de PF, agora exposta como campo para comparar com o apontado (worklog).
-  const implEstimatedHours = timeline ? businessDaysBetween(timeline.impl.start, timeline.impl.end) * hoursPerDay : null;
-  const testEstimatedHours = timeline ? businessDaysBetween(timeline.test.start, timeline.test.end) * hoursPerDay : null;
+  // Horas previstas por fase — a fração exata (70/30) da estimativa (PF × horas/PF), não derivada
+  // da janela em dias já arredondada (que pode fugir bastante do 70/30 em tarefas pequenas).
+  const implEstimatedHours = timeline?.implEstimatedHours ?? null;
+  const testEstimatedHours = timeline?.testEstimatedHours ?? null;
 
   // Apontamentos em bugs contam à parte (campo "Bugs (h)") — não entram nas horas de
   // Implementação/Teste, que mostram só o que foi apontado na própria subtarefa.

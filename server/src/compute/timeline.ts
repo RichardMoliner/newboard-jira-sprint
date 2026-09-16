@@ -18,6 +18,9 @@ export interface Timeline {
   totalBusinessDays: number;
   impl: TimelineWindow;
   test: TimelineWindow;
+  /** Horas previstas de cada fase — sempre a fração exata (IMPL_SHARE) da estimativa total, independente de como a janela em dias arredondou. */
+  implEstimatedHours: number;
+  testEstimatedHours: number;
 }
 
 /**
@@ -34,16 +37,26 @@ export function computeTimeline(
   hoursPerDay: number = DEFAULT_HOURS_PER_DAY,
 ): Timeline {
   const pfPerDay = hoursPerDay / hoursPerPf;
-  const totalBusinessDays = Math.ceil(storyPoints / pfPerDay);
-  const implSteps = Math.round(totalBusinessDays * IMPL_SHARE);
-  const testSteps = totalBusinessDays - implSteps;
+  const rawTotalBusinessDays = Math.ceil(storyPoints / pfPerDay);
+  let implSteps = Math.round(rawTotalBusinessDays * IMPL_SHARE);
+  let testSteps = rawTotalBusinessDays - implSteps;
+  // Arredondar 70/30 para dias úteis inteiros zera uma das fases quando o total é muito pequeno
+  // (ex.: 1 dia útil vira 100% Implementação, 0 dias de Teste) — a barra daquela fase some da
+  // timeline. Garante pelo menos 1 dia útil visível pra cada fase, crescendo o total se precisar.
+  if (implSteps < 1) implSteps = 1;
+  if (testSteps < 1) testSteps = 1;
+  const totalBusinessDays = implSteps + testSteps;
 
   const implEnd = addBusinessDays(startISO, implSteps);
   const testEnd = addBusinessDays(implEnd, testSteps);
+
+  const totalEstimatedHours = storyPoints * hoursPerPf;
 
   return {
     totalBusinessDays,
     impl: { start: startISO, end: implEnd },
     test: { start: implEnd, end: testEnd },
+    implEstimatedHours: totalEstimatedHours * IMPL_SHARE,
+    testEstimatedHours: totalEstimatedHours * (1 - IMPL_SHARE),
   };
 }
