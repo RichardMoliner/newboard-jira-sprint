@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { getConfig, saveConfig } from '../api/client.js';
 
-const VERTICAL_OPTIONS = ['Contratos', 'Contábil', 'Arrecadação', 'Saúde', 'Educação', 'ISS'];
+const VERTICAL_OPTIONS = ['Contratos', 'Contábil', 'Arrecadação', 'Saúde', 'Educação', 'ISS', 'Pessoal'];
 
 /** Converte um valor em horas decimais (ex.: "6,4") para "6h 24min", para o usuário conferir o valor exato digitado. */
 function formatHoursAsClock(rawValue: string): string | null {
