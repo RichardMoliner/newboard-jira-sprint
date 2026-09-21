@@ -1,7 +1,8 @@
 import { callJiraTool, type JiraCredentials } from '../mcp/client.js';
 import { searchAllIssues } from './searchAllIssues.js';
 import { mapWithConcurrency } from './mapWithConcurrency.js';
-import { groupSubtasks, type RawSubtask } from './groupSubtasks.js';
+import { groupSubtasks, type RawSubtask, type RawWorklogEntry } from './groupSubtasks.js';
+import { fillTruncatedWorklogs } from './fillTruncatedWorklogs.js';
 import { parseSprintField } from './parseSprintField.js';
 import { mapActivity, type RawStory } from '../domain/mapActivity.js';
 import type { Activity, BoardDataResponse, SprintInfo } from '../domain/types.js';
@@ -61,6 +62,15 @@ export async function fetchBoardData(
     ),
   ]);
 
+  const subtasksWithFullWorklogs = await fillTruncatedWorklogs(subtasks, async (issueKey, total) => {
+    const response = await callJiraTool<{ worklogs: RawWorklogEntry[] }>(
+      'get_worklogs',
+      { issueKey, maxResults: total },
+      credentials,
+    );
+    return response.worklogs;
+  });
+
   const {
     implStartByParent,
     implDoneByParent,
@@ -71,7 +81,7 @@ export async function fetchBoardData(
     worklogEntriesByParent,
     bugsByParent,
     testerByParent,
-  } = groupSubtasks(subtasks);
+  } = groupSubtasks(subtasksWithFullWorklogs);
 
   const storyDetails = await mapWithConcurrency(storyHits, GET_ISSUE_CONCURRENCY, async (hit) => {
     try {

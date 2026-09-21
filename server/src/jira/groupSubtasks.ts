@@ -1,6 +1,6 @@
 import type { BugSubtask, WorklogEntry } from '../domain/types.js';
 
-interface RawWorklogEntry {
+export interface RawWorklogEntry {
   author: { displayName: string };
   started: string;
   timeSpentSeconds: number;
@@ -16,8 +16,12 @@ export interface RawSubtask {
   created: string;
   updated: string;
   parent?: { key: string };
-  /** Só presente quando `worklog` é pedido como extraField na busca (subtarefas de Implementação/Teste/Bug). */
-  worklog?: { worklogs: RawWorklogEntry[] };
+  /**
+   * Só presente quando `worklog` é pedido como extraField na busca (subtarefas de Implementação/Teste/Bug).
+   * `worklogs` pode vir truncado (a API do Jira limita a lista embutida por issue, tipicamente a 20
+   * registros) — `total` é o número real de apontamentos; ver `fillTruncatedWorklogs`.
+   */
+  worklog?: { worklogs: RawWorklogEntry[]; total?: number };
 }
 
 export interface GroupedSubtasks {
