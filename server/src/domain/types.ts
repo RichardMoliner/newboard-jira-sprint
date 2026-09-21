@@ -48,6 +48,8 @@ export interface Activity {
   notStarted: boolean;
   /** True quando a(s) subtarefa(s) de Implementação já estão "Atendida" (independente do status geral da story). */
   implDone: boolean;
+  /** Data (YYYY-MM-DD) em que a Implementação foi disponibilizada para teste (última atualização da subtarefa quando implDone é true); null enquanto não está atendida. */
+  implDoneDate: string | null;
   /** True quando a(s) subtarefa(s) de Teste já estão "Atendida" (independente do status geral da story). */
   testDone: boolean;
   implWindow: TimelineWindow | null;

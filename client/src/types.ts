@@ -42,6 +42,7 @@ export interface Activity {
   isOverdue: boolean;
   notStarted: boolean;
   implDone: boolean;
+  implDoneDate: string | null;
   testDone: boolean;
   implWindow: TimelineWindow | null;
   testWindow: TimelineWindow | null;

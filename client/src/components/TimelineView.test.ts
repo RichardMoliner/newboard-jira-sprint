@@ -45,6 +45,7 @@ function activity(overrides: Partial<Activity> = {}): Activity {
     isOverdue: false,
     notStarted: false,
     implDone: false,
+    implDoneDate: null,
     testDone: false,
     implWindow: null,
     testWindow: null,

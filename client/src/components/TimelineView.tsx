@@ -696,48 +696,44 @@ function ActivityRow({
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 3, fontSize: 10.5, color: 'var(--text-secondary)' }}>
               <StatusBadge activity={activity} />
               {activity.isCarried && <Tag color="var(--status-warning)">🕓 Herdada</Tag>}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 3, fontSize: 10.5, color: 'var(--text-secondary)' }}>
               {!activity.notStarted && (
-                <span>
-                  <span style={{ color: 'var(--text-muted)' }}>Início: </span>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Início dev: </span>
                   {formatShort(activity.startDate)}
-                </span>
+                </div>
+              )}
+              {activity.implDoneDate && (
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Fim dev: </span>
+                  {formatShort(activity.implDoneDate)}
+                </div>
               )}
               {firstTestWorklogDate && (
-                <span>
-                  <span style={{ color: 'var(--text-muted)' }}>Início do teste: </span>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Início teste: </span>
                   {formatShort(firstTestWorklogDate)}
-                </span>
+                </div>
               )}
-              {(activity.isDone || activity.testDone) && activity.deliveredDate ? (
-                <>
-                  {activity.dueDate && (
-                    <span>
-                      <span style={{ color: 'var(--text-muted)' }}>Previsão: </span>
-                      {formatShort(activity.dueDate)}
+              {(activity.isDone || activity.testDone) && activity.deliveredDate && (
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Fim teste: </span>
+                  {formatShort(activity.deliveredDate)}
+                  {activity.deliveredOnTime !== null && (
+                    <span style={{ marginLeft: 6 }}>
+                      <Tag color={activity.deliveredOnTime ? 'var(--status-good)' : 'var(--status-critical)'}>
+                        {activity.deliveredOnTime ? '✓ No prazo' : '✗ Fora do prazo'}
+                      </Tag>
                     </span>
                   )}
-                  <span>
-                    <span style={{ color: 'var(--text-muted)' }}>Entregue em: </span>
-                    {formatShort(activity.deliveredDate)}
-                  </span>
-                  {activity.deliveredOnTime !== null && (
-                    <Tag color={activity.deliveredOnTime ? 'var(--status-good)' : 'var(--status-critical)'}>
-                      {activity.deliveredOnTime ? '✓ No prazo' : '✗ Fora do prazo'}
-                    </Tag>
-                  )}
-                </>
-              ) : activity.isOverdue && activity.dueDate ? (
-                <span>
+                </div>
+              )}
+              {activity.isOverdue && activity.dueDate && (
+                <div>
                   <span style={{ color: 'var(--text-muted)' }}>Atrasada desde: </span>
                   {formatShort(activity.dueDate)}
-                </span>
-              ) : (
-                activity.dueDate && (
-                  <span>
-                    <span style={{ color: 'var(--text-muted)' }}>Previsão de entrega: </span>
-                    {formatShort(activity.dueDate)}
-                  </span>
-                )
+                </div>
               )}
             </div>
             {bugCount > 0 && (

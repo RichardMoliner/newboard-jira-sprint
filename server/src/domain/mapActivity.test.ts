@@ -337,6 +337,47 @@ describe('mapActivity', () => {
     expect(activity.status).toBe('Atendida');
   });
 
+  test('exposes implDoneDate when implDone is true', () => {
+    const activity = mapActivity({
+      story: baseStory({ statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implDone: true,
+      implDoneDate: '2026-09-18',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.implDoneDate).toBe('2026-09-18');
+  });
+
+  test('leaves implDoneDate null when implDone is false, even if a date was provided', () => {
+    const activity = mapActivity({
+      story: baseStory({ statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implDone: false,
+      implDoneDate: '2026-09-18',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.implDoneDate).toBeNull();
+  });
+
+  test('defaults implDoneDate to null when not provided', () => {
+    const activity = mapActivity({
+      story: baseStory({ statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implDone: true,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.implDoneDate).toBeNull();
+  });
+
   test('uses the Teste subtask completion date as deliveredDate when testDone but the story is not formally done', () => {
     const activity = mapActivity({
       story: baseStory({ statusCategory: 'Em andamento', updated: '2026-01-01T00:00:00.000-0300' }),

@@ -33,6 +33,9 @@ export interface GroupedSubtasks {
   implStartByParent: Map<string, string>;
   /** True quando a(s) subtarefa(s) "Implementação" da atividade pai estão todas "Atendida". */
   implDoneByParent: Map<string, boolean>;
+  /** Data (YYYY-MM-DD) mais recente de atualização das subtarefas "Implementação" — usada como data em
+   * que o dev disponibilizou o trabalho para teste, quando `implDoneByParent` é true. */
+  implDoneDateByParent: Map<string, string>;
   /** True quando a(s) subtarefa(s) "Teste" da atividade pai estão todas "Atendida". */
   testDoneByParent: Map<string, boolean>;
   /** Data (YYYY-MM-DD) mais recente de atualização das subtarefas "Teste" já atendidas — usada como data de entrega quando a story ainda não foi formalmente concluída. */
@@ -76,6 +79,7 @@ function isNegligibleWorklog(worklog: RawWorklogEntry): boolean {
 export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
   const implStartByParent = new Map<string, string>();
   const implStatusesByParent = new Map<string, string[]>();
+  const implUpdatedByParent = new Map<string, string>();
   const testStatusesByParent = new Map<string, string[]>();
   const testUpdatedByParent = new Map<string, string>();
   const implLoggedSecondsByParent = new Map<string, number>();
@@ -115,6 +119,11 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
       const statuses = implStatusesByParent.get(parentKey) ?? [];
       statuses.push(subtask.status);
       implStatusesByParent.set(parentKey, statuses);
+      const implUpdatedDate = dateOnly(subtask.updated);
+      const currentImplUpdated = implUpdatedByParent.get(parentKey);
+      if (!currentImplUpdated || implUpdatedDate > currentImplUpdated) {
+        implUpdatedByParent.set(parentKey, implUpdatedDate);
+      }
       addWorklogs(subtask, parentKey, 'Implementação', implLoggedSecondsByParent);
     }
 
@@ -192,16 +201,21 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
   // O início real do trabalho é o primeiro apontamento de horas na Implementação, não a data de
   // criação da subtarefa — ela costuma ser criada bem antes de alguém de fato começar a codar.
   // Enquanto não há nenhum apontamento ainda, mantém a data de criação como estimativa provisória.
+  // Pelo mesmo motivo, o fim do trabalho é o último apontamento, não o campo "updated" da subtarefa —
+  // editar um apontamento antigo (corrigir comentário/horas) bate esse campo pra hoje sem refletir
+  // trabalho novo. Enquanto não há apontamento, mantém o "updated" da subtarefa como estimativa.
   for (const [parentKey, list] of worklogEntriesByParent) {
-    const firstImplWorklogDate = list.find((entry) => entry.subtaskType === 'Implementação')?.date;
-    if (firstImplWorklogDate) {
-      implStartByParent.set(parentKey, firstImplWorklogDate);
+    const implEntries = list.filter((entry) => entry.subtaskType === 'Implementação');
+    if (implEntries.length > 0) {
+      implStartByParent.set(parentKey, implEntries[0].date);
+      implUpdatedByParent.set(parentKey, implEntries[implEntries.length - 1].date);
     }
   }
 
   return {
     implStartByParent,
     implDoneByParent,
+    implDoneDateByParent: implUpdatedByParent,
     testDoneByParent,
     testDoneDateByParent: testUpdatedByParent,
     implLoggedHoursByParent,

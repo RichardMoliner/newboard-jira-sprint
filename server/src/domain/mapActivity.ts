@@ -50,6 +50,7 @@ export function mapActivity(params: {
   sprint: ParsedSprint;
   implStartDate: string | null;
   implDone?: boolean;
+  implDoneDate?: string | null;
   testDone?: boolean;
   testDoneDate?: string | null;
   implLoggedHours?: number | null;
@@ -66,6 +67,7 @@ export function mapActivity(params: {
     sprint,
     implStartDate,
     implDone = false,
+    implDoneDate = null,
     testDone = false,
     testDoneDate = null,
     implLoggedHours = null,
@@ -156,6 +158,7 @@ export function mapActivity(params: {
     isOverdue: isOverdue(dueDate, isDone || testDone, today),
     notStarted,
     implDone,
+    implDoneDate: implDone ? implDoneDate : null,
     testDone,
     implWindow: timeline?.impl ?? null,
     testWindow: timeline?.test ?? null,

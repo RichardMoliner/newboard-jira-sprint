@@ -74,6 +74,7 @@ export async function fetchBoardData(
   const {
     implStartByParent,
     implDoneByParent,
+    implDoneDateByParent,
     testDoneByParent,
     testDoneDateByParent,
     implLoggedHoursByParent,
@@ -120,6 +121,7 @@ export async function fetchBoardData(
         sprint,
         implStartDate: implStartByParent.get(story.key) ?? null,
         implDone: implDoneByParent.get(story.key) ?? false,
+        implDoneDate: implDoneDateByParent.get(story.key) ?? null,
         testDone: testDoneByParent.get(story.key) ?? false,
         testDoneDate: testDoneDateByParent.get(story.key) ?? null,
         implLoggedHours: implLoggedHoursByParent.get(story.key) ?? null,

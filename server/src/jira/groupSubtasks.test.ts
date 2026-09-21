@@ -161,6 +161,52 @@ describe('groupSubtasks', () => {
     expect(testDoneDateByParent.get('EC-11420')).toBe('2026-09-09');
   });
 
+  test('falls back to the subtask updated date (date-only) into implDoneDateByParent while there is no Implementação worklog yet', () => {
+    const { implDoneDateByParent } = groupSubtasks([
+      subtask({ status: 'Atendida', updated: '2026-09-18T17:54:21.000-0300' }),
+    ]);
+    expect(implDoneDateByParent.get('EC-11420')).toBe('2026-09-18');
+  });
+
+  test('picks the latest updated date across multiple Implementação subtasks with no worklog, for implDoneDateByParent', () => {
+    const { implDoneDateByParent } = groupSubtasks([
+      subtask({ key: 'EC-1', updated: '2026-09-05T00:00:00.000-0300' }),
+      subtask({ key: 'EC-2', updated: '2026-09-18T00:00:00.000-0300' }),
+    ]);
+    expect(implDoneDateByParent.get('EC-11420')).toBe('2026-09-18');
+  });
+
+  test('leaves implDoneDateByParent unset for a parent with no Implementação subtask', () => {
+    const { implDoneDateByParent } = groupSubtasks([subtask({ type: 'Teste' })]);
+    expect(implDoneDateByParent.has('EC-11420')).toBe(false);
+  });
+
+  test('uses the date of the last Implementação worklog, not the subtask "updated" field, for implDoneDateByParent', () => {
+    // Editar um apontamento antigo (ex.: corrigir o comentário) bate o campo "updated" da subtarefa
+    // para hoje, mesmo que o trabalho real (o "started" do worklog) tenha sido semanas antes — usar
+    // "updated" faria "Fim dev" aparecer depois do início do teste, que já tinha apontamento antes disso.
+    const { implDoneDateByParent } = groupSubtasks([
+      subtask({
+        updated: '2026-07-31T17:31:25.000-0300',
+        worklog: {
+          worklogs: [
+            { author: { displayName: 'Fulano' }, started: '2026-07-02T15:00:00.000-0300', timeSpentSeconds: 13212 },
+            { author: { displayName: 'Fulano' }, started: '2026-07-13T07:27:00.000-0300', timeSpentSeconds: 23004 },
+          ],
+        },
+      }),
+    ]);
+    expect(implDoneDateByParent.get('EC-11420')).toBe('2026-07-13');
+  });
+
+  test('picks the latest Implementação worklog date across multiple subtasks of the same parent, for implDoneDateByParent', () => {
+    const { implDoneDateByParent } = groupSubtasks([
+      subtask({ key: 'EC-1', worklog: { worklogs: [{ author: { displayName: 'A' }, started: '2026-09-08T00:00:00.000-0300', timeSpentSeconds: 3600 }] } }),
+      subtask({ key: 'EC-2', worklog: { worklogs: [{ author: { displayName: 'B' }, started: '2026-09-11T00:00:00.000-0300', timeSpentSeconds: 3600 }] } }),
+    ]);
+    expect(implDoneDateByParent.get('EC-11420')).toBe('2026-09-11');
+  });
+
   test('groups Bug subtasks under their parent key as BugSubtask entries', () => {
     const { bugsByParent } = groupSubtasks([
       subtask({
