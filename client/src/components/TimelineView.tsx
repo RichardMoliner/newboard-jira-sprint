@@ -108,7 +108,7 @@ export default function TimelineView({
 
   const filtered = useMemo(() => {
     const bySprint = sprintFilter.length === 0 ? activities : activities.filter((a) => sprintFilter.includes(a.sprintId));
-    const byDone = hideDone ? bySprint.filter((a) => !a.isDone) : bySprint;
+    const byDone = hideDone ? bySprint.filter((a) => !a.isDone && !a.testDone) : bySprint;
     const query = searchQuery.trim().toLowerCase();
     if (!query) return byDone;
     return byDone.filter(
@@ -257,7 +257,7 @@ export default function TimelineView({
             />
           ))}
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginLeft: 'auto' }}>
-            <SwitchPill active={hideDone} onClick={() => setHideDone((v) => !v)} label="Ocultar concluídas" />
+            <SwitchPill active={hideDone} onClick={() => setHideDone((v) => !v)} label="Ocultar concluídas/Ag. liberação" />
             <div style={{ position: 'relative' }}>
               <input
                 value={searchQuery}
