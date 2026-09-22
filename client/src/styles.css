@@ -39,6 +39,14 @@ body {
   --seq-blue-450: #2a78d6;
   --seq-orange-300: #f0a37f;
   --seq-orange-450: #eb6834;
+
+  --cat-1: #2a78d6;
+  --cat-2: #eb6834;
+  --cat-3: #1baf7a;
+  --cat-4: #eda100;
+  --cat-5: #e87ba4;
+  --cat-6: #008300;
+  --cat-7: #4a3aa7;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -61,6 +69,14 @@ body {
     --status-warning: #fab219;
     --status-serious: #ec835a;
     --status-critical: #ff5252;
+
+    --cat-1: #3987e5;
+    --cat-2: #d95926;
+    --cat-3: #199e70;
+    --cat-4: #c98500;
+    --cat-5: #d55181;
+    --cat-6: #008300;
+    --cat-7: #9085e9;
   }
 }
 
@@ -83,6 +99,14 @@ body {
   --status-warning: #fab219;
   --status-serious: #ec835a;
   --status-critical: #ff5252;
+
+  --cat-1: #3987e5;
+  --cat-2: #d95926;
+  --cat-3: #199e70;
+  --cat-4: #c98500;
+  --cat-5: #d55181;
+  --cat-6: #008300;
+  --cat-7: #9085e9;
 }
 
 .tabular-nums {

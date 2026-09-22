@@ -4,10 +4,12 @@ import {
   computeKpis,
   computePersonSummaries,
   computeSprintSummaries,
+  computeStatusSummaries,
   computeRealizedProductivity,
   topActivitiesByBugCount,
 } from '../indicators/computeIndicators.js';
 import { FilterPill } from './TimelineView.js';
+import StatusPieChart from './StatusPieChart.js';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -46,6 +48,7 @@ export default function IndicatorsView({
   );
   const people = useMemo(() => computePersonSummaries(filtered), [filtered]);
   const sprintSummaries = useMemo(() => computeSprintSummaries(filtered), [filtered]);
+  const statusSummaries = useMemo(() => computeStatusSummaries(filtered), [filtered]);
   const topBuggy = useMemo(() => topActivitiesByBugCount(filtered, 10), [filtered]);
 
   const atRisk = filtered.filter((a) => a.isOverdue);
@@ -74,6 +77,11 @@ export default function IndicatorsView({
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+        <Section title="Atividades por status">
+          <StatusPieChart summaries={statusSummaries} />
+        </Section>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
         <Kpi label="Atividades" value={kpis.totalActivities} />
         <Kpi label="Story points totais" value={kpis.totalStoryPoints} />
@@ -83,7 +91,6 @@ export default function IndicatorsView({
         <Kpi label="Em andamento (no prazo)" value={kpis.inProgressOnTimeCount} />
         <Kpi label="Bugs abertos" value={kpis.openBugsCount} />
         <Kpi label="Bugs por atividade" value={kpis.bugsPerActivity.toFixed(1)} />
-        <Kpi label="Sem estimativa" value={kpis.noEstimateCount} suffix={`/${kpis.totalActivities}`} />
         <Kpi
           label="Horas / PF (realizado)"
           value={realizedProductivity.hoursPerPf !== null ? realizedProductivity.hoursPerPf.toFixed(2) : '—'}
@@ -145,7 +152,7 @@ export default function IndicatorsView({
       </div>
 
         <label
-          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--text-secondary)', cursor: 'pointer' }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--text-secondary)', cursor: 'pointer', marginTop: 8 }}
           title="Quando desmarcado (padrão), os indicadores de Horas/PF e % de Assertividade acima ignoram tarefas herdadas de sprints anteriores — elas costumam ficar muito tempo paradas antes da entrega e distorcem o cálculo."
         >
           <input
@@ -156,6 +163,8 @@ export default function IndicatorsView({
           />
           Considerar herdadas nos indicadores de Horas/PF e % de Assertividade
         </label>
+      </div>
+      </div>
       </div>
 
       <Section title="⚠️ Atividades em risco (previsão vencida e não concluídas)">

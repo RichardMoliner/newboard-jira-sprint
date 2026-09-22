@@ -7,7 +7,6 @@ export interface Kpis {
   atRiskCount: number;
   carriedCount: number;
   inProgressOnTimeCount: number;
-  noEstimateCount: number;
   openBugsCount: number;
   bugsPerActivity: number;
 }
@@ -18,7 +17,6 @@ export function computeKpis(activities: Activity[], _today: string): Kpis {
   const doneCount = count(activities, (a) => a.isDone);
   const atRiskCount = count(activities, (a) => a.isOverdue);
   const carriedCount = count(activities, (a) => a.isCarried);
-  const noEstimateCount = count(activities, (a) => a.storyPoints === null);
   const inProgressOnTimeCount = count(activities, (a) => !a.isDone && !a.isOverdue);
   const openBugsCount = sum(activities.map((a) => a.bugs.length));
 
@@ -29,7 +27,6 @@ export function computeKpis(activities: Activity[], _today: string): Kpis {
     atRiskCount,
     carriedCount,
     inProgressOnTimeCount,
-    noEstimateCount,
     openBugsCount,
     bugsPerActivity: totalActivities === 0 ? 0 : openBugsCount / totalActivities,
   };
@@ -150,6 +147,88 @@ export function computeSprintSummaries(activities: Activity[]): SprintSummary[] 
   }
 
   return [...bySprint.values()].sort((a, b) => b.totalStoryPoints - a.totalStoryPoints);
+}
+
+export interface StatusSummary {
+  status: string;
+  activities: number;
+  storyPoints: number;
+  atRisk: number;
+}
+
+/** Ordem natural do fluxo de trabalho — status fora dessa lista (tipicamente o status real do Jira
+ * quando a atividade está concluída, ex.: "Atendida", "Cancelada") entram depois, por quantidade. */
+const STATUS_ORDER = ['Ainda não iniciada', 'Em andamento', 'Ag. início dos testes', 'Em testes', 'Aguardando liberação', 'Correção de bugs'];
+
+function normalizeStatusText(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
+}
+
+/** True quando a atividade tem algum bug ainda não "Atendida" — mesmo critério do badge "Atuando em bugs" da timeline. */
+function hasOpenBug(activity: Activity): boolean {
+  return activity.bugs.some((bug) => normalizeStatusText(bug.status) !== 'atendida');
+}
+
+/**
+ * Agrupa atividades pelo mesmo status exibido no badge da timeline: "Ainda não iniciada" quando
+ * ainda não há subtarefa de Implementação, senão o status derivado da atividade (que já cobre Em
+ * andamento/Ag. início dos testes/Em testes/Aguardando liberação/o status real do Jira quando
+ * concluída — ver mapActivity no server).
+ */
+export function computeStatusSummaries(activities: Activity[]): StatusSummary[] {
+  const byStatus = new Map<string, StatusSummary>();
+
+  for (const activity of activities) {
+    const status = activity.notStarted
+      ? 'Ainda não iniciada'
+      : !activity.isDone && hasOpenBug(activity)
+        ? 'Correção de bugs'
+        : activity.status;
+    const current = byStatus.get(status) ?? { status, activities: 0, storyPoints: 0, atRisk: 0 };
+
+    current.activities += 1;
+    current.storyPoints += activity.storyPoints ?? 0;
+    if (activity.isOverdue) current.atRisk += 1;
+
+    byStatus.set(status, current);
+  }
+
+  return [...byStatus.values()].sort((a, b) => {
+    const aIndex = STATUS_ORDER.indexOf(a.status);
+    const bIndex = STATUS_ORDER.indexOf(b.status);
+    if (aIndex !== -1 || bIndex !== -1) {
+      if (aIndex === -1) return 1;
+      if (bIndex === -1) return -1;
+      return aIndex - bIndex;
+    }
+    return b.activities - a.activities;
+  });
+}
+
+/**
+ * Reduz a lista de status para no máximo `maxSlices` fatias, somando o restante (os de menor
+ * prioridade na ordem já aplicada por `computeStatusSummaries`) numa fatia "Outros" — evita gerar
+ * mais cores categóricas do que a paleta suporta com segurança num gráfico de pizza.
+ */
+export function foldStatusSummariesForChart(summaries: StatusSummary[], maxSlices: number): StatusSummary[] {
+  if (summaries.length <= maxSlices) return summaries;
+
+  const kept = summaries.slice(0, maxSlices - 1);
+  const rest = summaries.slice(maxSlices - 1);
+  const others: StatusSummary = rest.reduce(
+    (acc, s) => ({
+      status: 'Outros',
+      activities: acc.activities + s.activities,
+      storyPoints: acc.storyPoints + s.storyPoints,
+      atRisk: acc.atRisk + s.atRisk,
+    }),
+    { status: 'Outros', activities: 0, storyPoints: 0, atRisk: 0 },
+  );
+
+  return [...kept, others];
 }
 
 export interface TopBuggyActivity {

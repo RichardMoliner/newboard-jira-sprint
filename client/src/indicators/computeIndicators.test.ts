@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'vitest';
-import { computeKpis, computePersonSummaries, computeSprintSummaries, computeRealizedProductivity, topActivitiesByBugCount } from './computeIndicators.js';
+import {
+  computeKpis,
+  computePersonSummaries,
+  computeSprintSummaries,
+  computeStatusSummaries,
+  foldStatusSummariesForChart,
+  computeRealizedProductivity,
+  topActivitiesByBugCount,
+} from './computeIndicators.js';
 import type { Activity } from '../types.js';
 
 function activity(overrides: Partial<Activity>): Activity {
@@ -40,7 +48,7 @@ function activity(overrides: Partial<Activity>): Activity {
 }
 
 describe('computeKpis', () => {
-  test('counts totals, done, at-risk, carried and no-estimate activities', () => {
+  test('counts totals, done, at-risk and carried activities', () => {
     const activities = [
       activity({ key: 'A', isDone: true, storyPoints: 10 }),
       activity({ key: 'B', isOverdue: true, storyPoints: 5 }),
@@ -55,7 +63,6 @@ describe('computeKpis', () => {
     expect(kpis.doneCount).toBe(1);
     expect(kpis.atRiskCount).toBe(1);
     expect(kpis.carriedCount).toBe(1);
-    expect(kpis.noEstimateCount).toBe(1);
   });
 
   test('counts open bugs and computes the average bugs per activity', () => {
@@ -269,6 +276,163 @@ describe('computeSprintSummaries', () => {
       done: 1,
       atRisk: 1,
     });
+  });
+});
+
+describe('computeStatusSummaries', () => {
+  test('aggregates activities per status, counting story points and at-risk activities', () => {
+    const activities = [
+      activity({ key: 'A', status: 'Em andamento', storyPoints: 10 }),
+      activity({ key: 'B', status: 'Em andamento', storyPoints: 5, isOverdue: true }),
+      activity({ key: 'C', status: 'Em testes', storyPoints: 3 }),
+    ];
+
+    const summaries = computeStatusSummaries(activities);
+    const emAndamento = summaries.find((s) => s.status === 'Em andamento');
+
+    expect(emAndamento).toEqual({ status: 'Em andamento', activities: 2, storyPoints: 15, atRisk: 1 });
+  });
+
+  test('groups a not-started activity under "Ainda não iniciada", regardless of its raw Jira status', () => {
+    const activities = [activity({ key: 'A', notStarted: true, status: 'Novo', storyPoints: 5 })];
+
+    const summaries = computeStatusSummaries(activities);
+
+    expect(summaries).toEqual([{ status: 'Ainda não iniciada', activities: 1, storyPoints: 5, atRisk: 0 }]);
+  });
+
+  test('groups a done activity under its real Jira status (e.g. "Atendida"), not a generic label', () => {
+    const activities = [activity({ key: 'A', isDone: true, status: 'Atendida', storyPoints: 5 })];
+
+    const summaries = computeStatusSummaries(activities);
+
+    expect(summaries).toEqual([{ status: 'Atendida', activities: 1, storyPoints: 5, atRisk: 0 }]);
+  });
+
+  test('treats storyPoints null as 0 when summing', () => {
+    const activities = [activity({ key: 'A', status: 'Em andamento', storyPoints: null })];
+
+    const summaries = computeStatusSummaries(activities);
+
+    expect(summaries[0].storyPoints).toBe(0);
+  });
+
+  test('orders known statuses by workflow order, regardless of activity count', () => {
+    const activities = [
+      activity({ key: 'A', isDone: true, status: 'Atendida' }),
+      activity({ key: 'B', status: 'Aguardando liberação' }),
+      activity({ key: 'C', status: 'Em testes' }),
+      activity({ key: 'D', status: 'Ag. início dos testes' }),
+      activity({ key: 'E', status: 'Em andamento' }),
+      activity({ key: 'F', notStarted: true, status: 'Novo' }),
+    ];
+
+    const summaries = computeStatusSummaries(activities);
+
+    expect(summaries.map((s) => s.status)).toEqual([
+      'Ainda não iniciada',
+      'Em andamento',
+      'Ag. início dos testes',
+      'Em testes',
+      'Aguardando liberação',
+      'Atendida',
+    ]);
+  });
+
+  test('appends unknown statuses after the known workflow order, sorted by activity count descending', () => {
+    const activities = [
+      activity({ key: 'A', isDone: true, status: 'Cancelada' }),
+      activity({ key: 'B', isDone: true, status: 'Rejeitada' }),
+      activity({ key: 'C', isDone: true, status: 'Rejeitada' }),
+      activity({ key: 'D', status: 'Em andamento' }),
+    ];
+
+    const summaries = computeStatusSummaries(activities);
+
+    expect(summaries.map((s) => s.status)).toEqual(['Em andamento', 'Rejeitada', 'Cancelada']);
+  });
+
+  function openBug(overrides: Partial<Activity['bugs'][number]> = {}) {
+    return { key: 'B-1', title: 'Bug', developer: null, status: 'Em correção', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], ...overrides };
+  }
+
+  test('groups an in-progress activity with an open bug under "Correção de bugs" instead of its normal status', () => {
+    const activities = [activity({ key: 'A', status: 'Em testes', bugs: [openBug()] })];
+
+    const summaries = computeStatusSummaries(activities);
+
+    expect(summaries).toEqual([{ status: 'Correção de bugs', activities: 1, storyPoints: 5, atRisk: 0 }]);
+  });
+
+  test('does not group under "Correção de bugs" when every bug is already resolved ("Atendida")', () => {
+    const activities = [activity({ key: 'A', status: 'Em testes', bugs: [openBug({ status: 'Atendida' })] })];
+
+    const summaries = computeStatusSummaries(activities);
+
+    expect(summaries.map((s) => s.status)).toEqual(['Em testes']);
+  });
+
+  test('does not override a done activity\'s status even with an open bug', () => {
+    const activities = [activity({ key: 'A', isDone: true, status: 'Atendida', bugs: [openBug()] })];
+
+    const summaries = computeStatusSummaries(activities);
+
+    expect(summaries.map((s) => s.status)).toEqual(['Atendida']);
+  });
+
+  test('does not override a not-started activity\'s "Ainda não iniciada" status even with an open bug', () => {
+    const activities = [activity({ key: 'A', notStarted: true, status: 'Novo', bugs: [openBug()] })];
+
+    const summaries = computeStatusSummaries(activities);
+
+    expect(summaries.map((s) => s.status)).toEqual(['Ainda não iniciada']);
+  });
+
+  test('orders "Correção de bugs" as part of the known workflow order', () => {
+    const activities = [
+      activity({ key: 'A', isDone: true, status: 'Atendida' }),
+      activity({ key: 'B', status: 'Aguardando liberação' }),
+      activity({ key: 'C', status: 'Em testes', bugs: [openBug()] }),
+      activity({ key: 'D', status: 'Em andamento' }),
+    ];
+
+    const summaries = computeStatusSummaries(activities);
+
+    expect(summaries.map((s) => s.status)).toEqual(['Em andamento', 'Aguardando liberação', 'Correção de bugs', 'Atendida']);
+  });
+});
+
+describe('foldStatusSummariesForChart', () => {
+  function summary(status: string, activities: number) {
+    return { status, activities, storyPoints: 0, atRisk: 0 };
+  }
+
+  test('returns summaries unchanged when at or under the max slice count', () => {
+    const summaries = [summary('A', 3), summary('B', 2)];
+    expect(foldStatusSummariesForChart(summaries, 6)).toEqual(summaries);
+  });
+
+  test('folds statuses past the max slice count into a single "Outros" slice', () => {
+    const summaries = [summary('A', 5), summary('B', 4), summary('C', 3), summary('D', 1)];
+
+    const folded = foldStatusSummariesForChart(summaries, 3);
+
+    expect(folded).toEqual([summary('A', 5), summary('B', 4), { status: 'Outros', activities: 4, storyPoints: 0, atRisk: 0 }]);
+  });
+
+  test('sums storyPoints and atRisk from the folded statuses into "Outros"', () => {
+    const summaries = [
+      { status: 'A', activities: 5, storyPoints: 10, atRisk: 1 },
+      { status: 'B', activities: 2, storyPoints: 3, atRisk: 0 },
+      { status: 'C', activities: 1, storyPoints: 2, atRisk: 1 },
+    ];
+
+    const folded = foldStatusSummariesForChart(summaries, 2);
+
+    expect(folded).toEqual([
+      { status: 'A', activities: 5, storyPoints: 10, atRisk: 1 },
+      { status: 'Outros', activities: 3, storyPoints: 5, atRisk: 1 },
+    ]);
   });
 });
 
