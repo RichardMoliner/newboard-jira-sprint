@@ -65,6 +65,10 @@ export interface Activity {
   /** Todos os apontamentos das subtarefas de Implementação/Teste, para exibir no tooltip da atividade. */
   worklogEntries: WorklogEntry[];
   bugs: BugSubtask[];
+  /** True quando a atividade entrou na sprint atual depois que ela já tinha começado (exclui herdadas — rolar de sprint não conta como adição nova). */
+  addedAfterSprintStart: boolean;
+  /** Timestamp ISO de quando a atividade entrou na sprint atual (via changelog do Jira); null quando não há esse histórico (ex: já criada dentro da sprint). */
+  sprintEnteredAt: string | null;
 }
 
 export interface SprintInfo {
@@ -72,6 +76,9 @@ export interface SprintInfo {
   name: string;
   startDate: string;
   endDate: string;
+  /** Timestamp ISO completo (não só a data) de início/fim da sprint — precisão de hora para comparar com o changelog de entrada na sprint. */
+  startDateTime: string;
+  endDateTime: string;
 }
 
 export interface BoardDataResponse {

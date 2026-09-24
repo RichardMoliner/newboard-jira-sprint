@@ -2,12 +2,14 @@ import { describe, expect, test } from 'vitest';
 import {
   computeDailyHours,
   computeImplFillEndDate,
+  computeOverrunDash,
   computeTestFillRange,
   dayFillRatio,
   formatConsumedPercent,
   isDeveloperAvailable,
   isWorkingOnBugs,
   lastWorklogDate,
+  matchesLegendFilter,
   projectTestWindow,
 } from './TimelineView.js';
 import type { Activity, BugSubtask, WorklogEntry } from '../types.js';
@@ -56,6 +58,8 @@ function activity(overrides: Partial<Activity> = {}): Activity {
     bugsLoggedHours: null,
     worklogEntries: [],
     bugs: [],
+    addedAfterSprintStart: false,
+    sprintEnteredAt: null,
     ...overrides,
   };
 }
@@ -480,5 +484,77 @@ describe('isWorkingOnBugs', () => {
   test('finds a bug on an activity that is not even "owned" by this developer — scans across all given activities', () => {
     const activities = [activity({ developer: 'Beltrano', bugs: [bug({ developer: 'Fulano', status: 'Em correção' })] })];
     expect(isWorkingOnBugs('Fulano', activities)).toBe(true);
+  });
+});
+
+describe('matchesLegendFilter', () => {
+  test('shows everything when no legend filter is active', () => {
+    expect(matchesLegendFilter(activity(), { bugOnly: false, atrasoOnly: false })).toBe(true);
+  });
+
+  test('bugOnly hides activities with no bugs', () => {
+    expect(matchesLegendFilter(activity({ bugs: [] }), { bugOnly: true, atrasoOnly: false })).toBe(false);
+  });
+
+  test('bugOnly keeps activities that have at least one bug', () => {
+    expect(matchesLegendFilter(activity({ bugs: [bug()] }), { bugOnly: true, atrasoOnly: false })).toBe(true);
+  });
+
+  test('atrasoOnly hides activities that are not overdue', () => {
+    expect(matchesLegendFilter(activity({ isOverdue: false }), { bugOnly: false, atrasoOnly: true })).toBe(false);
+  });
+
+  test('atrasoOnly keeps activities that are overdue', () => {
+    expect(matchesLegendFilter(activity({ isOverdue: true }), { bugOnly: false, atrasoOnly: true })).toBe(true);
+  });
+
+  test('combines bugOnly and atrasoOnly as AND — requires both to pass', () => {
+    const overdueNoBugs = activity({ isOverdue: true, bugs: [] });
+    const bugsNotOverdue = activity({ isOverdue: false, bugs: [bug()] });
+    const both = activity({ isOverdue: true, bugs: [bug()] });
+    const filters = { bugOnly: true, atrasoOnly: true };
+    expect(matchesLegendFilter(overdueNoBugs, filters)).toBe(false);
+    expect(matchesLegendFilter(bugsNotOverdue, filters)).toBe(false);
+    expect(matchesLegendFilter(both, filters)).toBe(true);
+  });
+
+  test('addedLateOnly hides activities not flagged as addedAfterSprintStart', () => {
+    expect(
+      matchesLegendFilter(activity({ addedAfterSprintStart: false }), { bugOnly: false, atrasoOnly: false, addedLateOnly: true }),
+    ).toBe(false);
+  });
+
+  test('addedLateOnly keeps activities flagged as addedAfterSprintStart', () => {
+    expect(
+      matchesLegendFilter(activity({ addedAfterSprintStart: true }), { bugOnly: false, atrasoOnly: false, addedLateOnly: true }),
+    ).toBe(true);
+  });
+
+  test('addedLateOnly combines with the other filters as AND', () => {
+    const lateNotOverdue = activity({ addedAfterSprintStart: true, isOverdue: false });
+    const overdueNotLate = activity({ addedAfterSprintStart: false, isOverdue: true });
+    const both = activity({ addedAfterSprintStart: true, isOverdue: true });
+    const filters = { bugOnly: false, atrasoOnly: true, addedLateOnly: true };
+    expect(matchesLegendFilter(lateNotOverdue, filters)).toBe(false);
+    expect(matchesLegendFilter(overdueNotLate, filters)).toBe(false);
+    expect(matchesLegendFilter(both, filters)).toBe(true);
+  });
+});
+
+describe('computeOverrunDash', () => {
+  test('returns null when the feature is disabled, even if the phase overran', () => {
+    expect(computeOverrunDash(100, 140, false)).toBeNull();
+  });
+
+  test('returns null when enabled but the phase has not overrun (fillRight within the box)', () => {
+    expect(computeOverrunDash(100, 100.5, true)).toBeNull();
+  });
+
+  test('returns the overrun rectangle from boxRight to fillRight when enabled and overrun', () => {
+    expect(computeOverrunDash(100, 140, true)).toEqual({ left: 100, width: 40 });
+  });
+
+  test('clamps to a minimum width so a barely-late overrun stays visible', () => {
+    expect(computeOverrunDash(100, 102, true)).toEqual({ left: 100, width: 4 });
   });
 });

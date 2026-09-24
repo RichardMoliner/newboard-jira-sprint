@@ -43,6 +43,8 @@ function activity(overrides: Partial<Activity>): Activity {
     bugsLoggedHours: null,
     worklogEntries: [],
     bugs: [],
+    addedAfterSprintStart: false,
+    sprintEnteredAt: null,
     ...overrides,
   };
 }
@@ -81,6 +83,34 @@ describe('computeKpis', () => {
     const kpis = computeKpis([], '2026-09-08');
     expect(kpis.totalActivities).toBe(0);
     expect(kpis.bugsPerActivity).toBe(0);
+  });
+
+  test('counts activities added after sprint start and sums their story points', () => {
+    const activities = [
+      activity({ key: 'A', addedAfterSprintStart: true, storyPoints: 4 }),
+      activity({ key: 'B', addedAfterSprintStart: true, storyPoints: 2 }),
+      activity({ key: 'C', addedAfterSprintStart: false, storyPoints: 10 }),
+    ];
+
+    const kpis = computeKpis(activities, '2026-09-08');
+
+    expect(kpis.addedLateCount).toBe(2);
+    expect(kpis.addedLateStoryPoints).toBe(6);
+  });
+
+  test('treats a null storyPoints on an added-late activity as 0 towards the sum', () => {
+    const activities = [activity({ key: 'A', addedAfterSprintStart: true, storyPoints: null })];
+
+    const kpis = computeKpis(activities, '2026-09-08');
+
+    expect(kpis.addedLateCount).toBe(1);
+    expect(kpis.addedLateStoryPoints).toBe(0);
+  });
+
+  test('zeroes added-late KPIs when nothing was added after sprint start', () => {
+    const kpis = computeKpis([activity({ addedAfterSprintStart: false })], '2026-09-08');
+    expect(kpis.addedLateCount).toBe(0);
+    expect(kpis.addedLateStoryPoints).toBe(0);
   });
 });
 

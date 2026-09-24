@@ -23,6 +23,7 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
   const [passwordAlreadySet, setPasswordAlreadySet] = useState(false);
   const [hoursPerPf, setHoursPerPf] = useState('');
   const [hoursPerDay, setHoursPerDay] = useState('');
+  const [dashDelayBar, setDashDelayBar] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hoursPerDayClock = formatHoursAsClock(hoursPerDay);
@@ -37,6 +38,7 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
       setPasswordAlreadySet(config.jiraPasswordSet);
       setHoursPerPf(String(Math.round(config.hoursPerPf * 100) / 100));
       setHoursPerDay(String(Math.round(config.hoursPerDay * 100) / 100));
+      setDashDelayBar(config.dashDelayBar);
     });
   }, []);
 
@@ -71,6 +73,7 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
         jiraPassword,
         hoursPerPf: parsedHoursPerPf,
         hoursPerDay: parsedHoursPerDay,
+        dashDelayBar,
       });
       onSaved(config.vertical!);
     } catch (err) {
@@ -176,6 +179,16 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
             previsões de prazo.
           </span>
         </Field>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
+          <input
+            type="checkbox"
+            checked={dashDelayBar}
+            onChange={(e) => setDashDelayBar(e.target.checked)}
+            style={{ cursor: 'pointer' }}
+          />
+          Tracejar barra de atraso
+        </label>
 
         {error && <p style={{ color: 'var(--status-critical)', fontSize: 13, margin: 0 }}>{error}</p>}
 

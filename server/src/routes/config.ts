@@ -10,6 +10,7 @@ function toPublicConfig(config: AppConfig) {
     jiraPasswordSet: Boolean(config.jiraPassword),
     hoursPerPf: config.hoursPerPf ?? DEFAULT_HOURS_PER_PF,
     hoursPerDay: config.hoursPerDay ?? DEFAULT_HOURS_PER_DAY,
+    dashDelayBar: config.dashDelayBar ?? false,
   };
 }
 
@@ -66,7 +67,9 @@ export function configRouter(configPath: string): Router {
       return;
     }
 
-    const next = { vertical, jiraUsername, jiraPassword, hoursPerPf: hoursPerPf.value, hoursPerDay: hoursPerDay.value };
+    const dashDelayBar = req.body?.dashDelayBar === undefined ? (existing.dashDelayBar ?? false) : Boolean(req.body.dashDelayBar);
+
+    const next = { vertical, jiraUsername, jiraPassword, hoursPerPf: hoursPerPf.value, hoursPerDay: hoursPerDay.value, dashDelayBar };
     await writeConfig(configPath, next);
     res.json(toPublicConfig(next));
   });

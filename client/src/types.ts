@@ -53,6 +53,8 @@ export interface Activity {
   bugsLoggedHours: number | null;
   worklogEntries: WorklogEntry[];
   bugs: BugSubtask[];
+  addedAfterSprintStart: boolean;
+  sprintEnteredAt: string | null;
 }
 
 export interface SprintInfo {
@@ -60,6 +62,8 @@ export interface SprintInfo {
   name: string;
   startDate: string;
   endDate: string;
+  startDateTime: string;
+  endDateTime: string;
 }
 
 export interface BoardDataResponse {

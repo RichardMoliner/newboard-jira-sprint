@@ -14,3 +14,17 @@ export function isDeliveredOnTime(deliveredDateISO: string | null, dueDateISO: s
   if (deliveredDateISO === null || dueDateISO === null) return null;
   return deliveredDateISO <= dueDateISO;
 }
+
+/**
+ * Uma atividade foi "adicionada após o início da sprint" quando entrou na sprint atual (via
+ * changelog) depois do timestamp exato de início dela — herdadas nunca contam aqui, rolar de
+ * sprint é continuação do mesmo trabalho, não uma adição nova ao escopo.
+ */
+export function isAddedAfterSprintStart(
+  isCarriedOver: boolean,
+  sprintEnteredAtISO: string | null,
+  sprintStartISO: string,
+): boolean {
+  if (isCarriedOver || sprintEnteredAtISO === null) return false;
+  return sprintEnteredAtISO > sprintStartISO;
+}

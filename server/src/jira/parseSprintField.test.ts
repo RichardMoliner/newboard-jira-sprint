@@ -15,6 +15,8 @@ describe('parseSprintField', () => {
       state: 'ACTIVE',
       startDate: '2026-09-03',
       endDate: '2026-10-05',
+      startDateTime: '2026-09-03T00:00:06.884-03:00',
+      endDateTime: '2026-10-05T23:59:00.000-03:00',
     });
   });
 
@@ -25,6 +27,8 @@ describe('parseSprintField', () => {
       state: 'ACTIVE',
       startDate: '2026-09-03',
       endDate: '2026-10-05',
+      startDateTime: '2026-09-03T00:00:06.884-03:00',
+      endDateTime: '2026-10-05T23:59:00.000-03:00',
     });
   });
 
@@ -35,6 +39,8 @@ describe('parseSprintField', () => {
       state: 'CLOSED',
       startDate: '2026-08-01',
       endDate: '2026-08-15',
+      startDateTime: '2026-08-01T00:00:00.000-03:00',
+      endDateTime: '2026-08-15T23:59:00.000-03:00',
     });
   });
 
@@ -52,6 +58,8 @@ describe('parseSprintField', () => {
       state: 'ACTIVE',
       startDate: '2026-09-03',
       endDate: '2026-10-05',
+      startDateTime: '2026-09-03T00:00:00.000-03:00',
+      endDateTime: '2026-10-05T23:59:00.000-03:00',
     });
   });
 });

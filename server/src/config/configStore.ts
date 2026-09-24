@@ -8,6 +8,8 @@ export interface AppConfig {
   hoursPerPf: number | null;
   /** Horas produtivas consideradas em 1 dia de trabalho. Nulo usa o padrão do sistema. */
   hoursPerDay: number | null;
+  /** Tracejar em vermelho a parte da barra que representa atraso. Nulo usa o padrão do sistema (desligado). */
+  dashDelayBar: boolean | null;
 }
 
 export async function readConfig(configPath: string): Promise<AppConfig> {
@@ -20,10 +22,11 @@ export async function readConfig(configPath: string): Promise<AppConfig> {
       jiraPassword: parsed.jiraPassword ?? null,
       hoursPerPf: parsed.hoursPerPf ?? null,
       hoursPerDay: parsed.hoursPerDay ?? null,
+      dashDelayBar: parsed.dashDelayBar ?? null,
     };
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return { vertical: null, jiraUsername: null, jiraPassword: null, hoursPerPf: null, hoursPerDay: null };
+      return { vertical: null, jiraUsername: null, jiraPassword: null, hoursPerPf: null, hoursPerDay: null, dashDelayBar: null };
     }
     throw err;
   }

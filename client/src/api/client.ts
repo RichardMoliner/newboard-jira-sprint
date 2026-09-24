@@ -18,6 +18,7 @@ export interface AppConfig {
   jiraPasswordSet: boolean;
   hoursPerPf: number;
   hoursPerDay: number;
+  dashDelayBar: boolean;
 }
 
 export interface SaveConfigInput {
@@ -27,6 +28,7 @@ export interface SaveConfigInput {
   jiraPassword: string;
   hoursPerPf: number;
   hoursPerDay: number;
+  dashDelayBar: boolean;
 }
 
 export function getConfig(): Promise<AppConfig> {

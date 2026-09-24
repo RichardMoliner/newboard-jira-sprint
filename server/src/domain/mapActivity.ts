@@ -1,5 +1,5 @@
 import { computeTimeline, DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY } from '../compute/timeline.js';
-import { isCarried, isOverdue, isDeliveredOnTime } from '../compute/status.js';
+import { isCarried, isOverdue, isDeliveredOnTime, isAddedAfterSprintStart } from '../compute/status.js';
 import { computeAccuracyPercent } from '../compute/accuracy.js';
 import type { ParsedSprint } from '../jira/parseSprintField.js';
 import type { Activity, BugSubtask, WorklogEntry } from './types.js';
@@ -57,6 +57,8 @@ export function mapActivity(params: {
   testLoggedHours?: number | null;
   worklogEntries?: WorklogEntry[];
   bugs: BugSubtask[];
+  /** Timestamp ISO de quando a issue entrou na sprint atual (via changelog do Jira); null sem esse histórico. */
+  sprintEnteredAt?: string | null;
   baseUrl: string;
   today: string;
   hoursPerPf?: number;
@@ -74,6 +76,7 @@ export function mapActivity(params: {
     testLoggedHours = null,
     worklogEntries = [],
     bugs,
+    sprintEnteredAt = null,
     baseUrl,
     today,
     hoursPerPf = DEFAULT_HOURS_PER_PF,
@@ -135,13 +138,15 @@ export function mapActivity(params: {
       ? computeAccuracyPercent(story.storyPoints * hoursPerPf, totalLoggedHoursWithBugs)
       : null;
 
+  const carried = notStarted ? false : isCarried(startDate, sprint.startDate);
+
   return {
     key: story.key,
     url: `${baseUrl}/browse/${story.key}`,
     title: story.summary,
     sprintId: sprint.id,
     sprintName: sprint.name,
-    isCarried: notStarted ? false : isCarried(startDate, sprint.startDate),
+    isCarried: carried,
     developer: story.desenvolvedor ?? story.assignee ?? 'Não atribuído',
     tester: story.testador,
     storyPoints: story.storyPoints,
@@ -169,5 +174,7 @@ export function mapActivity(params: {
     bugsLoggedHours,
     worklogEntries,
     bugs,
+    addedAfterSprintStart: isAddedAfterSprintStart(carried, sprintEnteredAt, sprint.startDateTime),
+    sprintEnteredAt,
   };
 }

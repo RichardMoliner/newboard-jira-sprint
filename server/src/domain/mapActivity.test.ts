@@ -9,6 +9,8 @@ const sprint: ParsedSprint = {
   state: 'ACTIVE',
   startDate: '2026-09-03',
   endDate: '2026-10-05',
+  startDateTime: '2026-09-03T00:00:00.000-03:00',
+  endDateTime: '2026-10-05T23:59:00.000-03:00',
 };
 
 function baseStory(overrides: Partial<RawStory> = {}): RawStory {
@@ -87,6 +89,60 @@ describe('mapActivity', () => {
       today: '2026-09-08',
     });
     expect(activity.isCarried).toBe(true);
+  });
+
+  test('flags addedAfterSprintStart when sprintEnteredAt is after the sprint startDateTime', () => {
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint, // sprint.startDateTime is 2026-09-03T00:00:00.000-03:00
+      implStartDate: '2026-09-04',
+      sprintEnteredAt: '2026-09-05T14:00:00.000-0300',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.addedAfterSprintStart).toBe(true);
+    expect(activity.sprintEnteredAt).toBe('2026-09-05T14:00:00.000-0300');
+  });
+
+  test('does not flag addedAfterSprintStart when sprintEnteredAt is before the sprint startDateTime', () => {
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint,
+      implStartDate: '2026-08-20',
+      sprintEnteredAt: '2026-09-01T14:00:00.000-0300',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.addedAfterSprintStart).toBe(false);
+  });
+
+  test('does not flag addedAfterSprintStart when there is no sprintEnteredAt', () => {
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint,
+      implStartDate: '2026-09-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.addedAfterSprintStart).toBe(false);
+    expect(activity.sprintEnteredAt).toBeNull();
+  });
+
+  test('does not flag addedAfterSprintStart for a carried-over activity, even with a late sprintEnteredAt', () => {
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint,
+      implStartDate: '2026-08-04', // before sprint.startDate -> isCarried
+      sprintEnteredAt: '2026-09-05T14:00:00.000-0300',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.isCarried).toBe(true);
+    expect(activity.addedAfterSprintStart).toBe(false);
   });
 
   test('computes dueDate from the timeline when storyPoints is set', () => {

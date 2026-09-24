@@ -88,6 +88,8 @@ export default function IndicatorsView({
         <Kpi label="Concluídas" value={kpis.doneCount} suffix={`/${kpis.totalActivities}`} accent="var(--status-good)" />
         <Kpi label="Em risco" value={kpis.atRiskCount} suffix={`/${kpis.totalActivities}`} accent="var(--status-critical)" />
         <Kpi label="Herdadas" value={kpis.carriedCount} suffix={`/${kpis.totalActivities}`} accent="var(--status-warning)" />
+        <Kpi label="Tarefas adicionadas" value={kpis.addedLateCount} suffix={`/${kpis.totalActivities}`} accent="var(--status-warning)" />
+        <Kpi label="Pontos adicionados" value={kpis.addedLateStoryPoints} accent="var(--status-warning)" />
         <Kpi label="Em andamento (no prazo)" value={kpis.inProgressOnTimeCount} />
         <Kpi label="Bugs abertos" value={kpis.openBugsCount} />
         <Kpi label="Bugs por atividade" value={kpis.bugsPerActivity.toFixed(1)} />

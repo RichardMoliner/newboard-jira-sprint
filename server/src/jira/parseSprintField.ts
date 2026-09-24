@@ -6,6 +6,9 @@ export interface ParsedSprint {
   startDate: string;
   /** Data de término da sprint, no formato YYYY-MM-DD. */
   endDate: string;
+  /** Timestamp ISO completo de início/fim, como veio do Jira — precisão de hora. */
+  startDateTime: string;
+  endDateTime: string;
 }
 
 const SPRINT_ATTR_PATTERN = /\[(.+)\]$/;
@@ -44,6 +47,8 @@ function toParsedSprint(raw: string): ParsedSprint | null {
     state: attrs.state ?? 'UNKNOWN',
     startDate: attrs.startDate.slice(0, 10),
     endDate: attrs.endDate ? attrs.endDate.slice(0, 10) : attrs.startDate.slice(0, 10),
+    startDateTime: attrs.startDate,
+    endDateTime: attrs.endDate ?? attrs.startDate,
   };
 }
 

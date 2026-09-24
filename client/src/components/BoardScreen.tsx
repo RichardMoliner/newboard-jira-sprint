@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { getConfig } from '../api/client.js';
 import { useBoardData } from '../api/useBoardData.js';
 import TimelineView from './TimelineView.js';
 import IndicatorsView from './IndicatorsView.js';
@@ -15,6 +16,11 @@ export default function BoardScreen({
   const { data, loading, error, refresh, secondsToNextRefresh } = useBoardData();
   const [tab, setTab] = useState<Tab>('timeline');
   const [sprintFilter, setSprintFilter] = useState<string[]>([]);
+  const [dashDelayBar, setDashDelayBar] = useState(false);
+
+  useEffect(() => {
+    getConfig().then((config) => setDashDelayBar(config.dashDelayBar));
+  }, []);
 
   // Clique normal seleciona só aquela sprint; shift+clique soma/remove da seleção atual,
   // permitindo combinar várias sprints no filtro.
@@ -97,6 +103,7 @@ export default function BoardScreen({
                 hoursPerDay={data.hoursPerDay}
                 sprintFilter={sprintFilter}
                 onSprintClick={handleSprintClick}
+                dashDelayBar={dashDelayBar}
               />
             </div>
           ) : (

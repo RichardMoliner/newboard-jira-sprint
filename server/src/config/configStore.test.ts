@@ -25,6 +25,7 @@ describe('configStore', () => {
       jiraPassword: null,
       hoursPerPf: null,
       hoursPerDay: null,
+      dashDelayBar: null,
     });
   });
 
@@ -36,6 +37,7 @@ describe('configStore', () => {
       jiraPassword: 'segredo',
       hoursPerPf: 6,
       hoursPerDay: 8,
+      dashDelayBar: true,
     });
     expect(await readConfig(configPath)).toEqual({
       vertical: 'CONTRATOS',
@@ -43,6 +45,7 @@ describe('configStore', () => {
       jiraPassword: 'segredo',
       hoursPerPf: 6,
       hoursPerDay: 8,
+      dashDelayBar: true,
     });
   });
 
@@ -54,6 +57,7 @@ describe('configStore', () => {
       jiraPassword: 'segredo',
       hoursPerPf: 6,
       hoursPerDay: 8,
+      dashDelayBar: true,
     });
     await writeConfig(configPath, {
       vertical: 'FINANCAS',
@@ -61,6 +65,7 @@ describe('configStore', () => {
       jiraPassword: 'outrasenha',
       hoursPerPf: 8,
       hoursPerDay: 6,
+      dashDelayBar: false,
     });
     expect(await readConfig(configPath)).toEqual({
       vertical: 'FINANCAS',
@@ -68,6 +73,7 @@ describe('configStore', () => {
       jiraPassword: 'outrasenha',
       hoursPerPf: 8,
       hoursPerDay: 6,
+      dashDelayBar: false,
     });
   });
 });

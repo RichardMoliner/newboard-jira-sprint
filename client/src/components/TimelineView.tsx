@@ -91,6 +91,7 @@ export default function TimelineView({
   hoursPerDay,
   sprintFilter,
   onSprintClick,
+  dashDelayBar,
 }: {
   activities: Activity[];
   sprints: SprintInfo[];
@@ -98,23 +99,37 @@ export default function TimelineView({
   hoursPerDay: number;
   sprintFilter: string[];
   onSprintClick: (id: string, shiftKey: boolean) => void;
+  dashDelayBar: boolean;
 }) {
   const [expandedBugs, setExpandedBugs] = useState<Set<string>>(new Set());
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
   const [dayWidth, setDayWidth] = useState(MIN_COLUMN_WIDTH);
   const [searchQuery, setSearchQuery] = useState('');
   const [hideDone, setHideDone] = useState(false);
+  // Filtro por clique na legenda: Implementação/Teste isolam uma fase (mutuamente exclusivas entre
+  // si); Bug/Atraso são toggles independentes que se combinam entre si e com a fase (E lógico).
+  const [phaseFilter, setPhaseFilter] = useState<'impl' | 'test' | null>(null);
+  const [bugFilterActive, setBugFilterActive] = useState(false);
+  const [atrasoFilterActive, setAtrasoFilterActive] = useState(false);
+  const [addedLateFilterActive, setAddedLateFilterActive] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  function handlePhaseFilterClick(phase: 'impl' | 'test') {
+    setPhaseFilter((prev) => (prev === phase ? null : phase));
+  }
 
   const filtered = useMemo(() => {
     const bySprint = sprintFilter.length === 0 ? activities : activities.filter((a) => sprintFilter.includes(a.sprintId));
     const byDone = hideDone ? bySprint.filter((a) => !a.isDone && !a.testDone) : bySprint;
+    const byLegend = byDone.filter((a) =>
+      matchesLegendFilter(a, { bugOnly: bugFilterActive, atrasoOnly: atrasoFilterActive, addedLateOnly: addedLateFilterActive }),
+    );
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return byDone;
-    return byDone.filter(
+    if (!query) return byLegend;
+    return byLegend.filter(
       (a) => a.title.toLowerCase().includes(query) || a.key.toLowerCase().includes(query) || a.developer.toLowerCase().includes(query),
     );
-  }, [activities, sprintFilter, hideDone, searchQuery]);
+  }, [activities, sprintFilter, hideDone, bugFilterActive, atrasoFilterActive, addedLateFilterActive, searchQuery]);
 
   const { minDate, maxDate } = useMemo(() => computeDomain(activities, sprints, today), [activities, sprints, today]);
   const days = useMemo(() => buildDayList(minDate, maxDate, today), [minDate, maxDate, today]);
@@ -305,7 +320,16 @@ export default function TimelineView({
       </div>
 
       <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--gridline)', flexShrink: 0 }}>
-        <Legend />
+        <Legend
+          phaseFilter={phaseFilter}
+          onPhaseFilterClick={handlePhaseFilterClick}
+          bugFilterActive={bugFilterActive}
+          onBugFilterClick={() => setBugFilterActive((v) => !v)}
+          atrasoFilterActive={atrasoFilterActive}
+          onAtrasoFilterClick={() => setAtrasoFilterActive((v) => !v)}
+          addedLateFilterActive={addedLateFilterActive}
+          onAddedLateFilterClick={() => setAddedLateFilterActive((v) => !v)}
+        />
         {availableDevs.length > 0 && (
           <p style={{ margin: '8px 0 0', fontSize: 10.5, color: 'var(--text-secondary)' }}>
             <span style={{ marginRight: 4 }}>⚠️</span>
@@ -450,8 +474,11 @@ export default function TimelineView({
                   today={today}
                   dayPixelWidth={dayPixelWidth}
                   hoursPerDay={hoursPerDay}
-                  bugsExpanded={expandedBugs.has(activity.key)}
+                  bugsExpanded={expandedBugs.has(activity.key) || bugFilterActive}
                   onToggleBugs={() => toggleIn(setExpandedBugs, activity.key)}
+                  phaseFilter={phaseFilter}
+                  hidePhaseBars={bugFilterActive}
+                  dashDelayBar={dashDelayBar}
                 />
               ))}
             </div>
@@ -538,6 +565,9 @@ function ActivityRow({
   hoursPerDay,
   bugsExpanded,
   onToggleBugs,
+  phaseFilter,
+  hidePhaseBars,
+  dashDelayBar,
 }: {
   activity: Activity;
   x: (d: string) => number;
@@ -547,7 +577,12 @@ function ActivityRow({
   hoursPerDay: number;
   bugsExpanded: boolean;
   onToggleBugs: () => void;
+  phaseFilter: 'impl' | 'test' | null;
+  hidePhaseBars: boolean;
+  dashDelayBar: boolean;
 }) {
+  const showImplBar = !hidePhaseBars && phaseFilter !== 'test';
+  const showTestBar = !hidePhaseBars && phaseFilter !== 'impl';
   const bugCount = activity.bugs.length;
 
   // Caixa tracejada = janela ESTIMADA (fixa, nunca muda) — a "expectativa".
@@ -696,6 +731,11 @@ function ActivityRow({
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 3, fontSize: 10.5, color: 'var(--text-secondary)' }}>
               <StatusBadge activity={activity} />
               {activity.isCarried && <Tag color="var(--status-warning)">🕓 Herdada</Tag>}
+              {activity.addedAfterSprintStart && (
+                <span title={activity.sprintEnteredAt ? `Entrou na sprint em ${formatShort(activity.sprintEnteredAt.slice(0, 10))}` : undefined}>
+                  <Tag color="var(--status-warning)">➕ Adicionada</Tag>
+                </span>
+              )}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 3, fontSize: 10.5, color: 'var(--text-secondary)' }}>
               {!activity.notStarted && (
@@ -755,30 +795,36 @@ function ActivityRow({
         <div style={{ position: 'relative', width: '100%', height: hasBothWindows ? BARS_ROW_HEIGHT : 34 }}>
           {hasBothWindows ? (
             <>
-              <PhaseBar
-                boxLeft={implBoxLeft!}
-                boxRight={implBoxRight!}
-                fillRight={implFillRight!}
-                boxColor="var(--series-impl)"
-                boxTitle={`Implementação (previsto): ${formatShort(activity.implWindow!.start)} a ${formatShort(activity.implWindow!.end)}`}
-                markerTitle={`Previsão era terminar a Implementação até ${formatShort(activity.implWindow!.end)}`}
-                fillCells={implFillCells}
-                bandTop={IMPL_BAND_TOP}
-              />
-              <PhaseBar
-                boxLeft={testBoxLeft!}
-                boxRight={testBoxRight!}
-                fillRight={testFillRight!}
-                boxColor="var(--series-test)"
-                boxTitle={
-                  testWindowIsProjected
-                    ? `Teste (projeção, ainda não iniciado): ${formatShort(projectedTestStart!)} a ${formatShort(projectedTestEnd!)}`
-                    : `Teste (previsto): ${formatShort(projectedTestStart!)} a ${formatShort(projectedTestEnd!)}`
-                }
-                bandTop={TEST_BAND_TOP}
-                markerTitle={`Previsão era terminar o Teste até ${formatShort(projectedTestEnd!)}`}
-                fillCells={testFillCells}
-              />
+              {showImplBar && (
+                <PhaseBar
+                  boxLeft={implBoxLeft!}
+                  boxRight={implBoxRight!}
+                  fillRight={implFillRight!}
+                  boxColor="var(--series-impl)"
+                  boxTitle={`Implementação (previsto): ${formatShort(activity.implWindow!.start)} a ${formatShort(activity.implWindow!.end)}`}
+                  markerTitle={`Previsão era terminar a Implementação até ${formatShort(activity.implWindow!.end)}`}
+                  fillCells={implFillCells}
+                  bandTop={IMPL_BAND_TOP}
+                  dashDelayBar={dashDelayBar}
+                />
+              )}
+              {showTestBar && (
+                <PhaseBar
+                  boxLeft={testBoxLeft!}
+                  boxRight={testBoxRight!}
+                  fillRight={testFillRight!}
+                  boxColor="var(--series-test)"
+                  boxTitle={
+                    testWindowIsProjected
+                      ? `Teste (projeção, ainda não iniciado): ${formatShort(projectedTestStart!)} a ${formatShort(projectedTestEnd!)}`
+                      : `Teste (previsto): ${formatShort(projectedTestStart!)} a ${formatShort(projectedTestEnd!)}`
+                  }
+                  bandTop={TEST_BAND_TOP}
+                  markerTitle={`Previsão era terminar o Teste até ${formatShort(projectedTestEnd!)}`}
+                  fillCells={testFillCells}
+                  dashDelayBar={dashDelayBar}
+                />
+              )}
             </>
           ) : activity.notStarted ? (
             <span style={{ position: 'absolute', left: 4, top: 10, fontSize: 10, color: 'var(--text-muted)' }}>
@@ -883,6 +929,7 @@ function PhaseBar({
   markerTitle,
   fillCells,
   bandTop,
+  dashDelayBar,
 }: {
   boxLeft: number;
   boxRight: number;
@@ -892,9 +939,11 @@ function PhaseBar({
   markerTitle: string;
   fillCells: React.ReactNode;
   bandTop: number;
+  dashDelayBar: boolean;
 }) {
   const boxWidth = Math.max(boxRight - boxLeft, 6);
   const overruns = fillRight > boxRight + 1;
+  const overrunDash = computeOverrunDash(boxRight, fillRight, dashDelayBar);
   return (
     <>
       <div
@@ -922,6 +971,22 @@ function PhaseBar({
             width: 2,
             height: PHASE_BAND_HEIGHT - 2,
             background: 'var(--status-critical)',
+          }}
+        />
+      )}
+      {overrunDash && (
+        <div
+          title={markerTitle}
+          style={{
+            position: 'absolute',
+            left: overrunDash.left,
+            width: overrunDash.width,
+            top: bandTop + 3,
+            height: 16,
+            border: '1.5px dashed var(--status-critical)',
+            borderRadius: 4,
+            boxSizing: 'border-box',
+            pointerEvents: 'none',
           }}
         />
       )}
@@ -1046,19 +1111,54 @@ function EmptyState({ searchQuery, onClearSearch }: { searchQuery: string; onCle
   );
 }
 
-function Legend() {
-  const items: [string, string][] = [
-    ['var(--series-impl)', 'Implementação'],
-    ['var(--series-test)', 'Teste'],
-    ['var(--status-good)', 'Concluída'],
-    ['var(--status-critical)', 'Atraso'],
-    ['var(--series-bug)', 'Bug'],
+function Legend({
+  phaseFilter,
+  onPhaseFilterClick,
+  bugFilterActive,
+  onBugFilterClick,
+  atrasoFilterActive,
+  onAtrasoFilterClick,
+  addedLateFilterActive,
+  onAddedLateFilterClick,
+}: {
+  phaseFilter: 'impl' | 'test' | null;
+  onPhaseFilterClick: (phase: 'impl' | 'test') => void;
+  bugFilterActive: boolean;
+  onBugFilterClick: () => void;
+  atrasoFilterActive: boolean;
+  onAtrasoFilterClick: () => void;
+  addedLateFilterActive: boolean;
+  onAddedLateFilterClick: () => void;
+}) {
+  const items: { color: string; label: string; active: boolean; onClick?: () => void }[] = [
+    { color: 'var(--series-impl)', label: 'Implementação', active: phaseFilter === 'impl', onClick: () => onPhaseFilterClick('impl') },
+    { color: 'var(--series-test)', label: 'Teste', active: phaseFilter === 'test', onClick: () => onPhaseFilterClick('test') },
+    { color: 'var(--status-good)', label: 'Concluída', active: false },
+    { color: 'var(--status-critical)', label: 'Atraso', active: atrasoFilterActive, onClick: onAtrasoFilterClick },
+    { color: 'var(--series-bug)', label: 'Bug', active: bugFilterActive, onClick: onBugFilterClick },
+    { color: 'var(--status-warning)', label: 'Adicionada', active: addedLateFilterActive, onClick: onAddedLateFilterClick },
   ];
   return (
-    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 14 }}>
-      {items.map(([color, label]) => (
-        <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 3, background: color, display: 'inline-block' }} />
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 11.5, marginBottom: 14 }}>
+      {items.map(({ color, label, active, onClick }) => (
+        <span
+          key={label}
+          onClick={onClick}
+          title={onClick ? (active ? `Clique para remover o filtro "${label}"` : `Clique para filtrar por "${label}"`) : undefined}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '3px 10px 3px 6px',
+            borderRadius: 20,
+            border: `1px solid ${active ? color : 'transparent'}`,
+            background: active ? `color-mix(in srgb, ${color} 16%, transparent)` : 'transparent',
+            color: active ? color : 'var(--text-secondary)',
+            fontWeight: active ? 700 : 400,
+            cursor: onClick ? 'pointer' : 'default',
+          }}
+        >
+          <span style={{ width: 12, height: 12, borderRadius: 3, background: color, display: 'inline-block', flexShrink: 0 }} />
           {label}
         </span>
       ))}
@@ -1531,4 +1631,26 @@ export function isDeveloperAvailable(activities: Activity[]): boolean {
 /** True quando há algum bug ainda aberto (não "Atendida") atribuído a esse dev, em qualquer uma das atividades informadas — não só nas que estão "no nome dele". */
 export function isWorkingOnBugs(developerName: string, activities: Activity[]): boolean {
   return activities.some((a) => a.bugs.some((bug) => bug.developer === developerName && !isResolvedBug(bug.status)));
+}
+
+/** Filtro de linhas acionado ao clicar nos itens da legenda — combina como E (AND). */
+export function matchesLegendFilter(
+  activity: Activity,
+  filters: { bugOnly: boolean; atrasoOnly: boolean; addedLateOnly?: boolean },
+): boolean {
+  if (filters.bugOnly && activity.bugs.length === 0) return false;
+  if (filters.atrasoOnly && !activity.isOverdue) return false;
+  if (filters.addedLateOnly && !activity.addedAfterSprintStart) return false;
+  return true;
+}
+
+/**
+ * Retângulo tracejado de "Tracejar barra de atraso" (configurável), cobrindo só o trecho que passou
+ * do previsto — de `boxRight` (fim da caixa tracejada, previsto) até `fillRight` (fim real do
+ * preenchimento). Mesmo limiar de atraso do marcador em `PhaseBar` (`fillRight > boxRight + 1`).
+ */
+export function computeOverrunDash(boxRight: number, fillRight: number, dashDelayBar: boolean): { left: number; width: number } | null {
+  if (!dashDelayBar) return null;
+  if (fillRight <= boxRight + 1) return null;
+  return { left: boxRight, width: Math.max(fillRight - boxRight, 4) };
 }

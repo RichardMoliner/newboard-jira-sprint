@@ -9,6 +9,10 @@ export interface Kpis {
   inProgressOnTimeCount: number;
   openBugsCount: number;
   bugsPerActivity: number;
+  /** Atividades que entraram na sprint atual depois que ela já tinha começado (exclui herdadas). */
+  addedLateCount: number;
+  /** Soma dos Story Points dessas atividades; null vira 0 na soma. */
+  addedLateStoryPoints: number;
 }
 
 export function computeKpis(activities: Activity[], _today: string): Kpis {
@@ -19,6 +23,7 @@ export function computeKpis(activities: Activity[], _today: string): Kpis {
   const carriedCount = count(activities, (a) => a.isCarried);
   const inProgressOnTimeCount = count(activities, (a) => !a.isDone && !a.isOverdue);
   const openBugsCount = sum(activities.map((a) => a.bugs.length));
+  const addedLate = activities.filter((a) => a.addedAfterSprintStart);
 
   return {
     totalActivities,
@@ -29,6 +34,8 @@ export function computeKpis(activities: Activity[], _today: string): Kpis {
     inProgressOnTimeCount,
     openBugsCount,
     bugsPerActivity: totalActivities === 0 ? 0 : openBugsCount / totalActivities,
+    addedLateCount: addedLate.length,
+    addedLateStoryPoints: sum(addedLate.map((a) => a.storyPoints ?? 0)),
   };
 }
 
