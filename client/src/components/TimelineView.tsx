@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Activity, SprintInfo, TimelineWindow, WorklogEntry } from '../types.js';
+import { computeStatusSummaries } from '../indicators/computeIndicators.js';
 
 const MIN_COLUMN_WIDTH = 28;
 const MAX_COLUMN_WIDTH = 96;
@@ -130,6 +131,26 @@ export default function TimelineView({
       (a) => a.title.toLowerCase().includes(query) || a.key.toLowerCase().includes(query) || a.developer.toLowerCase().includes(query),
     );
   }, [activities, sprintFilter, hideDone, bugFilterActive, atrasoFilterActive, addedLateFilterActive, searchQuery]);
+
+  // Composição de cada sprint (para os números/tooltip dos botões de filtro) — sempre sobre TODAS
+  // as atividades daquela sprint, independente de busca/"ocultar concluídas" ativos no momento.
+  const activitiesBySprintId = useMemo(() => {
+    const map = new Map<string, Activity[]>();
+    for (const a of activities) {
+      const list = map.get(a.sprintId);
+      if (list) list.push(a);
+      else map.set(a.sprintId, [a]);
+    }
+    return map;
+  }, [activities]);
+
+  // Soma de concluídas/total das sprints selecionadas — só faz sentido mostrar com 2+ selecionadas,
+  // já que com 0 ou 1 os números já aparecem no próprio botão ("Todas as sprints" ou a sprint única).
+  const selectedSprintsCompletion = useMemo(() => {
+    if (sprintFilter.length < 2) return null;
+    const selectedActivities = activities.filter((a) => sprintFilter.includes(a.sprintId));
+    return { completion: computeSprintCompletion(selectedActivities), tooltip: formatStatusBreakdownTooltip(selectedActivities) };
+  }, [activities, sprintFilter]);
 
   const { minDate, maxDate } = useMemo(() => computeDomain(activities, sprints, today), [activities, sprints, today]);
   const days = useMemo(() => buildDayList(minDate, maxDate, today), [minDate, maxDate, today]);
@@ -262,15 +283,46 @@ export default function TimelineView({
     >
       <div style={{ padding: '12px 14px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <FilterPill label="Todas as sprints" active={sprintFilter.length === 0} onClick={() => onSprintClick('all', false)} />
-          {sprints.map((s) => (
-            <FilterPill
-              key={s.id}
-              label={s.name}
-              active={sprintFilter.includes(s.id)}
-              onClick={(e) => onSprintClick(s.id, e.shiftKey)}
-            />
-          ))}
+          <FilterPill
+            label="Todas as sprints"
+            active={sprintFilter.length === 0}
+            onClick={() => onSprintClick('all', false)}
+            completion={computeSprintCompletion(activities)}
+            tooltip={formatStatusBreakdownTooltip(activities)}
+          />
+          {sprints.map((s) => {
+            const sprintActivities = activitiesBySprintId.get(s.id) ?? [];
+            return (
+              <FilterPill
+                key={s.id}
+                label={s.name}
+                active={sprintFilter.includes(s.id)}
+                onClick={(e) => onSprintClick(s.id, e.shiftKey)}
+                completion={computeSprintCompletion(sprintActivities)}
+                tooltip={formatStatusBreakdownTooltip(sprintActivities)}
+              />
+            );
+          })}
+          {selectedSprintsCompletion && (
+            <span
+              title={selectedSprintsCompletion.tooltip}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 14px',
+                fontSize: 11.5,
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                background: 'color-mix(in srgb, var(--series-impl) 16%, transparent)',
+                border: '1px solid var(--series-impl)',
+                borderRadius: 20,
+              }}
+            >
+              Selecionadas: {selectedSprintsCompletion.completion.doneCount}/{selectedSprintsCompletion.completion.totalCount} (
+              {selectedSprintsCompletion.completion.percent}%)
+            </span>
+          )}
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginLeft: 'auto' }}>
             <SwitchPill active={hideDone} onClick={() => setHideDone((v) => !v)} label="Ocultar concluídas/Ag. liberação" />
             <div style={{ position: 'relative' }}>
@@ -1010,14 +1062,20 @@ export function FilterPill({
   label,
   active,
   onClick,
+  completion,
+  tooltip,
 }: {
   label: string;
   active: boolean;
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  /** Concluídas/total (%) da sprint — omite a segunda linha quando não informado. */
+  completion?: { doneCount: number; totalCount: number; percent: number };
+  tooltip?: string;
 }) {
   return (
     <button
       onClick={onClick}
+      title={tooltip}
       style={{
         padding: '6px 14px',
         fontSize: 11.5,
@@ -1028,9 +1086,18 @@ export function FilterPill({
         borderRadius: 20,
         cursor: 'pointer',
         fontFamily: 'inherit',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 2,
       }}
     >
       {label}
+      {completion && (
+        <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>
+          {completion.doneCount}/{completion.totalCount} ({completion.percent}%)
+        </span>
+      )}
     </button>
   );
 }
@@ -1653,4 +1720,25 @@ export function computeOverrunDash(boxRight: number, fillRight: number, dashDela
   if (!dashDelayBar) return null;
   if (fillRight <= boxRight + 1) return null;
   return { left: boxRight, width: Math.max(fillRight - boxRight, 4) };
+}
+
+/**
+ * Concluída = Concluída de fato OU Aguardando liberação (Teste já atendido) — mesmo critério
+ * "funcionalmente concluída" usado na Assertividade. Bugs nunca entram na conta: o total é sempre
+ * o número de atividades (stories), bugs são sub-itens de cada uma, não contam à parte.
+ */
+export function computeSprintCompletion(activities: Activity[]): { doneCount: number; totalCount: number; percent: number } {
+  const totalCount = activities.length;
+  const doneCount = activities.filter((a) => a.isDone || a.testDone).length;
+  const percent = totalCount === 0 ? 0 : Math.round((doneCount / totalCount) * 100);
+  return { doneCount, totalCount, percent };
+}
+
+/** Tooltip do botão de sprint: % de cada status entre as atividades, uma linha por status. */
+export function formatStatusBreakdownTooltip(activities: Activity[]): string {
+  const total = activities.length;
+  if (total === 0) return '';
+  return computeStatusSummaries(activities)
+    .map((s) => `${s.status}: ${Math.round((s.activities / total) * 100)}% (${s.activities})`)
+    .join('\n');
 }

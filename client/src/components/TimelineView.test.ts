@@ -3,9 +3,11 @@ import {
   computeDailyHours,
   computeImplFillEndDate,
   computeOverrunDash,
+  computeSprintCompletion,
   computeTestFillRange,
   dayFillRatio,
   formatConsumedPercent,
+  formatStatusBreakdownTooltip,
   isDeveloperAvailable,
   isWorkingOnBugs,
   lastWorklogDate,
@@ -556,5 +558,59 @@ describe('computeOverrunDash', () => {
 
   test('clamps to a minimum width so a barely-late overrun stays visible', () => {
     expect(computeOverrunDash(100, 102, true)).toEqual({ left: 100, width: 4 });
+  });
+});
+
+describe('computeSprintCompletion', () => {
+  test('returns all zeroes for an empty activity list', () => {
+    expect(computeSprintCompletion([])).toEqual({ doneCount: 0, totalCount: 0, percent: 0 });
+  });
+
+  test('counts isDone activities as done', () => {
+    const result = computeSprintCompletion([activity({ isDone: true }), activity({ isDone: false })]);
+    expect(result).toEqual({ doneCount: 1, totalCount: 2, percent: 50 });
+  });
+
+  test('counts testDone (Aguardando liberação) activities as done too, even without isDone', () => {
+    const result = computeSprintCompletion([activity({ isDone: false, testDone: true }), activity({ isDone: false, testDone: false })]);
+    expect(result).toEqual({ doneCount: 1, totalCount: 2, percent: 50 });
+  });
+
+  test('does not double count an activity that is both isDone and testDone', () => {
+    const result = computeSprintCompletion([activity({ isDone: true, testDone: true })]);
+    expect(result).toEqual({ doneCount: 1, totalCount: 1, percent: 100 });
+  });
+
+  test('rounds the percentage', () => {
+    const result = computeSprintCompletion([activity({ isDone: true }), activity({ isDone: false }), activity({ isDone: false })]);
+    expect(result.percent).toBe(33);
+  });
+
+  test('bugs on an activity never count toward the totals, only the activity itself does', () => {
+    const busyWithBugs = activity({ isDone: false, testDone: false, bugs: [bug(), bug(), bug()] });
+    expect(computeSprintCompletion([busyWithBugs])).toEqual({ doneCount: 0, totalCount: 1, percent: 0 });
+  });
+});
+
+describe('formatStatusBreakdownTooltip', () => {
+  test('returns an empty string for an empty activity list', () => {
+    expect(formatStatusBreakdownTooltip([])).toBe('');
+  });
+
+  test('formats a single status at 100%', () => {
+    const activities = [activity({ status: 'Em andamento' }), activity({ status: 'Em andamento' })];
+    expect(formatStatusBreakdownTooltip(activities)).toBe('Em andamento: 100% (2)');
+  });
+
+  test('formats multiple statuses, one per line, with rounded percentages', () => {
+    const activities = [
+      activity({ status: 'Em andamento' }),
+      activity({ status: 'Em andamento' }),
+      activity({ isDone: true, status: 'Atendida' }),
+    ];
+    const lines = formatStatusBreakdownTooltip(activities).split('\n');
+    expect(lines).toContain('Em andamento: 67% (2)');
+    expect(lines).toContain('Atendida: 33% (1)');
+    expect(lines).toHaveLength(2);
   });
 });
