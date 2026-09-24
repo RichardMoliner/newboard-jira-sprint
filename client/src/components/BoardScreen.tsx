@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getConfig } from '../api/client.js';
 import { useBoardData } from '../api/useBoardData.js';
+import type { Theme } from '../App.js';
 import TimelineView from './TimelineView.js';
 import IndicatorsView from './IndicatorsView.js';
 
@@ -9,9 +10,13 @@ type Tab = 'timeline' | 'indicators';
 export default function BoardScreen({
   vertical,
   onChangeVertical,
+  theme,
+  onToggleTheme,
 }: {
   vertical: string;
   onChangeVertical: () => void;
+  theme: Theme;
+  onToggleTheme: () => void;
 }) {
   const { data, loading, error, refresh, secondsToNextRefresh } = useBoardData();
   const [tab, setTab] = useState<Tab>('timeline');
@@ -44,6 +49,14 @@ export default function BoardScreen({
         <h1 style={{ fontSize: 20, margin: 0 }}>Painel de acompanhamento — {vertical}</h1>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
           <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={onToggleTheme}
+              title={theme === 'dark' ? 'Mudar para modo claro' : 'Mudar para modo escuro'}
+              aria-label="Alternar tema claro/escuro"
+              style={{ ...secondaryButtonStyle, padding: '8px 10px', fontSize: 15, lineHeight: 1 }}
+            >
+              {theme === 'dark' ? '🌙' : '☀️'}
+            </button>
             <button onClick={onChangeVertical} style={secondaryButtonStyle}>
               Configurações
             </button>

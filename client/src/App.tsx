@@ -9,8 +9,24 @@ type AppState =
   | { status: 'ready'; vertical: string }
   | { status: 'error'; message: string };
 
+export type Theme = 'light' | 'dark';
+
+const THEME_STORAGE_KEY = 'theme';
+
+function getInitialTheme(): Theme {
+  const stored = localStorage.getItem(THEME_STORAGE_KEY);
+  if (stored === 'light' || stored === 'dark') return stored;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 export default function App() {
   const [state, setState] = useState<AppState>({ status: 'loading' });
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
 
   useEffect(() => {
     getConfig()
@@ -20,6 +36,10 @@ export default function App() {
       })
       .catch((err) => setState({ status: 'error', message: err.message }));
   }, []);
+
+  function toggleTheme() {
+    setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+  }
 
   if (state.status === 'loading') {
     return <CenteredMessage text="Carregando..." />;
@@ -37,6 +57,8 @@ export default function App() {
     <BoardScreen
       vertical={state.vertical}
       onChangeVertical={() => setState({ status: 'needs-setup' })}
+      theme={theme}
+      onToggleTheme={toggleTheme}
     />
   );
 }
