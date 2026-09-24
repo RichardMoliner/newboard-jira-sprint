@@ -18,10 +18,10 @@ export interface Kpis {
 export function computeKpis(activities: Activity[], _today: string): Kpis {
   const totalActivities = activities.length;
   const totalStoryPoints = sum(activities.map((a) => a.storyPoints ?? 0));
-  const doneCount = count(activities, (a) => a.isDone);
+  const doneCount = count(activities, isCompleted);
   const atRiskCount = count(activities, (a) => a.isOverdue);
   const carriedCount = count(activities, (a) => a.isCarried);
-  const inProgressOnTimeCount = count(activities, (a) => !a.isDone && !a.isOverdue);
+  const inProgressOnTimeCount = count(activities, (a) => !isCompleted(a) && !a.isOverdue);
   const openBugsCount = sum(activities.map((a) => a.bugs.length));
   const addedLate = activities.filter((a) => a.addedAfterSprintStart);
 
@@ -41,6 +41,10 @@ export function computeKpis(activities: Activity[], _today: string): Kpis {
 
 export interface RealizedProductivity {
   hoursPerPf: number | null;
+  /** Mesma média, olhando só as horas de Implementação sobre o PF dedicado à Implementação (fração `100 - assumedTestSharePercent`). */
+  hoursPerPfImpl: number | null;
+  /** Mesma média, olhando só as horas de Teste sobre o PF dedicado ao Teste (fração `assumedTestSharePercent`). */
+  hoursPerPfTest: number | null;
   /**
    * % de assertividade agregado: total de horas apontadas (Implementação + Teste) / total de
    * horas estimadas (PF × horas/PF) nas tarefas concluídas. 100% = bateram exatamente; abaixo de
@@ -60,26 +64,71 @@ export interface RealizedProductivity {
  * Implementação + Teste) nas tarefas concluídas, ponderadas pelos PFs de cada uma. Indicador
  * "vivo" — muda conforme mais tarefas são concluídas e mais apontamentos são lançados.
  */
-export function computeRealizedProductivity(activities: Activity[], hoursPerPf: number): RealizedProductivity {
+export function computeRealizedProductivity(
+  activities: Activity[],
+  hoursPerPf: number,
+  assumedTestSharePercent: number,
+): RealizedProductivity {
   // Implementação + Teste "Atendida" (testDone) já é trabalho funcionalmente concluído, mesmo que
   // a story ainda esteja só "Aguardando liberação" — não faz sentido esperar o fechamento formal
   // pra contar horas que já são reais.
   const eligible = activities.filter(
     (a) => (a.isDone || a.testDone) && a.storyPoints !== null && a.storyPoints > 0 && (a.implLoggedHours !== null || a.testLoggedHours !== null),
   );
+  const implSharePercent = 100 - assumedTestSharePercent;
   const totalStoryPoints = sum(eligible.map((a) => a.storyPoints ?? 0));
+  const totalImplHours = sum(eligible.map((a) => a.implLoggedHours ?? 0));
   const totalTestHours = sum(eligible.map((a) => a.testLoggedHours ?? 0));
-  const totalLoggedHours = sum(eligible.map((a) => (a.implLoggedHours ?? 0) + (a.testLoggedHours ?? 0)));
+  const totalLoggedHours = totalImplHours + totalTestHours;
   const totalLoggedHoursWithBugs = totalLoggedHours + sum(eligible.map((a) => a.bugsLoggedHours ?? 0));
   const totalEstimatedHours = totalStoryPoints * hoursPerPf;
+  const totalPfImpl = totalStoryPoints * (implSharePercent / 100);
+  const totalPfTest = totalStoryPoints * (assumedTestSharePercent / 100);
 
   return {
     hoursPerPf: totalStoryPoints > 0 ? totalLoggedHours / totalStoryPoints : null,
+    hoursPerPfImpl: totalPfImpl > 0 ? totalImplHours / totalPfImpl : null,
+    hoursPerPfTest: totalPfTest > 0 ? totalTestHours / totalPfTest : null,
     accuracyPercent: totalEstimatedHours > 0 ? (totalLoggedHours / totalEstimatedHours) * 100 : null,
     accuracyWithBugsPercent: totalEstimatedHours > 0 ? (totalLoggedHoursWithBugs / totalEstimatedHours) * 100 : null,
     testSharePercent: totalLoggedHours > 0 ? (totalTestHours / totalLoggedHours) * 100 : null,
     sampleSize: eligible.length,
   };
+}
+
+export interface HoursPerPfSummary {
+  developer: string;
+  /** PF dedicados à Implementação — Story Points × implSharePercent/100, somados de todas as tarefas do dev. */
+  pfImpl: number;
+  /** Horas de Implementação apontadas, somadas de todas as tarefas do dev (concluídas ou não). */
+  implHours: number;
+  /** implHours / pfImpl; null quando o dev não tem PF de Implementação nenhum para dividir (evita dividir por zero). */
+  hoursPerPf: number | null;
+}
+
+/**
+ * Horas de Implementação apontadas por PF de Implementação, por desenvolvedor — considera TODAS as
+ * tarefas (não só as concluídas), usando a fração de PF atribuída à Implementação (`implSharePercent`,
+ * hoje 70% — vem de `assumedTestSharePercent` do board-data, para não fixar o percentual no client).
+ */
+export function computeHoursPerPfByDeveloper(activities: Activity[], implSharePercent: number): HoursPerPfSummary[] {
+  const byDeveloper = new Map<string, { pfImpl: number; implHours: number }>();
+
+  for (const activity of activities) {
+    const current = byDeveloper.get(activity.developer) ?? { pfImpl: 0, implHours: 0 };
+    current.pfImpl += (activity.storyPoints ?? 0) * (implSharePercent / 100);
+    current.implHours += activity.implLoggedHours ?? 0;
+    byDeveloper.set(activity.developer, current);
+  }
+
+  return [...byDeveloper.entries()]
+    .map(([developer, { pfImpl, implHours }]) => ({
+      developer,
+      pfImpl,
+      implHours,
+      hoursPerPf: pfImpl > 0 ? implHours / pfImpl : null,
+    }))
+    .sort((a, b) => (a.hoursPerPf ?? Infinity) - (b.hoursPerPf ?? Infinity));
 }
 
 export interface PersonSummary {
@@ -111,9 +160,9 @@ export function computePersonSummaries(activities: Activity[]): PersonSummary[] 
     current.activities += 1;
     current.storyPoints += activity.storyPoints ?? 0;
     current.bugs += activity.bugs.length;
-    if (activity.isDone) current.done += 1;
+    if (isCompleted(activity)) current.done += 1;
     if (activity.isOverdue) current.atRisk += 1;
-    if (!activity.isDone && !activity.isOverdue) current.inProgress += 1;
+    if (!isCompleted(activity) && !activity.isOverdue) current.inProgress += 1;
     if (activity.storyPoints === null) current.noEstimate += 1;
 
     byPerson.set(activity.developer, current);
@@ -147,7 +196,7 @@ export function computeSprintSummaries(activities: Activity[]): SprintSummary[] 
     current.activities += 1;
     current.totalStoryPoints += activity.storyPoints ?? 0;
     current.bugs += activity.bugs.length;
-    if (activity.isDone) current.done += 1;
+    if (isCompleted(activity)) current.done += 1;
     if (activity.isOverdue) current.atRisk += 1;
 
     bySprint.set(activity.sprintName, current);
@@ -252,6 +301,12 @@ export function topActivitiesByBugCount(activities: Activity[], limit: number): 
     .map((a) => ({ key: a.key, title: a.title, sprintName: a.sprintName, developer: a.developer, bugCount: a.bugs.length }))
     .sort((a, b) => b.bugCount - a.bugCount)
     .slice(0, limit);
+}
+
+/** "Concluída" nos indicadores = Concluída de fato OU Aguardando liberação (Teste já atendido) —
+ * mesmo critério "funcionalmente concluída" usado na Assertividade e nos botões de sprint. */
+function isCompleted(activity: Activity): boolean {
+  return activity.isDone || activity.testDone;
 }
 
 function sum(values: number[]): number {

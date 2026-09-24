@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Activity, SprintInfo } from '../types.js';
 import {
+  computeHoursPerPfByDeveloper,
   computeKpis,
   computePersonSummaries,
   computeSprintSummaries,
@@ -43,10 +44,14 @@ export default function IndicatorsView({
     [filtered, considerCarriedInProductivity],
   );
   const realizedProductivity = useMemo(
-    () => computeRealizedProductivity(productivityActivities, hoursPerPf),
-    [productivityActivities, hoursPerPf],
+    () => computeRealizedProductivity(productivityActivities, hoursPerPf, assumedTestSharePercent),
+    [productivityActivities, hoursPerPf, assumedTestSharePercent],
   );
   const people = useMemo(() => computePersonSummaries(filtered), [filtered]);
+  const hoursPerPfByDeveloper = useMemo(
+    () => computeHoursPerPfByDeveloper(filtered, 100 - assumedTestSharePercent),
+    [filtered, assumedTestSharePercent],
+  );
   const sprintSummaries = useMemo(() => computeSprintSummaries(filtered), [filtered]);
   const statusSummaries = useMemo(() => computeStatusSummaries(filtered), [filtered]);
   const topBuggy = useMemo(() => topActivitiesByBugCount(filtered, 10), [filtered]);
@@ -94,7 +99,7 @@ export default function IndicatorsView({
         <Kpi label="Bugs abertos" value={kpis.openBugsCount} />
         <Kpi label="Bugs por atividade" value={kpis.bugsPerActivity.toFixed(1)} />
         <Kpi
-          label="Horas / PF (realizado)"
+          label="Horas / PF (geral)"
           value={realizedProductivity.hoursPerPf !== null ? realizedProductivity.hoursPerPf.toFixed(2) : '—'}
           suffix={
             realizedProductivity.sampleSize > 0
@@ -109,6 +114,40 @@ export default function IndicatorsView({
                 : 'var(--status-good)'
           }
           title="Média de horas por Ponto de Função realmente apontadas (worklog de Implementação + Teste) nas tarefas concluídas, ponderada pelos PFs de cada tarefa e comparada com a estimativa configurada. Atualiza sozinho conforme mais tarefas são concluídas e mais apontamentos são lançados."
+        />
+        <Kpi
+          label={`Horas / PF (Impl., ${(100 - assumedTestSharePercent).toFixed(0)}%)`}
+          value={realizedProductivity.hoursPerPfImpl !== null ? realizedProductivity.hoursPerPfImpl.toFixed(2) : '—'}
+          suffix={
+            realizedProductivity.sampleSize > 0
+              ? `${realizedProductivity.sampleSize} concluída${realizedProductivity.sampleSize > 1 ? 's' : ''} · estimado ${hoursPerPf.toFixed(2)}`
+              : 'sem concluídas com apontamento'
+          }
+          accent={
+            realizedProductivity.hoursPerPfImpl === null
+              ? undefined
+              : realizedProductivity.hoursPerPfImpl > hoursPerPf
+                ? 'var(--status-warning)'
+                : 'var(--status-good)'
+          }
+          title={`Mesma média de Horas/PF, olhando só as horas de Implementação apontadas sobre o PF dedicado à Implementação (${(100 - assumedTestSharePercent).toFixed(0)}% do PF de cada tarefa concluída).`}
+        />
+        <Kpi
+          label={`Horas / PF (Teste, ${assumedTestSharePercent.toFixed(0)}%)`}
+          value={realizedProductivity.hoursPerPfTest !== null ? realizedProductivity.hoursPerPfTest.toFixed(2) : '—'}
+          suffix={
+            realizedProductivity.sampleSize > 0
+              ? `${realizedProductivity.sampleSize} concluída${realizedProductivity.sampleSize > 1 ? 's' : ''} · estimado ${hoursPerPf.toFixed(2)}`
+              : 'sem concluídas com apontamento'
+          }
+          accent={
+            realizedProductivity.hoursPerPfTest === null
+              ? undefined
+              : realizedProductivity.hoursPerPfTest > hoursPerPf
+                ? 'var(--status-warning)'
+                : 'var(--status-good)'
+          }
+          title={`Mesma média de Horas/PF, olhando só as horas de Teste apontadas sobre o PF dedicado ao Teste (${assumedTestSharePercent.toFixed(0)}% do PF de cada tarefa concluída).`}
         />
         <Kpi
           label="% de Assertividade"
@@ -167,6 +206,24 @@ export default function IndicatorsView({
         </label>
       </div>
       </div>
+      </div>
+
+      <div title={`Horas de Implementação apontadas dividido pelo PF de Implementação (Story Points × fração de Implementação, hoje ${(100 - assumedTestSharePercent).toFixed(0)}%) — considera TODAS as tarefas do dev, concluídas ou não. Ordenado do mais eficiente (menos horas por PF) para o menos.`}>
+        <Section title="Horas / PF por dev">
+          {hoursPerPfByDeveloper.length === 0 ? (
+            <Empty text="Sem dados." />
+          ) : (
+            <Table
+              columns={['Desenvolvedor', `PF Impl. (${(100 - assumedTestSharePercent).toFixed(0)}%)`, 'Horas Impl.', 'Horas/PF']}
+              rows={hoursPerPfByDeveloper.map((p) => [
+                p.developer,
+                p.pfImpl.toFixed(2),
+                p.implHours.toFixed(1),
+                p.hoursPerPf !== null ? p.hoursPerPf.toFixed(2) : '—',
+              ])}
+            />
+          )}
+        </Section>
       </div>
 
       <Section title="⚠️ Atividades em risco (previsão vencida e não concluídas)">

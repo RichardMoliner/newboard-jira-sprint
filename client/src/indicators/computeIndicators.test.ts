@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  computeHoursPerPfByDeveloper,
   computeKpis,
   computePersonSummaries,
   computeSprintSummaries,
@@ -112,12 +113,27 @@ describe('computeKpis', () => {
     expect(kpis.addedLateCount).toBe(0);
     expect(kpis.addedLateStoryPoints).toBe(0);
   });
+
+  test('counts testDone (Aguardando liberação) activities as done, same as isDone', () => {
+    const activities = [
+      activity({ key: 'A', isDone: false, testDone: true }),
+      activity({ key: 'B', isDone: false, testDone: false }),
+    ];
+    const kpis = computeKpis(activities, '2026-09-08');
+    expect(kpis.doneCount).toBe(1);
+  });
+
+  test('does not count a testDone activity towards inProgressOnTimeCount', () => {
+    const activities = [activity({ key: 'A', isDone: false, testDone: true, isOverdue: false })];
+    const kpis = computeKpis(activities, '2026-09-08');
+    expect(kpis.inProgressOnTimeCount).toBe(0);
+  });
 });
 
 describe('computeRealizedProductivity', () => {
   test('returns null with zero sample size when there are no completed activities', () => {
     const activities = [activity({ key: 'A', isDone: false })];
-    const result = computeRealizedProductivity(activities, 5);
+    const result = computeRealizedProductivity(activities, 5, 30);
     expect(result.hoursPerPf).toBeNull();
     expect(result.accuracyPercent).toBeNull();
     expect(result.sampleSize).toBe(0);
@@ -126,7 +142,7 @@ describe('computeRealizedProductivity', () => {
   test('computes hours per PF for a single completed activity from logged hours', () => {
     const activities = [activity({ key: 'A', isDone: true, storyPoints: 5, implLoggedHours: 24, testLoggedHours: 8 })];
     // 24h + 8h = 32h apontadas para 5 PF -> 6.4h/PF
-    const result = computeRealizedProductivity(activities, 5);
+    const result = computeRealizedProductivity(activities, 5, 30);
     expect(result.hoursPerPf).toBeCloseTo(6.4);
     expect(result.sampleSize).toBe(1);
   });
@@ -137,7 +153,7 @@ describe('computeRealizedProductivity', () => {
       activity({ key: 'B', isDone: true, storyPoints: 2, implLoggedHours: 8, testLoggedHours: 0 }), // 8h / 2 PF
     ];
     // (64h + 8h) / (10 PF + 2 PF) = 72 / 12 = 6
-    const result = computeRealizedProductivity(activities, 5);
+    const result = computeRealizedProductivity(activities, 5, 30);
     expect(result.hoursPerPf).toBeCloseTo(72 / 12);
     expect(result.sampleSize).toBe(2);
   });
@@ -149,7 +165,7 @@ describe('computeRealizedProductivity', () => {
       activity({ key: 'C', isDone: true, storyPoints: null, implLoggedHours: 32 }),
       activity({ key: 'D', isDone: true, storyPoints: 5, implLoggedHours: null, testLoggedHours: null }),
     ];
-    const result = computeRealizedProductivity(activities, 5);
+    const result = computeRealizedProductivity(activities, 5, 30);
     expect(result.sampleSize).toBe(1);
     expect(result.hoursPerPf).toBeCloseTo(6.4);
   });
@@ -157,34 +173,34 @@ describe('computeRealizedProductivity', () => {
   test('treats a null implLoggedHours or testLoggedHours as 0 when summing, as long as one of them has data', () => {
     const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 40, testLoggedHours: null })];
     // apontado: 40h + 0h = 40h / 10 PF = 4h/PF
-    const result = computeRealizedProductivity(activities, 5);
+    const result = computeRealizedProductivity(activities, 5, 30);
     expect(result.hoursPerPf).toBeCloseTo(4);
   });
 
   test('computes 100% accuracy when total estimated hours match total logged hours', () => {
     const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 60, testLoggedHours: 20 })];
     // estimado: 10 PF x 8h/PF = 80h; apontado: 60h + 20h = 80h
-    const result = computeRealizedProductivity(activities, 8);
+    const result = computeRealizedProductivity(activities, 8, 30);
     expect(result.accuracyPercent).toBeCloseTo(100);
   });
 
   test('computes accuracy above 100% when more hours were logged than estimated (subestimamos)', () => {
     const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 50, testLoggedHours: 14 })];
     // estimado: 10 PF x 5h/PF = 50h; apontado: 50h + 14h = 64h -> 64/50 = 128%
-    const result = computeRealizedProductivity(activities, 5);
+    const result = computeRealizedProductivity(activities, 5, 30);
     expect(result.accuracyPercent).toBeCloseTo(128);
   });
 
   test('computes accuracy below 100% when fewer hours were logged than estimated (superestimamos)', () => {
     const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 30, testLoggedHours: 18 })];
     // estimado: 10 PF x 8h/PF = 80h; apontado: 30h + 18h = 48h -> 48/80 = 60%
-    const result = computeRealizedProductivity(activities, 8);
+    const result = computeRealizedProductivity(activities, 8, 30);
     expect(result.accuracyPercent).toBeCloseTo(60);
   });
 
   test('returns null for both metrics when there are no eligible activities', () => {
     const activities = [activity({ key: 'A', isDone: false, storyPoints: 5, implLoggedHours: 10 })];
-    const result = computeRealizedProductivity(activities, 5);
+    const result = computeRealizedProductivity(activities, 5, 30);
     expect(result.hoursPerPf).toBeNull();
     expect(result.accuracyPercent).toBeNull();
     expect(result.sampleSize).toBe(0);
@@ -192,7 +208,7 @@ describe('computeRealizedProductivity', () => {
 
   test('excludes a done activity with no logged hours at all', () => {
     const activities = [activity({ key: 'A', isDone: true, storyPoints: 5, implLoggedHours: null, testLoggedHours: null })];
-    const result = computeRealizedProductivity(activities, 5);
+    const result = computeRealizedProductivity(activities, 5, 30);
     expect(result.hoursPerPf).toBeNull();
     expect(result.accuracyPercent).toBeNull();
     expect(result.sampleSize).toBe(0);
@@ -200,14 +216,14 @@ describe('computeRealizedProductivity', () => {
 
   test('accuracyWithBugsPercent equals accuracyPercent when there are no bug hours', () => {
     const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 50, testLoggedHours: 14 })];
-    const result = computeRealizedProductivity(activities, 5);
+    const result = computeRealizedProductivity(activities, 5, 30);
     expect(result.accuracyWithBugsPercent).toBeCloseTo(result.accuracyPercent!);
   });
 
   test('accuracyWithBugsPercent adds bug hours on top of Implementação + Teste', () => {
     const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 50, testLoggedHours: 14, bugsLoggedHours: 16 })];
     // estimado: 10 PF x 5h/PF = 50h; apontado com bugs: 50h + 14h + 16h = 80h -> 80/50 = 160%
-    const result = computeRealizedProductivity(activities, 5);
+    const result = computeRealizedProductivity(activities, 5, 30);
     expect(result.accuracyPercent).toBeCloseTo(128); // sem bugs, igual ao teste acima
     expect(result.accuracyWithBugsPercent).toBeCloseTo(160);
   });
@@ -215,13 +231,13 @@ describe('computeRealizedProductivity', () => {
   test('testSharePercent computes the share of Teste hours out of Implementação + Teste, ignoring bugs', () => {
     const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 70, testLoggedHours: 30, bugsLoggedHours: 100 })];
     // 30h de Teste em 100h de Impl+Teste (bugs de fora) -> 30%
-    const result = computeRealizedProductivity(activities, 5);
+    const result = computeRealizedProductivity(activities, 5, 30);
     expect(result.testSharePercent).toBeCloseTo(30);
   });
 
   test('leaves testSharePercent null when there are no eligible activities', () => {
     const activities = [activity({ key: 'A', isDone: false, storyPoints: 5, implLoggedHours: 10 })];
-    const result = computeRealizedProductivity(activities, 5);
+    const result = computeRealizedProductivity(activities, 5, 30);
     expect(result.testSharePercent).toBeNull();
   });
 
@@ -231,9 +247,44 @@ describe('computeRealizedProductivity', () => {
     const activities = [
       activity({ key: 'A', isDone: false, testDone: true, storyPoints: 10, implLoggedHours: 40, testLoggedHours: 10 }),
     ];
-    const result = computeRealizedProductivity(activities, 5);
+    const result = computeRealizedProductivity(activities, 5, 30);
     expect(result.sampleSize).toBe(1);
     expect(result.hoursPerPf).toBeCloseTo(5);
+  });
+});
+
+describe('computeRealizedProductivity — hoursPerPfImpl / hoursPerPfTest', () => {
+  test('splits the realized hours/PF into Implementação-only and Teste-only, using the assumed 70/30 split', () => {
+    const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 21, testLoggedHours: 9 })];
+    // PF Impl = 10*0.7=7 -> 21h/7PF=3h/PF; PF Teste = 10*0.3=3 -> 9h/3PF=3h/PF
+    const result = computeRealizedProductivity(activities, 5, 30);
+    expect(result.hoursPerPfImpl).toBeCloseTo(3);
+    expect(result.hoursPerPfTest).toBeCloseTo(3);
+  });
+
+  test('sums PF and hours across multiple eligible activities before dividing', () => {
+    const activities = [
+      activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: 21, testLoggedHours: 9 }),
+      activity({ key: 'B', isDone: true, storyPoints: 5, implLoggedHours: 3.5, testLoggedHours: 1.5 }),
+    ];
+    // PF Impl total = 15*0.7=10.5 -> (21+3.5)/10.5; PF Teste total = 15*0.3=4.5 -> (9+1.5)/4.5
+    const result = computeRealizedProductivity(activities, 5, 30);
+    expect(result.hoursPerPfImpl).toBeCloseTo(24.5 / 10.5);
+    expect(result.hoursPerPfTest).toBeCloseTo(10.5 / 4.5);
+  });
+
+  test('treats a null implLoggedHours as 0 towards hoursPerPfImpl, independent of hoursPerPfTest', () => {
+    const activities = [activity({ key: 'A', isDone: true, storyPoints: 10, implLoggedHours: null, testLoggedHours: 9 })];
+    const result = computeRealizedProductivity(activities, 5, 30);
+    expect(result.hoursPerPfImpl).toBeCloseTo(0);
+    expect(result.hoursPerPfTest).toBeCloseTo(3);
+  });
+
+  test('is null for both when there are no eligible activities', () => {
+    const activities = [activity({ key: 'A', isDone: false, storyPoints: 5, implLoggedHours: 10 })];
+    const result = computeRealizedProductivity(activities, 5, 30);
+    expect(result.hoursPerPfImpl).toBeNull();
+    expect(result.hoursPerPfTest).toBeNull();
   });
 });
 
@@ -285,6 +336,61 @@ describe('computePersonSummaries', () => {
     const summaries = computePersonSummaries(activities);
     expect(summaries.map((s) => s.person)).toEqual(['Alto', 'Baixo']);
   });
+
+  test('counts a testDone (Aguardando liberação) activity as done, not in progress', () => {
+    const activities = [activity({ key: 'A', developer: 'Fulano', isDone: false, testDone: true })];
+    const summaries = computePersonSummaries(activities);
+    const fulano = summaries.find((s) => s.person === 'Fulano');
+    expect(fulano?.done).toBe(1);
+    expect(fulano?.inProgress).toBe(0);
+  });
+});
+
+describe('computeHoursPerPfByDeveloper', () => {
+  test('computes PF dedicated to implementation (storyPoints * implSharePercent/100) and hours de Impl. dividido pelo PF', () => {
+    const activities = [activity({ developer: 'Fulano', storyPoints: 10, implLoggedHours: 14 })];
+    expect(computeHoursPerPfByDeveloper(activities, 70)).toEqual([{ developer: 'Fulano', pfImpl: 7, implHours: 14, hoursPerPf: 2 }]);
+  });
+
+  test('sums PF and hours across multiple activities of the same developer', () => {
+    const activities = [
+      activity({ key: 'A', developer: 'Fulano', storyPoints: 10, implLoggedHours: 14 }),
+      activity({ key: 'B', developer: 'Fulano', storyPoints: 5, implLoggedHours: 6 }),
+    ];
+    const [result] = computeHoursPerPfByDeveloper(activities, 70);
+    expect(result.pfImpl).toBe(10.5);
+    expect(result.implHours).toBe(20);
+    expect(result.hoursPerPf).toBeCloseTo(20 / 10.5);
+  });
+
+  test('has no PF basis to divide by when storyPoints is null — hoursPerPf is null, not Infinity', () => {
+    const activities = [activity({ developer: 'Fulano', storyPoints: null, implLoggedHours: 5 })];
+    expect(computeHoursPerPfByDeveloper(activities, 70)).toEqual([{ developer: 'Fulano', pfImpl: 0, implHours: 5, hoursPerPf: null }]);
+  });
+
+  test('is 0 hours per PF when there is a PF basis but no hours logged yet — not a divide-by-zero case', () => {
+    const activities = [activity({ developer: 'Fulano', storyPoints: 10, implLoggedHours: null })];
+    expect(computeHoursPerPfByDeveloper(activities, 70)).toEqual([{ developer: 'Fulano', pfImpl: 7, implHours: 0, hoursPerPf: 0 }]);
+  });
+
+  test('groups independently by developer', () => {
+    const activities = [
+      activity({ key: 'A', developer: 'Alicio', storyPoints: 10, implLoggedHours: 7 }),
+      activity({ key: 'B', developer: 'Bia', storyPoints: 20, implLoggedHours: 28 }),
+    ];
+    const result = computeHoursPerPfByDeveloper(activities, 70);
+    expect(result.map((r) => r.developer).sort()).toEqual(['Alicio', 'Bia']);
+  });
+
+  test('sorts ascending by hoursPerPf (fewer hours per PF = more efficient, shown first), no-PF-basis developers last', () => {
+    const activities = [
+      activity({ key: 'A', developer: 'Lento', storyPoints: 5, implLoggedHours: 20 }),
+      activity({ key: 'B', developer: 'Rapido', storyPoints: 5, implLoggedHours: 5 }),
+      activity({ key: 'C', developer: 'SemPF', storyPoints: null, implLoggedHours: 10 }),
+    ];
+    const result = computeHoursPerPfByDeveloper(activities, 70);
+    expect(result.map((r) => r.developer)).toEqual(['Rapido', 'Lento', 'SemPF']);
+  });
 });
 
 describe('computeSprintSummaries', () => {
@@ -306,6 +412,12 @@ describe('computeSprintSummaries', () => {
       done: 1,
       atRisk: 1,
     });
+  });
+
+  test('counts a testDone (Aguardando liberação) activity as done', () => {
+    const activities = [activity({ key: 'A', sprintName: 'Sprint 1', isDone: false, testDone: true })];
+    const summaries = computeSprintSummaries(activities);
+    expect(summaries.find((s) => s.sprintName === 'Sprint 1')?.done).toBe(1);
   });
 });
 
