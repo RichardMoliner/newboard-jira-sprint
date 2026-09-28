@@ -16,6 +16,23 @@ if errorlevel 1 (
     exit /b 1
 )
 
+where git >nul 2>nul
+if not errorlevel 1 (
+    if exist ".git" (
+        echo Verificando atualizacoes do painel...
+        git pull --ff-only
+        if errorlevel 1 (
+            echo.
+            echo ================================================================
+            echo  Nao foi possivel atualizar automaticamente ^(sem rede/VPN, ou ha
+            echo  alteracoes locais neste computador^). Continuando com a versao
+            echo  atual do painel...
+            echo ================================================================
+            echo.
+        )
+    )
+)
+
 if not exist ".env" (
     echo Criando arquivo .env a partir do .env.example...
     copy /y ".env.example" ".env" >nul
@@ -37,6 +54,9 @@ if not exist "node_modules" (
         pause
         exit /b 1
     )
+) else (
+    echo Verificando dependencias...
+    call npm install
 )
 
 echo.

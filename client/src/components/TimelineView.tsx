@@ -788,6 +788,11 @@ function ActivityRow({
                   <Tag color="var(--status-warning)">➕ Adicionada</Tag>
                 </span>
               )}
+              {(activity.isDone || activity.testDone) && activity.deliveredOnTime !== null && (
+                <Tag color={activity.deliveredOnTime ? 'var(--status-good)' : 'var(--status-critical)'}>
+                  {activity.deliveredOnTime ? '✓ No prazo' : '✗ Fora do prazo'}
+                </Tag>
+              )}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 3, fontSize: 10.5, color: 'var(--text-secondary)' }}>
               {!activity.notStarted && (
@@ -812,13 +817,6 @@ function ActivityRow({
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Fim teste: </span>
                   {formatShort(activity.deliveredDate)}
-                  {activity.deliveredOnTime !== null && (
-                    <span style={{ marginLeft: 6 }}>
-                      <Tag color={activity.deliveredOnTime ? 'var(--status-good)' : 'var(--status-critical)'}>
-                        {activity.deliveredOnTime ? '✓ No prazo' : '✗ Fora do prazo'}
-                      </Tag>
-                    </span>
-                  )}
                 </div>
               )}
               {activity.isOverdue && activity.dueDate && (
