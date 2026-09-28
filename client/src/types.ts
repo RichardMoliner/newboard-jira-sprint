@@ -51,6 +51,8 @@ export interface Activity {
   implLoggedHours: number | null;
   testLoggedHours: number | null;
   bugsLoggedHours: number | null;
+  implBugsLoggedHours: number | null;
+  testBugsLoggedHours: number | null;
   worklogEntries: WorklogEntry[];
   bugs: BugSubtask[];
   addedAfterSprintStart: boolean;

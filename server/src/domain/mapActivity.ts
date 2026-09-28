@@ -2,6 +2,7 @@ import { computeTimeline, DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY } from '..
 import { isCarried, isOverdue, isDeliveredOnTime, isAddedAfterSprintStart } from '../compute/status.js';
 import { computeAccuracyPercent } from '../compute/accuracy.js';
 import type { ParsedSprint } from '../jira/parseSprintField.js';
+import type { DeveloperRole } from '../jira/inferRoles.js';
 import type { Activity, BugSubtask, WorklogEntry } from './types.js';
 
 export interface RawStory {
@@ -45,6 +46,27 @@ function sumBugWorklogHours(bugs: BugSubtask[]): number {
   return total;
 }
 
+/**
+ * Separa os apontamentos de bug em horas de Impl./Teste conforme o papel (dev ou tester) de quem
+ * apontou. Quem apontou mas não tem papel conhecido (não foi responsável por nenhuma subtarefa de
+ * Implementação/Teste na sprint) não entra em nenhum dos dois — só no total `bugsLoggedHours`.
+ */
+function splitBugWorklogHoursByRole(
+  bugs: BugSubtask[],
+  developerRoles: Map<string, DeveloperRole>,
+): { implBugsLoggedHours: number; testBugsLoggedHours: number } {
+  let implHours = 0;
+  let testHours = 0;
+  for (const bug of bugs) {
+    for (const entry of bug.worklogEntries) {
+      const role = developerRoles.get(entry.author);
+      if (role === 'dev') implHours += entry.hours;
+      else if (role === 'tester') testHours += entry.hours;
+    }
+  }
+  return { implBugsLoggedHours: implHours, testBugsLoggedHours: testHours };
+}
+
 export function mapActivity(params: {
   story: RawStory;
   sprint: ParsedSprint;
@@ -57,6 +79,8 @@ export function mapActivity(params: {
   testLoggedHours?: number | null;
   worklogEntries?: WorklogEntry[];
   bugs: BugSubtask[];
+  /** Papel (dev/tester) de cada pessoa na sprint, usado para separar as horas de bug entre Impl./Teste. */
+  developerRoles?: Map<string, DeveloperRole>;
   /** Timestamp ISO de quando a issue entrou na sprint atual (via changelog do Jira); null sem esse histórico. */
   sprintEnteredAt?: string | null;
   baseUrl: string;
@@ -76,6 +100,7 @@ export function mapActivity(params: {
     testLoggedHours = null,
     worklogEntries = [],
     bugs,
+    developerRoles = new Map(),
     sprintEnteredAt = null,
     baseUrl,
     today,
@@ -118,6 +143,8 @@ export function mapActivity(params: {
   // Apontamentos em bugs contam à parte (campo "Bugs (h)") — não entram nas horas de
   // Implementação/Teste, que mostram só o que foi apontado na própria subtarefa.
   const bugsLoggedHours = bugs.length > 0 ? sumBugWorklogHours(bugs) : null;
+  const { implBugsLoggedHours, testBugsLoggedHours } =
+    bugs.length > 0 ? splitBugWorklogHoursByRole(bugs, developerRoles) : { implBugsLoggedHours: null, testBugsLoggedHours: null };
 
   // Duas assertividades: uma só com o trabalho planejado (Implementação + Teste, contra a
   // estimativa original) e outra somando também os bugs (esforço real total, incluindo correções
@@ -172,6 +199,8 @@ export function mapActivity(params: {
     implLoggedHours,
     testLoggedHours,
     bugsLoggedHours,
+    implBugsLoggedHours,
+    testBugsLoggedHours,
     worklogEntries,
     bugs,
     addedAfterSprintStart: isAddedAfterSprintStart(carried, sprintEnteredAt, sprint.startDateTime),

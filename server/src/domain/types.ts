@@ -62,6 +62,9 @@ export interface Activity {
   testLoggedHours: number | null;
   /** Soma de todos os apontamentos em bugs da atividade (sem separar por quem apontou); null quando não há bugs. */
   bugsLoggedHours: number | null;
+  /** Horas de bug apontadas por quem tem papel de dev/tester na sprint (inferido, ver `inferRoles.ts`); apontamentos de quem não tem papel conhecido ficam de fora dos dois, mas continuam em `bugsLoggedHours`. Null quando não há bugs. */
+  implBugsLoggedHours: number | null;
+  testBugsLoggedHours: number | null;
   /** Todos os apontamentos das subtarefas de Implementação/Teste, para exibir no tooltip da atividade. */
   worklogEntries: WorklogEntry[];
   bugs: BugSubtask[];

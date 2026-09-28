@@ -1326,9 +1326,14 @@ function SideList({ activity }: { activity: Activity }) {
     ...(activity.bugsLoggedHours !== null
       ? ([
           [
-            'Bugs (h)',
-            formatHoursMinutes(activity.bugsLoggedHours),
-            'Soma de todos os apontamentos (worklog) lançados nos bugs desta atividade, de qualquer pessoa.',
+            'Impl Bugs (h)',
+            formatHoursMinutes(activity.implBugsLoggedHours ?? 0),
+            'Apontamentos em bugs feitos por quem tem papel de dev na sprint (inferido pelas subtarefas de Implementação/Teste que cada um assume).',
+          ] as [string, React.ReactNode, string?],
+          [
+            'Teste Bugs (h)',
+            formatHoursMinutes(activity.testBugsLoggedHours ?? 0),
+            'Apontamentos em bugs feitos por quem tem papel de tester na sprint (inferido pelas subtarefas de Implementação/Teste que cada um assume).',
           ] as [string, React.ReactNode, string?],
         ])
       : []),

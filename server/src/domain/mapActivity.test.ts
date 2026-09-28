@@ -1012,4 +1012,67 @@ describe('mapActivity', () => {
     });
     expect(activity.bugsLoggedHours).toBe(0);
   });
+
+  test('splits bug worklog hours into implBugsLoggedHours/testBugsLoggedHours based on developerRoles', () => {
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [
+        bug({
+          key: 'EC-11983',
+          worklogEntries: [
+            { subtaskType: 'Bug', author: 'Guilherme Henrique Gibim de Mello', date: '2026-08-28', hours: 2, comment: null },
+            { subtaskType: 'Bug', author: 'Luana de Souza Bez Batti', date: '2026-08-29', hours: 1.5, comment: null },
+          ],
+        }),
+        bug({
+          key: 'EC-11984',
+          worklogEntries: [{ subtaskType: 'Bug', author: 'Guilherme Henrique Gibim de Mello', date: '2026-09-01', hours: 3, comment: null }],
+        }),
+      ],
+      developerRoles: new Map([
+        ['Guilherme Henrique Gibim de Mello', 'dev'],
+        ['Luana de Souza Bez Batti', 'tester'],
+      ]),
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.implBugsLoggedHours).toBeCloseTo(5);
+    expect(activity.testBugsLoggedHours).toBeCloseTo(1.5);
+    expect(activity.bugsLoggedHours).toBeCloseTo(6.5);
+  });
+
+  test('keeps an unclassified bug worklog author out of the split but still counts it in bugsLoggedHours', () => {
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [
+        bug({
+          worklogEntries: [{ subtaskType: 'Bug', author: 'Estagiário Sem Papel Conhecido', date: '2026-08-28', hours: 2, comment: null }],
+        }),
+      ],
+      developerRoles: new Map(),
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.implBugsLoggedHours).toBe(0);
+    expect(activity.testBugsLoggedHours).toBe(0);
+    expect(activity.bugsLoggedHours).toBeCloseTo(2);
+  });
+
+  test('leaves implBugsLoggedHours/testBugsLoggedHours null when the activity has no bugs', () => {
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      developerRoles: new Map([['Guilherme Henrique Gibim de Mello', 'dev']]),
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.implBugsLoggedHours).toBeNull();
+    expect(activity.testBugsLoggedHours).toBeNull();
+  });
 });

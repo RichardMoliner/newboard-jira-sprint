@@ -2,6 +2,7 @@ import { callJiraTool, type JiraCredentials } from '../mcp/client.js';
 import { searchAllIssues } from './searchAllIssues.js';
 import { mapWithConcurrency } from './mapWithConcurrency.js';
 import { groupSubtasks, type RawSubtask, type RawWorklogEntry } from './groupSubtasks.js';
+import { inferDeveloperRoles } from './inferRoles.js';
 import { fillTruncatedWorklogs } from './fillTruncatedWorklogs.js';
 import { parseSprintField } from './parseSprintField.js';
 import { getSprintEntryDate } from './fetchSprintEntry.js';
@@ -88,6 +89,7 @@ export async function fetchBoardData(
     bugsByParent,
     testerByParent,
   } = groupSubtasks(subtasksWithFullWorklogs);
+  const developerRoles = inferDeveloperRoles(subtasksWithFullWorklogs);
 
   report('Buscando detalhes das stories...');
   const storyDetails = await mapWithConcurrency(storyHits, GET_ISSUE_CONCURRENCY, async (hit) => {
@@ -154,6 +156,7 @@ export async function fetchBoardData(
         testLoggedHours: testLoggedHoursByParent.get(story.key) ?? null,
         worklogEntries: worklogEntriesByParent.get(story.key) ?? [],
         bugs: bugsByParent.get(story.key) ?? [],
+        developerRoles,
         sprintEnteredAt: sprintEntryByStoryKey.get(story.key) ?? null,
         baseUrl,
         today,

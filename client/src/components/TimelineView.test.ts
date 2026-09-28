@@ -58,6 +58,8 @@ function activity(overrides: Partial<Activity> = {}): Activity {
     implLoggedHours: null,
     testLoggedHours: null,
     bugsLoggedHours: null,
+    implBugsLoggedHours: null,
+    testBugsLoggedHours: null,
     worklogEntries: [],
     bugs: [],
     addedAfterSprintStart: false,
