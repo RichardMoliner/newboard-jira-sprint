@@ -4,6 +4,7 @@ import { useBoardData } from '../api/useBoardData.js';
 import type { Theme } from '../App.js';
 import TimelineView from './TimelineView.js';
 import IndicatorsView from './IndicatorsView.js';
+import ProgressModal from './ProgressModal.js';
 
 type Tab = 'timeline' | 'indicators';
 
@@ -18,7 +19,7 @@ export default function BoardScreen({
   theme: Theme;
   onToggleTheme: () => void;
 }) {
-  const { data, loading, error, refresh, secondsToNextRefresh } = useBoardData();
+  const { data, loading, error, refresh, secondsToNextRefresh, progressMessages } = useBoardData();
   const [tab, setTab] = useState<Tab>('timeline');
   const [sprintFilter, setSprintFilter] = useState<string[]>([]);
   const [dashDelayBar, setDashDelayBar] = useState(false);
@@ -43,6 +44,7 @@ export default function BoardScreen({
 
   return (
     <div style={{ height: '100vh', boxSizing: 'border-box', padding: '24px 32px 0', display: 'flex', flexDirection: 'column' }}>
+      {loading && <ProgressModal messages={progressMessages} />}
       <header
         style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20, flexShrink: 0 }}
       >

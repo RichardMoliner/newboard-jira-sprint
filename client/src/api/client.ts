@@ -42,3 +42,7 @@ export function saveConfig(input: SaveConfigInput): Promise<AppConfig> {
 export function getBoardData<T>(): Promise<T> {
   return request<T>('/board-data');
 }
+
+export function getBoardDataProgress(): Promise<{ messages: string[] }> {
+  return request<{ messages: string[] }>('/board-data/progress');
+}

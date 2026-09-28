@@ -5,6 +5,7 @@ import { groupSubtasks, type RawSubtask, type RawWorklogEntry } from './groupSub
 import { fillTruncatedWorklogs } from './fillTruncatedWorklogs.js';
 import { parseSprintField } from './parseSprintField.js';
 import { getSprintEntryDate } from './fetchSprintEntry.js';
+import { report } from './progressLog.js';
 import { mapActivity, type RawStory } from '../domain/mapActivity.js';
 import type { Activity, BoardDataResponse, SprintInfo } from '../domain/types.js';
 import { DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY, IMPL_SHARE } from '../compute/timeline.js';
@@ -51,6 +52,7 @@ export async function fetchBoardData(
   const baseUrl = requireEnv('JIRA_BASE_URL').replace(/\/$/, '');
   const today = todayISO();
 
+  report('Buscando atividades da sprint...');
   const [storyHits, subtasks] = await Promise.all([
     searchAllIssues<StorySearchHit>(
       `vertical = ${quoteJql(vertical)} AND issuetype = Story AND sprint in openSprints()`,
@@ -64,6 +66,7 @@ export async function fetchBoardData(
     ),
   ]);
 
+  report('Buscando apontamentos de horas...');
   const subtasksWithFullWorklogs = await fillTruncatedWorklogs(subtasks, async (issueKey, total) => {
     const response = await callJiraTool<{ worklogs: RawWorklogEntry[] }>(
       'get_worklogs',
@@ -86,6 +89,7 @@ export async function fetchBoardData(
     testerByParent,
   } = groupSubtasks(subtasksWithFullWorklogs);
 
+  report('Buscando detalhes das stories...');
   const storyDetails = await mapWithConcurrency(storyHits, GET_ISSUE_CONCURRENCY, async (hit) => {
     try {
       return await callJiraTool<StoryDetail>('get_issue', { issueKey: hit.key, response_format: 'detailed' }, credentials);
@@ -102,6 +106,7 @@ export async function fetchBoardData(
   // sprint. Buscada para todas as stories resolvidas; `mapActivity` já suprime a marcação para
   // herdadas, então não precisa duplicar aqui a lógica de "é herdada".
   const resolvedStories = (storyDetails.filter((s): s is StoryDetail => s !== null)).filter((s) => sprintByStoryKey.get(s.key));
+  report('Buscando histórico de sprint...');
   const sprintEntryPairs = await mapWithConcurrency(resolvedStories, CHANGELOG_CONCURRENCY, async (story) => {
     const sprint = sprintByStoryKey.get(story.key)!;
     const sprintEnteredAt = await getSprintEntryDate(story.key, story.updated, sprint.name, credentials);
@@ -159,6 +164,8 @@ export async function fetchBoardData(
   }
 
   activities.sort((a, b) => a.developer.localeCompare(b.developer) || a.title.localeCompare(b.title));
+
+  report('Concluído.');
 
   return {
     generatedAt: new Date().toISOString(),

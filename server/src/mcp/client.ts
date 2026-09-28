@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { parseToolResult } from './parseToolResult.js';
+import { withOneRetry } from '../jira/withOneRetry.js';
 
 const JIRA_MCP_ARGS = ['-y', '--registry', 'http://nexus3.betha.com.br/repository/npm-all/', '@betha/jira-mcp'];
 
@@ -59,13 +60,21 @@ function getClient(credentials: JiraCredentials): Promise<Client> {
   return clientPromise;
 }
 
-/** Chama uma tool do MCP jira-desenv (@betha/jira-mcp) e retorna o JSON já parseado. */
+/**
+ * Chama uma tool do MCP jira-desenv (@betha/jira-mcp) e retorna o JSON já parseado.
+ *
+ * O jira-mcp já reage a lentidão do Jira internamente (até 3 tentativas, 10/15/20s).
+ * Se mesmo assim ele desistir, tentamos mais uma vez aqui antes de propagar o erro —
+ * cobre instabilidades pontuais sem derrubar a busca inteira do board.
+ */
 export async function callJiraTool<T = unknown>(
   name: string,
   args: Record<string, unknown>,
   credentials: JiraCredentials,
 ): Promise<T> {
-  const client = await getClient(credentials);
-  const result = await client.callTool({ name, arguments: args });
-  return parseToolResult<T>(result);
+  return withOneRetry(async () => {
+    const client = await getClient(credentials);
+    const result = await client.callTool({ name, arguments: args });
+    return parseToolResult<T>(result);
+  });
 }
