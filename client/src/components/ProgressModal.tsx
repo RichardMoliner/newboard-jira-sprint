@@ -23,46 +23,29 @@ export default function ProgressModal({ messages }: { messages: string[] }) {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-          <Spinner />
+          <img src="/loading_B.gif" alt="" width={28} height={28} />
           <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Buscando dados do Jira...</span>
         </div>
         <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {messages.map((message, i) => (
-            <li
-              key={i}
-              style={{
-                fontSize: 12.5,
-                color: i === messages.length - 1 ? 'var(--text-primary)' : 'var(--text-muted)',
-              }}
-            >
-              {message}
-            </li>
-          ))}
+          {messages.map((message, i) => {
+            // Uma etapa é considerada concluída quando uma etapa mais nova já começou depois dela
+            // (ou quando ela própria é a etapa final "Concluído.").
+            const done = i < messages.length - 1 || message === 'Concluído.';
+            return (
+              <li
+                key={i}
+                style={{
+                  fontSize: 12.5,
+                  color: done ? 'var(--text-muted)' : 'var(--text-primary)',
+                }}
+              >
+                {done && <span style={{ color: 'var(--status-good)', marginRight: 5 }}>✓</span>}
+                {message}
+              </li>
+            );
+          })}
         </ul>
       </div>
     </div>
-  );
-}
-
-function Spinner() {
-  return (
-    <>
-      <span
-        style={{
-          display: 'inline-block',
-          width: 14,
-          height: 14,
-          border: '2px solid var(--gridline)',
-          borderTopColor: 'var(--series-impl)',
-          borderRadius: '50%',
-          animation: 'progress-modal-spin 0.8s linear infinite',
-        }}
-      />
-      <style>{`
-        @keyframes progress-modal-spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-    </>
   );
 }
