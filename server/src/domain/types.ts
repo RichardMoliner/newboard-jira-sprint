@@ -15,6 +15,10 @@ export interface BugSubtask {
   endDate: string;
   /** Apontamentos (worklog) lançados neste bug — somados nas horas de Implementação/Teste da atividade pai, conforme quem apontou. */
   worklogEntries: WorklogEntry[];
+  /** Artefato do bug (customfield_10232 no Jira): se foi gerado no requisito ou na solução/dev. Null quando não preenchido ou com valor não reconhecido. */
+  artifact: 'requisito' | 'implementacao' | null;
+  /** Rótulos (labels) do bug no Jira, ex.: bug_devolvido, bug_impeditivo. Pode ter mais de um. */
+  labels: string[];
 }
 
 export interface TimelineWindow {

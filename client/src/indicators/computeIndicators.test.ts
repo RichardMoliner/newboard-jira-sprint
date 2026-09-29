@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import {
+  computeBugLabelSummaries,
   computeHoursPerPfByDeveloper,
+  computeHoursSummary,
   computeKpis,
   computePersonSummaries,
   computeSprintSummaries,
@@ -72,7 +74,7 @@ describe('computeKpis', () => {
 
   test('counts open bugs and computes the average bugs per activity', () => {
     const activities = [
-      activity({ key: 'A', bugs: [{ key: 'B1', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [] }] }),
+      activity({ key: 'A', bugs: [{ key: 'B1', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels: [] }] }),
       activity({ key: 'B', bugs: [] }),
     ];
 
@@ -80,6 +82,30 @@ describe('computeKpis', () => {
 
     expect(kpis.openBugsCount).toBe(1);
     expect(kpis.bugsPerActivity).toBeCloseTo(0.5);
+  });
+
+  test('counts bugs by artifact (requisito vs implementacao)', () => {
+    const bug = (artifact: Activity['bugs'][number]['artifact']) => ({
+      key: 'B1',
+      title: 'x',
+      developer: null,
+      status: 's',
+      startDate: '2026-09-01',
+      endDate: '2026-09-02',
+      worklogEntries: [],
+      artifact,
+      labels: [],
+    });
+    const activities = [
+      activity({ key: 'A', bugs: [bug('requisito'), bug('requisito')] }),
+      activity({ key: 'B', bugs: [bug('implementacao')] }),
+      activity({ key: 'C', bugs: [bug(null)] }),
+    ];
+
+    const kpis = computeKpis(activities, '2026-09-08');
+
+    expect(kpis.bugsRequisitoCount).toBe(2);
+    expect(kpis.bugsImplementacaoCount).toBe(1);
   });
 
   test('returns zeroed KPIs for an empty activity list', () => {
@@ -299,7 +325,7 @@ describe('computePersonSummaries', () => {
         developer: 'Alicio',
         storyPoints: 5,
         isOverdue: true,
-        bugs: [{ key: 'B1', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [] }],
+        bugs: [{ key: 'B1', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels: [] }],
       }),
       activity({ key: 'C', developer: 'Bia', storyPoints: null }),
     ];
@@ -497,7 +523,7 @@ describe('computeStatusSummaries', () => {
   });
 
   function openBug(overrides: Partial<Activity['bugs'][number]> = {}) {
-    return { key: 'B-1', title: 'Bug', developer: null, status: 'Em correção', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], ...overrides };
+    return { key: 'B-1', title: 'Bug', developer: null, status: 'Em correção', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels: [], ...overrides };
   }
 
   test('groups an in-progress activity with an open bug under "Correção de bugs" instead of its normal status', () => {
@@ -582,7 +608,7 @@ describe('foldStatusSummariesForChart', () => {
 
 describe('topActivitiesByBugCount', () => {
   test('returns activities sorted by bug count descending, limited to N', () => {
-    const bug = { key: 'B', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [] };
+    const bug = { key: 'B', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels: [] };
     const activities = [
       activity({ key: 'A', title: 'Poucos bugs', bugs: [bug] }),
       activity({ key: 'B', title: 'Muitos bugs', bugs: [bug, bug, bug] }),
@@ -600,5 +626,113 @@ describe('topActivitiesByBugCount', () => {
   test('excludes activities with no bugs', () => {
     const activities = [activity({ key: 'A', bugs: [] })];
     expect(topActivitiesByBugCount(activities, 10)).toHaveLength(0);
+  });
+});
+
+describe('computeBugLabelSummaries', () => {
+  function bug(labels: string[]) {
+    return { key: 'B', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels };
+  }
+
+  test('counts one occurrence per label across all bugs', () => {
+    const activities = [
+      activity({ key: 'A', bugs: [bug(['bug_devolvido'])] }),
+      activity({ key: 'B', bugs: [bug(['bug_devolvido']), bug(['bug_impeditivo'])] }),
+    ];
+
+    const summaries = computeBugLabelSummaries(activities);
+
+    expect(summaries).toContainEqual(expect.objectContaining({ label: 'bug_devolvido', count: 2 }));
+    expect(summaries).toContainEqual(expect.objectContaining({ label: 'bug_impeditivo', count: 1 }));
+  });
+
+  test('counts a bug with multiple labels once per label (not mutually exclusive)', () => {
+    const activities = [activity({ key: 'A', bugs: [bug(['bug_devolvido', 'bug_prototipo_nao_atendido'])] })];
+
+    const summaries = computeBugLabelSummaries(activities);
+
+    expect(summaries).toContainEqual(expect.objectContaining({ label: 'bug_devolvido', count: 1 }));
+    expect(summaries).toContainEqual(expect.objectContaining({ label: 'bug_prototipo_nao_atendido', count: 1 }));
+  });
+
+  test('ignores bugs with no labels', () => {
+    const activities = [activity({ key: 'A', bugs: [bug([])] })];
+    expect(computeBugLabelSummaries(activities)).toEqual([]);
+  });
+
+  test('sorts by count descending', () => {
+    const activities = [
+      activity({ key: 'A', bugs: [bug(['bug_impeditivo'])] }),
+      activity({ key: 'B', bugs: [bug(['bug_devolvido']), bug(['bug_devolvido'])] }),
+    ];
+
+    const summaries = computeBugLabelSummaries(activities);
+
+    expect(summaries[0].label).toBe('bug_devolvido');
+    expect(summaries[1].label).toBe('bug_impeditivo');
+  });
+});
+
+describe('computeHoursSummary', () => {
+  test('computes planned hours as total story points times hours per PF', () => {
+    const activities = [activity({ key: 'A', storyPoints: 5 }), activity({ key: 'B', storyPoints: 3 })];
+    const summary = computeHoursSummary(activities, 4, 30);
+    expect(summary.plannedHours).toBe(32);
+  });
+
+  test('splits planned hours between Implementação/Teste using assumedTestSharePercent', () => {
+    const activities = [activity({ key: 'A', storyPoints: 10 })];
+    const summary = computeHoursSummary(activities, 4, 30);
+    expect(summary.plannedImplHours).toBeCloseTo(28);
+    expect(summary.plannedTestHours).toBeCloseTo(12);
+  });
+
+  test('computes executed hours as the sum of implLoggedHours + testLoggedHours across activities', () => {
+    const activities = [
+      activity({ key: 'A', implLoggedHours: 10, testLoggedHours: 4 }),
+      activity({ key: 'B', implLoggedHours: 6, testLoggedHours: null }),
+    ];
+    const summary = computeHoursSummary(activities, 4, 30);
+    expect(summary.executedHours).toBe(20);
+  });
+
+  test('computes executedImplHours/executedTestHours separately', () => {
+    const activities = [
+      activity({ key: 'A', implLoggedHours: 10, testLoggedHours: 4 }),
+      activity({ key: 'B', implLoggedHours: 6, testLoggedHours: null }),
+    ];
+    const summary = computeHoursSummary(activities, 4, 30);
+    expect(summary.executedImplHours).toBe(16);
+    expect(summary.executedTestHours).toBe(4);
+  });
+
+  test('computes bug fix hours as the sum of implBugsLoggedHours across activities', () => {
+    const activities = [
+      activity({ key: 'A', implBugsLoggedHours: 5 }),
+      activity({ key: 'B', implBugsLoggedHours: null }),
+      activity({ key: 'C', implBugsLoggedHours: 2.5 }),
+    ];
+    const summary = computeHoursSummary(activities, 4, 30);
+    expect(summary.bugFixHours).toBe(7.5);
+  });
+
+  test('computes bug test hours as the sum of testBugsLoggedHours across activities', () => {
+    const activities = [activity({ key: 'A', testBugsLoggedHours: 3 }), activity({ key: 'B', testBugsLoggedHours: 1.5 })];
+    const summary = computeHoursSummary(activities, 4, 30);
+    expect(summary.bugTestHours).toBe(4.5);
+  });
+
+  test('returns zeros for an empty activity list', () => {
+    const summary = computeHoursSummary([], 4, 30);
+    expect(summary).toEqual({
+      plannedHours: 0,
+      plannedImplHours: 0,
+      plannedTestHours: 0,
+      executedHours: 0,
+      executedImplHours: 0,
+      executedTestHours: 0,
+      bugFixHours: 0,
+      bugTestHours: 0,
+    });
   });
 });

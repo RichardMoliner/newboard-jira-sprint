@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Activity, SprintInfo, TimelineWindow, WorklogEntry } from '../types.js';
 import { computeStatusSummaries } from '../indicators/computeIndicators.js';
+import { describeBugLabel } from '../bugLabels.js';
 
 const MIN_COLUMN_WIDTH = 28;
 const MAX_COLUMN_WIDTH = 96;
@@ -889,9 +890,14 @@ function ActivityRow({
       </div>
 
       {bugsExpanded &&
-        [...activity.bugs]
-          .sort((a, b) => Number(isResolvedBug(b.status)) - Number(isResolvedBug(a.status)))
-          .map((bug) => <BugRow key={bug.key} bug={bug} x={x} />)}
+        groupBugsByArtifact(activity.bugs).map((group) => (
+          <div key={String(group.key)} style={{ display: 'contents' }}>
+            <BugArtifactHeader group={group} />
+            {group.bugs.map((bug) => (
+              <BugRow key={bug.key} bug={bug} x={x} />
+            ))}
+          </div>
+        ))}
     </div>
   );
 }
@@ -907,6 +913,70 @@ function isResolvedBug(status: string): boolean {
   return normalizeStatus(status) === 'atendida';
 }
 
+export interface BugArtifactGroup {
+  key: 'requisito' | 'implementacao' | null;
+  label: string;
+  bugs: Activity['bugs'];
+}
+
+const ARTIFACT_ORDER: { key: BugArtifactGroup['key']; label: string }[] = [
+  { key: 'requisito', label: 'Requisito' },
+  { key: 'implementacao', label: 'Implementação' },
+  { key: null, label: 'Sem artefato' },
+];
+
+/** Agrupa os bugs de uma atividade em swimlanes por artefato (Requisito/Implementação), mantendo os
+ * não resolvidos primeiro dentro de cada grupo — grupos sem nenhum bug não aparecem. */
+export function groupBugsByArtifact(bugs: Activity['bugs']): BugArtifactGroup[] {
+  const sorted = [...bugs].sort((a, b) => Number(isResolvedBug(b.status)) - Number(isResolvedBug(a.status)));
+  return ARTIFACT_ORDER.map(({ key, label }) => ({ key, label, bugs: sorted.filter((b) => b.artifact === key) })).filter(
+    (group) => group.bugs.length > 0,
+  );
+}
+
+function Badge({ children, color }: { children: React.ReactNode; color: string }) {
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        color,
+        background: `color-mix(in srgb, ${color} 16%, transparent)`,
+        borderRadius: 4,
+        padding: '1px 5px',
+        fontSize: 9.5,
+        fontWeight: 700,
+        lineHeight: 1.5,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function BugArtifactHeader({ group }: { group: BugArtifactGroup }) {
+  return (
+    <div style={{ display: 'contents' }}>
+      <div
+        style={{
+          position: 'sticky',
+          left: 0,
+          zIndex: 1,
+          background: 'color-mix(in srgb, var(--series-bug) 12%, var(--page-plane))',
+          color: 'var(--series-bug)',
+          fontWeight: 700,
+          fontSize: 10,
+          padding: '4px 14px 4px 34px',
+          borderBottom: '1px solid var(--gridline)',
+          borderRight: '1px solid var(--gridline)',
+        }}
+      >
+        {group.label} ({group.bugs.length})
+      </div>
+      <div style={{ background: 'color-mix(in srgb, var(--series-bug) 12%, var(--page-plane))', borderBottom: '1px solid var(--gridline)' }} />
+    </div>
+  );
+}
+
 function BugRow({ bug, x }: { bug: Activity['bugs'][number]; x: (d: string) => number }) {
   const isResolved = isResolvedBug(bug.status);
   const textColor = isResolved ? 'var(--status-good)' : 'var(--text-muted)';
@@ -917,9 +987,19 @@ function BugRow({ bug, x }: { bug: Activity['bugs'][number]; x: (d: string) => n
           <span style={{ color: textColor, fontWeight: 700, marginRight: 4 }}>{bug.key}</span>
           {bug.title}
         </div>
-        <div style={{ color: textColor, marginTop: 2 }}>
-          {bug.developer ?? '—'} - {bug.status}
-          {isResolved && ` em ${formatShort(bug.endDate)}`}
+        <div style={{ color: textColor, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span>
+            {bug.developer ?? '—'} - {bug.status}
+            {isResolved && ` em ${formatShort(bug.endDate)}`}
+          </span>
+          {bug.labels.map((label) => {
+            const info = describeBugLabel(label);
+            return (
+              <Badge key={label} color={info.color}>
+                {info.text}
+              </Badge>
+            );
+          })}
         </div>
       </div>
       <div className="timeline-row-bars" style={{ position: 'relative', height: 24, borderBottom: '1px solid var(--gridline)', background: 'var(--page-plane)' }}>

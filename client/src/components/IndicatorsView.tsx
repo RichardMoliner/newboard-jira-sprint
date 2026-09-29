@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { Activity, SprintInfo } from '../types.js';
 import {
+  computeBugLabelSummaries,
   computeHoursPerPfByDeveloper,
+  computeHoursSummary,
   computeKpis,
   computePersonSummaries,
   computeSprintSummaries,
@@ -11,6 +13,7 @@ import {
 } from '../indicators/computeIndicators.js';
 import { FilterPill } from './TimelineView.js';
 import StatusPieChart from './StatusPieChart.js';
+import BugLabelsPieChart from './BugLabelsPieChart.js';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -55,6 +58,11 @@ export default function IndicatorsView({
   const sprintSummaries = useMemo(() => computeSprintSummaries(filtered), [filtered]);
   const statusSummaries = useMemo(() => computeStatusSummaries(filtered), [filtered]);
   const topBuggy = useMemo(() => topActivitiesByBugCount(filtered, 10), [filtered]);
+  const bugLabelSummaries = useMemo(() => computeBugLabelSummaries(filtered), [filtered]);
+  const hoursSummary = useMemo(
+    () => computeHoursSummary(filtered, hoursPerPf, assumedTestSharePercent),
+    [filtered, hoursPerPf, assumedTestSharePercent],
+  );
 
   const atRisk = filtered.filter((a) => a.isOverdue);
   const carried = filtered.filter((a) => a.isCarried);
@@ -81,13 +89,9 @@ export default function IndicatorsView({
         </p>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
-        <Section title="Atividades por status">
-          <StatusPieChart summaries={statusSummaries} />
-        </Section>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <Section title="Visão geral">
+      <div style={KPI_GRID_STYLE}>
         <Kpi label="Atividades" value={kpis.totalActivities} />
         <Kpi label="Story points totais" value={kpis.totalStoryPoints} />
         <Kpi label="Concluídas" value={kpis.doneCount} suffix={`/${kpis.totalActivities}`} accent="var(--status-good)" />
@@ -96,8 +100,82 @@ export default function IndicatorsView({
         <Kpi label="Tarefas adicionadas" value={kpis.addedLateCount} suffix={`/${kpis.totalActivities}`} accent="var(--status-warning)" />
         <Kpi label="Pontos adicionados" value={kpis.addedLateStoryPoints} accent="var(--status-warning)" />
         <Kpi label="Em andamento (no prazo)" value={kpis.inProgressOnTimeCount} />
+      </div>
+      </Section>
+
+      <Section title="Horas — planejado vs. executado">
+      <div style={KPI_GRID_STYLE}>
+        <Kpi
+          label="Horas planejadas"
+          value={hoursSummary.plannedHours.toFixed(1)}
+          title="Story points totais × horas/PF configurado — esforço previsto para o escopo atual."
+        />
+        <Kpi
+          label="Horas executadas"
+          value={hoursSummary.executedHours.toFixed(1)}
+          suffix={executionPercentSuffix(hoursSummary.executedHours, hoursSummary.plannedHours)}
+          accent={executionAccent(hoursSummary.executedHours, hoursSummary.plannedHours)}
+          title="Soma das horas apontadas em Implementação + Teste (subtarefas), sem contar bugs. Vermelho quando passa do planejado."
+        />
+        <Kpi
+          label="Planejado implementação"
+          value={hoursSummary.plannedImplHours.toFixed(1)}
+          title={`Fatia de "Horas planejadas" prevista para Implementação (${(100 - assumedTestSharePercent).toFixed(0)}% do total).`}
+        />
+        <Kpi
+          label="Executado implementação"
+          value={hoursSummary.executedImplHours.toFixed(1)}
+          suffix={executionPercentSuffix(hoursSummary.executedImplHours, hoursSummary.plannedImplHours)}
+          accent={executionAccent(hoursSummary.executedImplHours, hoursSummary.plannedImplHours)}
+          title="Soma das horas apontadas só nas subtarefas de Implementação. Vermelho quando passa do planejado."
+        />
+        <Kpi
+          label="Planejado teste"
+          value={hoursSummary.plannedTestHours.toFixed(1)}
+          title={`Fatia de "Horas planejadas" prevista para Teste (${assumedTestSharePercent.toFixed(0)}% do total).`}
+        />
+        <Kpi
+          label="Executado teste"
+          value={hoursSummary.executedTestHours.toFixed(1)}
+          suffix={executionPercentSuffix(hoursSummary.executedTestHours, hoursSummary.plannedTestHours)}
+          accent={executionAccent(hoursSummary.executedTestHours, hoursSummary.plannedTestHours)}
+          title="Soma das horas apontadas só nas subtarefas de Teste. Vermelho quando passa do planejado."
+        />
+        <Kpi
+          label="Horas correção de bugs"
+          value={hoursSummary.bugFixHours.toFixed(1)}
+          title="Soma das horas de bug apontadas por quem tem papel de dev na sprint."
+        />
+        <Kpi
+          label="Horas teste bugs"
+          value={hoursSummary.bugTestHours.toFixed(1)}
+          title="Soma das horas de bug apontadas por quem tem papel de tester (QA) na sprint."
+        />
+      </div>
+      </Section>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'stretch' }}>
+      <Section title="Bugs">
+      <div style={KPI_GRID_STYLE}>
         <Kpi label="Bugs abertos" value={kpis.openBugsCount} />
         <Kpi label="Bugs por atividade" value={kpis.bugsPerActivity.toFixed(1)} />
+        <Kpi
+          label="Bugs de requisito"
+          value={kpis.bugsRequisitoCount}
+          suffix={`/${kpis.openBugsCount}`}
+          title='Bugs cujo "Artefato do bug" no Jira é Requisito — gerados no requisito/produto, não na implementação.'
+        />
+        <Kpi
+          label="Bugs de implementação"
+          value={kpis.bugsImplementacaoCount}
+          suffix={`/${kpis.openBugsCount}`}
+          title='Bugs cujo "Artefato do bug" no Jira é Solução — gerados na implementação/dev.'
+        />
+      </div>
+      </Section>
+
+      <Section title="Produtividade e assertividade">
+      <div style={KPI_GRID_STYLE}>
         <Kpi
           label="Horas / PF (geral)"
           value={realizedProductivity.hoursPerPf !== null ? realizedProductivity.hoursPerPf.toFixed(2) : '—'}
@@ -191,9 +269,11 @@ export default function IndicatorsView({
           title="Quanto do tempo total (Implementação + Teste apontados) foi de fato Teste, nas tarefas concluídas — bugs ficam de fora dessa conta. Compara com o percentual assumido hoje (fixo) ao projetar a janela prevista de Teste, pra ver se essa suposição bate com a realidade. Atualiza sozinho conforme mais tarefas são concluídas."
         />
       </div>
+      </Section>
+      </div>
 
         <label
-          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--text-secondary)', cursor: 'pointer', marginTop: 8 }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--text-secondary)', cursor: 'pointer' }}
           title="Quando desmarcado (padrão), os indicadores de Horas/PF e % de Assertividade acima ignoram tarefas herdadas de sprints anteriores — elas costumam ficar muito tempo paradas antes da entrega e distorcem o cálculo."
         >
           <input
@@ -204,8 +284,18 @@ export default function IndicatorsView({
           />
           Considerar herdadas nos indicadores de Horas/PF e % de Assertividade
         </label>
-      </div>
-      </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start', marginTop: 8 }}>
+          <Section title="Atividades por status">
+            <StatusPieChart summaries={statusSummaries} />
+          </Section>
+          <Section
+            title="Distribuição por rótulo"
+            subtitle="Um bug pode ter mais de um rótulo — a proporção é entre ocorrências de rótulo, não entre bugs."
+          >
+            <BugLabelsPieChart summaries={bugLabelSummaries} />
+          </Section>
+        </div>
       </div>
 
       <div title={`Horas de Implementação apontadas dividido pelo PF de Implementação (Story Points × fração de Implementação, hoje ${(100 - assumedTestSharePercent).toFixed(0)}%) — considera TODAS as tarefas do dev, concluídas ou não. Ordenado do mais eficiente (menos horas por PF) para o menos.`}>
@@ -260,6 +350,7 @@ export default function IndicatorsView({
           />
         )}
       </Section>
+
 
       <Section title="Bugs por profissional">
         <BarList items={people.filter((p) => p.bugs > 0).map((p) => ({ label: p.person, value: p.bugs }))} max={maxBugs} color="var(--seq-orange-450)" />
@@ -327,6 +418,19 @@ function accuracyAccent(accuracyPercent: number | null): string | undefined {
   return 'var(--status-critical)';
 }
 
+/** Vermelho quando o executado passa do planejado; sem planejado (0h) não há o que comparar. */
+function executionAccent(executed: number, planned: number): string | undefined {
+  if (planned <= 0) return undefined;
+  return executed > planned ? 'var(--status-critical)' : 'var(--status-good)';
+}
+
+function executionPercentSuffix(executed: number, planned: number): string | undefined {
+  if (planned <= 0) return undefined;
+  return `${Math.round((executed / planned) * 100)}% do planejado`;
+}
+
+const KPI_GRID_STYLE: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 };
+
 function Kpi({
   label,
   value,
@@ -348,6 +452,11 @@ function Kpi({
         border: '1px solid var(--gridline)',
         borderRadius: 10,
         padding: '12px 14px',
+        height: 92,
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
         cursor: title ? 'help' : undefined,
       }}
     >
@@ -362,10 +471,11 @@ function Kpi({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
     <div>
-      <h3 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 10px' }}>{title}</h3>
+      <h3 style={{ fontSize: 14, fontWeight: 700, margin: subtitle ? '0 0 2px' : '0 0 10px' }}>{title}</h3>
+      {subtitle && <p style={{ fontSize: 10.5, color: 'var(--text-muted)', margin: '0 0 10px' }}>{subtitle}</p>}
       {children}
     </div>
   );

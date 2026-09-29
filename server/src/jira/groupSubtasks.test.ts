@@ -229,8 +229,41 @@ describe('groupSubtasks', () => {
         startDate: '2026-08-27',
         endDate: '2026-09-08',
         worklogEntries: [],
+        artifact: null,
+        labels: [],
       },
     ]);
+  });
+
+  test('classifies the bug artifact as "requisito" when customfield_10232 is "Requisitos"', () => {
+    const { bugsByParent } = groupSubtasks([
+      subtask({ key: 'EC-11983', type: 'Bug', customfield_10232: { value: 'Requisitos', id: '10295' } }),
+    ]);
+    expect(bugsByParent.get('EC-11420')?.[0].artifact).toBe('requisito');
+  });
+
+  test('classifies the bug artifact as "implementacao" when customfield_10232 is "Solução"', () => {
+    const { bugsByParent } = groupSubtasks([
+      subtask({ key: 'EC-11983', type: 'Bug', customfield_10232: { value: 'Solução', id: '10296' } }),
+    ]);
+    expect(bugsByParent.get('EC-11420')?.[0].artifact).toBe('implementacao');
+  });
+
+  test('leaves the bug artifact null when customfield_10232 is absent', () => {
+    const { bugsByParent } = groupSubtasks([subtask({ key: 'EC-11983', type: 'Bug' })]);
+    expect(bugsByParent.get('EC-11420')?.[0].artifact).toBeNull();
+  });
+
+  test('attaches the bug labels', () => {
+    const { bugsByParent } = groupSubtasks([
+      subtask({ key: 'EC-11983', type: 'Bug', labels: ['bug_devolvido', 'bug_impeditivo'] }),
+    ]);
+    expect(bugsByParent.get('EC-11420')?.[0].labels).toEqual(['bug_devolvido', 'bug_impeditivo']);
+  });
+
+  test('defaults the bug labels to an empty array when absent', () => {
+    const { bugsByParent } = groupSubtasks([subtask({ key: 'EC-11983', type: 'Bug' })]);
+    expect(bugsByParent.get('EC-11420')?.[0].labels).toEqual([]);
   });
 
   test('ignores a worklog entry of 5 minutes or less entirely, both from the hour total and from worklogEntries', () => {

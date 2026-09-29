@@ -38,6 +38,8 @@ function bug(overrides: Partial<BugSubtask> = {}): BugSubtask {
     startDate: '2026-08-27',
     endDate: '2026-09-08',
     worklogEntries: [],
+    artifact: null,
+    labels: [],
     ...overrides,
   };
 }
@@ -837,7 +839,7 @@ describe('mapActivity', () => {
 
   test('passes bugs through untouched', () => {
     const bugs = [
-      { key: 'EC-11983', title: 'Bug X', developer: 'Fulano', status: 'Em correção', startDate: '2026-08-27', endDate: '2026-09-03', worklogEntries: [] },
+      { key: 'EC-11983', title: 'Bug X', developer: 'Fulano', status: 'Em correção', startDate: '2026-08-27', endDate: '2026-09-03', worklogEntries: [], artifact: null, labels: [] },
     ];
     const activity = mapActivity({
       story: baseStory(),
@@ -862,6 +864,8 @@ describe('mapActivity', () => {
         worklogEntries: [
           { subtaskType: 'Bug' as const, author: 'Guilherme Henrique Gibim de Mello', date: '2026-08-28', hours: 2, comment: null },
         ],
+        artifact: null,
+        labels: [],
       },
     ];
     const activity = mapActivity({
@@ -888,6 +892,8 @@ describe('mapActivity', () => {
         startDate: '2026-08-27',
         endDate: '2026-09-03',
         worklogEntries: [{ subtaskType: 'Bug' as const, author: 'Luana de Souza Bez Batti', date: '2026-08-28', hours: 1.5, comment: null }],
+        artifact: null,
+        labels: [],
       },
     ];
     const activity = mapActivity({
@@ -914,6 +920,8 @@ describe('mapActivity', () => {
         startDate: '2026-08-27',
         endDate: '2026-09-03',
         worklogEntries: [{ subtaskType: 'Bug' as const, author: 'Guilherme Henrique Gibim de Mello', date: '2026-08-28', hours: 2, comment: null }],
+        artifact: null,
+        labels: [],
       },
     ];
     const activity = mapActivity({

@@ -22,6 +22,10 @@ export interface RawSubtask {
    * registros) — `total` é o número real de apontamentos; ver `fillTruncatedWorklogs`.
    */
   worklog?: { worklogs: RawWorklogEntry[]; total?: number };
+  /** "Artefato do bug" (customfield_10232) — só presente quando pedido como extraField na busca de Bug. */
+  customfield_10232?: { value: string; id: string } | null;
+  /** Rótulos (labels) da issue — só presente quando pedido como extraField na busca. */
+  labels?: string[];
 }
 
 export interface GroupedSubtasks {
@@ -153,6 +157,10 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
           comment: worklog.comment ?? null,
         }));
 
+      const artifactValue = subtask.customfield_10232?.value;
+      const artifact: BugSubtask['artifact'] =
+        artifactValue === 'Requisitos' ? 'requisito' : artifactValue === 'Solução' ? 'implementacao' : null;
+
       const bug: BugSubtask = {
         key: subtask.key,
         title: subtask.summary,
@@ -161,6 +169,8 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
         startDate: dateOnly(subtask.created),
         endDate: dateOnly(subtask.updated),
         worklogEntries: bugWorklogEntries,
+        artifact,
+        labels: subtask.labels ?? [],
       };
       const list = bugsByParent.get(parentKey) ?? [];
       list.push(bug);

@@ -8,6 +8,7 @@ import {
   dayFillRatio,
   formatConsumedPercent,
   formatStatusBreakdownTooltip,
+  groupBugsByArtifact,
   isDeveloperAvailable,
   isWorkingOnBugs,
   lastWorklogDate,
@@ -77,6 +78,8 @@ function bug(overrides: Partial<BugSubtask> = {}): BugSubtask {
     startDate: '2026-08-27',
     endDate: '2026-09-08',
     worklogEntries: [],
+    artifact: null,
+    labels: [],
     ...overrides,
   };
 }
@@ -614,5 +617,41 @@ describe('formatStatusBreakdownTooltip', () => {
     expect(lines).toContain('Em andamento: 67% (2)');
     expect(lines).toContain('Atendida: 33% (1)');
     expect(lines).toHaveLength(2);
+  });
+});
+
+describe('groupBugsByArtifact', () => {
+  test('returns an empty array for no bugs', () => {
+    expect(groupBugsByArtifact([])).toEqual([]);
+  });
+
+  test('groups bugs by artifact, ordered Requisito then Implementação', () => {
+    const bugRequisito = bug({ key: 'B1', artifact: 'requisito' });
+    const bugImpl = bug({ key: 'B2', artifact: 'implementacao' });
+    const groups = groupBugsByArtifact([bugImpl, bugRequisito]);
+
+    expect(groups.map((g) => g.key)).toEqual(['requisito', 'implementacao']);
+    expect(groups[0].label).toBe('Requisito');
+    expect(groups[0].bugs).toEqual([bugRequisito]);
+    expect(groups[1].label).toBe('Implementação');
+    expect(groups[1].bugs).toEqual([bugImpl]);
+  });
+
+  test('omits a group entirely when it has no bugs', () => {
+    const groups = groupBugsByArtifact([bug({ artifact: 'requisito' })]);
+    expect(groups.map((g) => g.key)).toEqual(['requisito']);
+  });
+
+  test('puts bugs with no recognized artifact in a trailing "Sem artefato" group', () => {
+    const groups = groupBugsByArtifact([bug({ artifact: null })]);
+    expect(groups.map((g) => g.key)).toEqual([null]);
+    expect(groups[0].label).toBe('Sem artefato');
+  });
+
+  test('keeps the same resolved-first ordering as today within each group', () => {
+    const unresolved = bug({ key: 'B1', artifact: 'requisito', status: 'Em correção' });
+    const resolved = bug({ key: 'B2', artifact: 'requisito', status: 'Atendida' });
+    const groups = groupBugsByArtifact([unresolved, resolved]);
+    expect(groups[0].bugs.map((b) => b.key)).toEqual(['B2', 'B1']);
   });
 });

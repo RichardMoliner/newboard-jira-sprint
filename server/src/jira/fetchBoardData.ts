@@ -62,7 +62,7 @@ export async function fetchBoardData(
     ),
     searchAllIssues<RawSubtask>(
       `vertical = ${quoteJql(vertical)} AND issuetype in (Bug, Implementação, Teste) AND sprint in openSprints()`,
-      ['parent', 'worklog'],
+      ['parent', 'worklog', 'customfield_10232', 'labels'],
       credentials,
     ),
   ]);

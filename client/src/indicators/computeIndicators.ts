@@ -9,6 +9,10 @@ export interface Kpis {
   inProgressOnTimeCount: number;
   openBugsCount: number;
   bugsPerActivity: number;
+  /** Bugs cujo "Artefato do bug" (Jira) é Requisito — gerados no requisito/produto. */
+  bugsRequisitoCount: number;
+  /** Bugs cujo "Artefato do bug" (Jira) é Solução — gerados na implementação/dev. */
+  bugsImplementacaoCount: number;
   /** Atividades que entraram na sprint atual depois que ela já tinha começado (exclui herdadas). */
   addedLateCount: number;
   /** Soma dos Story Points dessas atividades; null vira 0 na soma. */
@@ -23,6 +27,9 @@ export function computeKpis(activities: Activity[], _today: string): Kpis {
   const carriedCount = count(activities, (a) => a.isCarried);
   const inProgressOnTimeCount = count(activities, (a) => !isCompleted(a) && !a.isOverdue);
   const openBugsCount = sum(activities.map((a) => a.bugs.length));
+  const allBugs = activities.flatMap((a) => a.bugs);
+  const bugsRequisitoCount = allBugs.filter((b) => b.artifact === 'requisito').length;
+  const bugsImplementacaoCount = allBugs.filter((b) => b.artifact === 'implementacao').length;
   const addedLate = activities.filter((a) => a.addedAfterSprintStart);
 
   return {
@@ -33,6 +40,8 @@ export function computeKpis(activities: Activity[], _today: string): Kpis {
     carriedCount,
     inProgressOnTimeCount,
     openBugsCount,
+    bugsRequisitoCount,
+    bugsImplementacaoCount,
     bugsPerActivity: totalActivities === 0 ? 0 : openBugsCount / totalActivities,
     addedLateCount: addedLate.length,
     addedLateStoryPoints: sum(addedLate.map((a) => a.storyPoints ?? 0)),
@@ -301,6 +310,65 @@ export function topActivitiesByBugCount(activities: Activity[], limit: number): 
     .map((a) => ({ key: a.key, title: a.title, sprintName: a.sprintName, developer: a.developer, bugCount: a.bugs.length }))
     .sort((a, b) => b.bugCount - a.bugCount)
     .slice(0, limit);
+}
+
+export interface BugLabelSummary {
+  label: string;
+  count: number;
+}
+
+/**
+ * Conta ocorrências de cada rótulo (label) de bug em todas as atividades — um bug com mais de um
+ * rótulo conta uma vez em cada, então a soma pode passar do total de bugs (não é mutuamente
+ * exclusivo, ao contrário de status ou artefato).
+ */
+export function computeBugLabelSummaries(activities: Activity[]): BugLabelSummary[] {
+  const countByLabel = new Map<string, number>();
+  for (const bug of activities.flatMap((a) => a.bugs)) {
+    for (const label of bug.labels) {
+      countByLabel.set(label, (countByLabel.get(label) ?? 0) + 1);
+    }
+  }
+  return [...countByLabel.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
+}
+
+export interface HoursSummary {
+  /** Story points totais × horas/PF configurado — quanto se previu de esforço para o escopo atual. */
+  plannedHours: number;
+  /** Fatia de `plannedHours` prevista para Implementação (100% − assumedTestSharePercent). */
+  plannedImplHours: number;
+  /** Fatia de `plannedHours` prevista para Teste (assumedTestSharePercent). */
+  plannedTestHours: number;
+  /** Soma das horas apontadas em Implementação + Teste (subtarefas, sem bugs). */
+  executedHours: number;
+  /** Soma só das horas apontadas em Implementação. */
+  executedImplHours: number;
+  /** Soma só das horas apontadas em Teste. */
+  executedTestHours: number;
+  /** Soma das horas de bug apontadas por quem tem papel de dev na sprint (ver `inferRoles` no servidor). */
+  bugFixHours: number;
+  /** Soma das horas de bug apontadas por quem tem papel de tester na sprint. */
+  bugTestHours: number;
+}
+
+export function computeHoursSummary(activities: Activity[], hoursPerPf: number, assumedTestSharePercent: number): HoursSummary {
+  const totalStoryPoints = sum(activities.map((a) => a.storyPoints ?? 0));
+  const plannedHours = totalStoryPoints * hoursPerPf;
+  const executedImplHours = sum(activities.map((a) => a.implLoggedHours ?? 0));
+  const executedTestHours = sum(activities.map((a) => a.testLoggedHours ?? 0));
+  const bugFixHours = sum(activities.map((a) => a.implBugsLoggedHours ?? 0));
+  const bugTestHours = sum(activities.map((a) => a.testBugsLoggedHours ?? 0));
+
+  return {
+    plannedHours,
+    plannedImplHours: plannedHours * ((100 - assumedTestSharePercent) / 100),
+    plannedTestHours: plannedHours * (assumedTestSharePercent / 100),
+    executedHours: executedImplHours + executedTestHours,
+    executedImplHours,
+    executedTestHours,
+    bugFixHours,
+    bugTestHours,
+  };
 }
 
 /** "Concluída" nos indicadores = Concluída de fato OU Aguardando liberação (Teste já atendido) —
