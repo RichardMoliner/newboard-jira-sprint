@@ -39,29 +39,36 @@ export default function IndicatorsView({
     [activities, sprintFilter],
   );
 
-  const kpis = useMemo(() => computeKpis(filtered, today), [filtered, today]);
+  const [considerCarried, setConsiderCarried] = useState(false);
+  // Base usada pela maioria dos indicadores — exclui herdadas por padrão (elas costumam ficar muito
+  // tempo paradas antes da entrega e distorcem as médias). "Herdadas", "Em risco" e as tabelas que
+  // listam essas próprias atividades ficam de fora dessa regra e usam `filtered` direto, senão
+  // desmarcar a checkbox sempre mostraria "Herdadas: 0"/lista vazia e esconderia atrasos reais.
+  const indicatorActivities = useMemo(
+    () => (considerCarried ? filtered : filtered.filter((a) => !a.isCarried)),
+    [filtered, considerCarried],
+  );
 
-  const [considerCarriedInProductivity, setConsiderCarriedInProductivity] = useState(false);
-  const productivityActivities = useMemo(
-    () => (considerCarriedInProductivity ? filtered : filtered.filter((a) => !a.isCarried)),
-    [filtered, considerCarriedInProductivity],
-  );
+  // Só para os dois campos que precisam sempre refletir TODAS as atividades (ver comentário acima).
+  const kpisFull = useMemo(() => computeKpis(filtered, today), [filtered, today]);
+  const kpis = useMemo(() => computeKpis(indicatorActivities, today), [indicatorActivities, today]);
+
   const realizedProductivity = useMemo(
-    () => computeRealizedProductivity(productivityActivities, hoursPerPf, assumedTestSharePercent),
-    [productivityActivities, hoursPerPf, assumedTestSharePercent],
+    () => computeRealizedProductivity(indicatorActivities, hoursPerPf, assumedTestSharePercent),
+    [indicatorActivities, hoursPerPf, assumedTestSharePercent],
   );
-  const people = useMemo(() => computePersonSummaries(filtered), [filtered]);
+  const people = useMemo(() => computePersonSummaries(indicatorActivities), [indicatorActivities]);
   const hoursPerPfByDeveloper = useMemo(
-    () => computeHoursPerPfByDeveloper(filtered, 100 - assumedTestSharePercent),
-    [filtered, assumedTestSharePercent],
+    () => computeHoursPerPfByDeveloper(indicatorActivities, 100 - assumedTestSharePercent),
+    [indicatorActivities, assumedTestSharePercent],
   );
-  const sprintSummaries = useMemo(() => computeSprintSummaries(filtered), [filtered]);
-  const statusSummaries = useMemo(() => computeStatusSummaries(filtered), [filtered]);
-  const topBuggy = useMemo(() => topActivitiesByBugCount(filtered, 10), [filtered]);
-  const bugLabelSummaries = useMemo(() => computeBugLabelSummaries(filtered), [filtered]);
+  const sprintSummaries = useMemo(() => computeSprintSummaries(indicatorActivities), [indicatorActivities]);
+  const statusSummaries = useMemo(() => computeStatusSummaries(indicatorActivities), [indicatorActivities]);
+  const topBuggy = useMemo(() => topActivitiesByBugCount(indicatorActivities, 10), [indicatorActivities]);
+  const bugLabelSummaries = useMemo(() => computeBugLabelSummaries(indicatorActivities), [indicatorActivities]);
   const hoursSummary = useMemo(
-    () => computeHoursSummary(filtered, hoursPerPf, assumedTestSharePercent),
-    [filtered, hoursPerPf, assumedTestSharePercent],
+    () => computeHoursSummary(indicatorActivities, hoursPerPf, assumedTestSharePercent),
+    [indicatorActivities, hoursPerPf, assumedTestSharePercent],
   );
 
   const atRisk = filtered.filter((a) => a.isOverdue);
@@ -89,14 +96,27 @@ export default function IndicatorsView({
         </p>
       </div>
 
+      <label
+        style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--text-secondary)', cursor: 'pointer' }}
+        title="Quando desmarcado (padrão), os indicadores abaixo ignoram tarefas herdadas de sprints anteriores — elas costumam ficar muito tempo paradas antes da entrega e distorcem o cálculo. Exceções: os cards &quot;Em risco&quot;/&quot;Herdadas&quot;, e as seções &quot;Atividades em risco&quot; e &quot;Tarefas herdadas&quot; sempre mostram todas as atividades, com ou sem herdadas."
+      >
+        <input
+          type="checkbox"
+          checked={considerCarried}
+          onChange={(e) => setConsiderCarried(e.target.checked)}
+          style={{ cursor: 'pointer' }}
+        />
+        Considerar herdadas nos indicadores
+      </label>
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <Section title="Visão geral">
       <div style={KPI_GRID_STYLE}>
         <Kpi label="Atividades" value={kpis.totalActivities} />
         <Kpi label="Story points totais" value={kpis.totalStoryPoints} />
         <Kpi label="Concluídas" value={kpis.doneCount} suffix={`/${kpis.totalActivities}`} accent="var(--status-good)" />
-        <Kpi label="Em risco" value={kpis.atRiskCount} suffix={`/${kpis.totalActivities}`} accent="var(--status-critical)" />
-        <Kpi label="Herdadas" value={kpis.carriedCount} suffix={`/${kpis.totalActivities}`} accent="var(--status-warning)" />
+        <Kpi label="Em risco" value={kpisFull.atRiskCount} suffix={`/${kpisFull.totalActivities}`} accent="var(--status-critical)" />
+        <Kpi label="Herdadas" value={kpisFull.carriedCount} suffix={`/${kpisFull.totalActivities}`} accent="var(--status-warning)" />
         <Kpi label="Tarefas adicionadas" value={kpis.addedLateCount} suffix={`/${kpis.totalActivities}`} accent="var(--status-warning)" />
         <Kpi label="Pontos adicionados" value={kpis.addedLateStoryPoints} accent="var(--status-warning)" />
         <Kpi label="Em andamento (no prazo)" value={kpis.inProgressOnTimeCount} />
@@ -271,19 +291,6 @@ export default function IndicatorsView({
       </div>
       </Section>
       </div>
-
-        <label
-          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--text-secondary)', cursor: 'pointer' }}
-          title="Quando desmarcado (padrão), os indicadores de Horas/PF e % de Assertividade acima ignoram tarefas herdadas de sprints anteriores — elas costumam ficar muito tempo paradas antes da entrega e distorcem o cálculo."
-        >
-          <input
-            type="checkbox"
-            checked={considerCarriedInProductivity}
-            onChange={(e) => setConsiderCarriedInProductivity(e.target.checked)}
-            style={{ cursor: 'pointer' }}
-          />
-          Considerar herdadas nos indicadores de Horas/PF e % de Assertividade
-        </label>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start', marginTop: 8 }}>
           <Section title="Atividades por status">
