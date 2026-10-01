@@ -16,6 +16,8 @@ export interface AppConfig {
   lastTestDay: string | null;
   /** Data (YYYY-MM-DD) do dia da publicação. Nulo = não configurado, régua não aparece. */
   publishDay: string | null;
+  /** Busca os dados do Jira automaticamente a cada 5 minutos. Nulo usa o padrão do sistema (ligado). */
+  autoRefreshEnabled: boolean | null;
 }
 
 export async function readConfig(configPath: string): Promise<AppConfig> {
@@ -32,6 +34,7 @@ export async function readConfig(configPath: string): Promise<AppConfig> {
       lastPublishDay: parsed.lastPublishDay ?? null,
       lastTestDay: parsed.lastTestDay ?? null,
       publishDay: parsed.publishDay ?? null,
+      autoRefreshEnabled: parsed.autoRefreshEnabled ?? null,
     };
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -45,6 +48,7 @@ export async function readConfig(configPath: string): Promise<AppConfig> {
         lastPublishDay: null,
         lastTestDay: null,
         publishDay: null,
+        autoRefreshEnabled: null,
       };
     }
     throw err;

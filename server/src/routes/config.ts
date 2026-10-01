@@ -14,6 +14,7 @@ function toPublicConfig(config: AppConfig) {
     lastPublishDay: config.lastPublishDay ?? null,
     lastTestDay: config.lastTestDay ?? null,
     publishDay: config.publishDay ?? null,
+    autoRefreshEnabled: config.autoRefreshEnabled ?? true,
   };
 }
 
@@ -109,6 +110,9 @@ export function configRouter(configPath: string): Router {
       return;
     }
 
+    const autoRefreshEnabled =
+      req.body?.autoRefreshEnabled === undefined ? (existing.autoRefreshEnabled ?? true) : Boolean(req.body.autoRefreshEnabled);
+
     const next = {
       vertical,
       jiraUsername,
@@ -119,6 +123,7 @@ export function configRouter(configPath: string): Router {
       lastPublishDay: lastPublishDay.value,
       lastTestDay: lastTestDay.value,
       publishDay: publishDay.value,
+      autoRefreshEnabled,
     };
     await writeConfig(configPath, next);
     res.json(toPublicConfig(next));

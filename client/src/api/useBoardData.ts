@@ -5,7 +5,7 @@ import type { BoardDataResponse } from '../types.js';
 export const AUTO_REFRESH_SECONDS = 5 * 60;
 const PROGRESS_POLL_MS = 800;
 
-export function useBoardData() {
+export function useBoardData(autoRefreshEnabled: boolean) {
   const [data, setData] = useState<BoardDataResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,8 +50,10 @@ export function useBoardData() {
     refresh();
   }, [refresh]);
 
-  // Busca os dados de novo automaticamente a cada AUTO_REFRESH_SECONDS, mesmo sem ação do usuário.
+  // Busca os dados de novo automaticamente a cada AUTO_REFRESH_SECONDS, mesmo sem ação do usuário —
+  // a menos que o usuário tenha desligado o auto-refresh nas configurações.
   useEffect(() => {
+    if (!autoRefreshEnabled) return;
     const interval = setInterval(() => {
       setSecondsToNextRefresh((prev) => {
         if (prev <= 1) {
@@ -62,7 +64,7 @@ export function useBoardData() {
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [refresh]);
+  }, [refresh, autoRefreshEnabled]);
 
   return { data, loading, error, refresh, secondsToNextRefresh, progressMessages };
 }

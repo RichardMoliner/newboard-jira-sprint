@@ -19,7 +19,6 @@ export default function BoardScreen({
   theme: Theme;
   onToggleTheme: () => void;
 }) {
-  const { data, loading, error, refresh, secondsToNextRefresh, progressMessages } = useBoardData();
   const [tab, setTab] = useState<Tab>('timeline');
   const [sprintFilter, setSprintFilter] = useState<string[]>([]);
   const [dashDelayBar, setDashDelayBar] = useState(false);
@@ -28,11 +27,14 @@ export default function BoardScreen({
     lastTestDay: null,
     publishDay: null,
   });
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const { data, loading, error, refresh, secondsToNextRefresh, progressMessages } = useBoardData(autoRefreshEnabled);
 
   useEffect(() => {
     getConfig().then((config) => {
       setDashDelayBar(config.dashDelayBar);
       setDeadlines({ lastPublishDay: config.lastPublishDay, lastTestDay: config.lastTestDay, publishDay: config.publishDay });
+      setAutoRefreshEnabled(config.autoRefreshEnabled);
     });
   }, []);
 
@@ -78,7 +80,7 @@ export default function BoardScreen({
             {data ? (
               <>
                 Atualizado às {formatTime(data.generatedAt)}
-                {!loading && ` · Próxima em ${formatCountdown(secondsToNextRefresh)}`}
+                {!loading && (autoRefreshEnabled ? ` · Próxima em ${formatCountdown(secondsToNextRefresh)}` : ' · Auto-atualização desligada')}
               </>
             ) : loading ? (
               'Buscando dados do Jira...'

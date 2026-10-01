@@ -27,6 +27,7 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
   const [lastPublishDay, setLastPublishDay] = useState('');
   const [lastTestDay, setLastTestDay] = useState('');
   const [publishDay, setPublishDay] = useState('');
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hoursPerDayClock = formatHoursAsClock(hoursPerDay);
@@ -45,6 +46,7 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
       setLastPublishDay(config.lastPublishDay ?? '');
       setLastTestDay(config.lastTestDay ?? '');
       setPublishDay(config.publishDay ?? '');
+      setAutoRefreshEnabled(config.autoRefreshEnabled);
     });
   }, []);
 
@@ -83,6 +85,7 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
         lastPublishDay: lastPublishDay || null,
         lastTestDay: lastTestDay || null,
         publishDay: publishDay || null,
+        autoRefreshEnabled,
       });
       onSaved(config.vertical!);
     } catch (err) {
@@ -197,6 +200,16 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
             style={{ cursor: 'pointer' }}
           />
           Tracejar barra de atraso
+        </label>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
+          <input
+            type="checkbox"
+            checked={autoRefreshEnabled}
+            onChange={(e) => setAutoRefreshEnabled(e.target.checked)}
+            style={{ cursor: 'pointer' }}
+          />
+          Atualizar automaticamente a cada 5 minutos
         </label>
 
         <Field label="Último dia implementação">

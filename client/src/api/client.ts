@@ -22,6 +22,7 @@ export interface AppConfig {
   lastPublishDay: string | null;
   lastTestDay: string | null;
   publishDay: string | null;
+  autoRefreshEnabled: boolean;
 }
 
 export interface SaveConfigInput {
@@ -35,6 +36,7 @@ export interface SaveConfigInput {
   lastPublishDay: string | null;
   lastTestDay: string | null;
   publishDay: string | null;
+  autoRefreshEnabled: boolean;
 }
 
 export function getConfig(): Promise<AppConfig> {

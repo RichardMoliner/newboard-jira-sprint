@@ -29,6 +29,7 @@ describe('configStore', () => {
       lastPublishDay: null,
       lastTestDay: null,
       publishDay: null,
+      autoRefreshEnabled: null,
     });
   });
 
@@ -44,6 +45,7 @@ describe('configStore', () => {
       lastPublishDay: '2026-10-01',
       lastTestDay: '2026-10-03',
       publishDay: '2026-10-05',
+      autoRefreshEnabled: false,
     });
     expect(await readConfig(configPath)).toEqual({
       vertical: 'CONTRATOS',
@@ -55,6 +57,7 @@ describe('configStore', () => {
       lastPublishDay: '2026-10-01',
       lastTestDay: '2026-10-03',
       publishDay: '2026-10-05',
+      autoRefreshEnabled: false,
     });
   });
 
@@ -70,6 +73,7 @@ describe('configStore', () => {
       lastPublishDay: '2026-10-01',
       lastTestDay: '2026-10-03',
       publishDay: '2026-10-05',
+      autoRefreshEnabled: false,
     });
     await writeConfig(configPath, {
       vertical: 'FINANCAS',
@@ -81,6 +85,7 @@ describe('configStore', () => {
       lastPublishDay: null,
       lastTestDay: null,
       publishDay: null,
+      autoRefreshEnabled: true,
     });
     expect(await readConfig(configPath)).toEqual({
       vertical: 'FINANCAS',
@@ -92,6 +97,7 @@ describe('configStore', () => {
       lastPublishDay: null,
       lastTestDay: null,
       publishDay: null,
+      autoRefreshEnabled: true,
     });
   });
 });
