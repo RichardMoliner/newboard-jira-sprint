@@ -223,35 +223,21 @@ export interface StatusSummary {
 
 /** Ordem natural do fluxo de trabalho — status fora dessa lista (tipicamente o status real do Jira
  * quando a atividade está concluída, ex.: "Atendida", "Cancelada") entram depois, por quantidade. */
-const STATUS_ORDER = ['Ainda não iniciada', 'Em andamento', 'Ag. início dos testes', 'Em testes', 'Aguardando liberação', 'Correção de bugs'];
-
-function normalizeStatusText(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase();
-}
-
-/** True quando a atividade tem algum bug ainda não "Atendida" — mesmo critério do badge "Atuando em bugs" da timeline. */
-function hasOpenBug(activity: Activity): boolean {
-  return activity.bugs.some((bug) => normalizeStatusText(bug.status) !== 'atendida');
-}
+const STATUS_ORDER = ['Ainda não iniciada', 'Em andamento', 'Ag. início dos testes', 'Em testes', 'Aguardando liberação'];
 
 /**
  * Agrupa atividades pelo mesmo status exibido no badge da timeline: "Ainda não iniciada" quando
  * ainda não há subtarefa de Implementação, senão o status derivado da atividade (que já cobre Em
  * andamento/Ag. início dos testes/Em testes/Aguardando liberação/o status real do Jira quando
- * concluída — ver mapActivity no server).
+ * concluída — ver mapActivity no server). Não reclassifica por ter bug aberto: o badge da timeline
+ * nunca muda por causa de bug, então a pizza também não deve mudar — senão a contagem de um status
+ * (ex.: "Aguardando liberação") deixa de bater com a lista de atividades.
  */
 export function computeStatusSummaries(activities: Activity[]): StatusSummary[] {
   const byStatus = new Map<string, StatusSummary>();
 
   for (const activity of activities) {
-    const status = activity.notStarted
-      ? 'Ainda não iniciada'
-      : !activity.isDone && hasOpenBug(activity)
-        ? 'Correção de bugs'
-        : activity.status;
+    const status = activity.notStarted ? 'Ainda não iniciada' : activity.status;
     const current = byStatus.get(status) ?? { status, activities: 0, storyPoints: 0, atRisk: 0 };
 
     current.activities += 1;

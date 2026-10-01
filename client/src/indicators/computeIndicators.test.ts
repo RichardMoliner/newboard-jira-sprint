@@ -526,15 +526,15 @@ describe('computeStatusSummaries', () => {
     return { key: 'B-1', title: 'Bug', developer: null, status: 'Em correção', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels: [], ...overrides };
   }
 
-  test('groups an in-progress activity with an open bug under "Correção de bugs" instead of its normal status', () => {
+  test('keeps an in-progress activity under its normal status even with an open bug — matches the timeline badge, which never shows a bug-specific status', () => {
     const activities = [activity({ key: 'A', status: 'Em testes', bugs: [openBug()] })];
 
     const summaries = computeStatusSummaries(activities);
 
-    expect(summaries).toEqual([{ status: 'Correção de bugs', activities: 1, storyPoints: 5, atRisk: 0 }]);
+    expect(summaries).toEqual([{ status: 'Em testes', activities: 1, storyPoints: 5, atRisk: 0 }]);
   });
 
-  test('does not group under "Correção de bugs" when every bug is already resolved ("Atendida")', () => {
+  test('still counts activities with a resolved bug ("Atendida") under their normal status', () => {
     const activities = [activity({ key: 'A', status: 'Em testes', bugs: [openBug({ status: 'Atendida' })] })];
 
     const summaries = computeStatusSummaries(activities);
@@ -556,19 +556,6 @@ describe('computeStatusSummaries', () => {
     const summaries = computeStatusSummaries(activities);
 
     expect(summaries.map((s) => s.status)).toEqual(['Ainda não iniciada']);
-  });
-
-  test('orders "Correção de bugs" as part of the known workflow order', () => {
-    const activities = [
-      activity({ key: 'A', isDone: true, status: 'Atendida' }),
-      activity({ key: 'B', status: 'Aguardando liberação' }),
-      activity({ key: 'C', status: 'Em testes', bugs: [openBug()] }),
-      activity({ key: 'D', status: 'Em andamento' }),
-    ];
-
-    const summaries = computeStatusSummaries(activities);
-
-    expect(summaries.map((s) => s.status)).toEqual(['Em andamento', 'Aguardando liberação', 'Correção de bugs', 'Atendida']);
   });
 });
 
