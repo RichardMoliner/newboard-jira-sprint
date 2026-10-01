@@ -19,6 +19,9 @@ export interface AppConfig {
   hoursPerPf: number;
   hoursPerDay: number;
   dashDelayBar: boolean;
+  lastPublishDay: string | null;
+  lastTestDay: string | null;
+  publishDay: string | null;
 }
 
 export interface SaveConfigInput {
@@ -29,6 +32,9 @@ export interface SaveConfigInput {
   hoursPerPf: number;
   hoursPerDay: number;
   dashDelayBar: boolean;
+  lastPublishDay: string | null;
+  lastTestDay: string | null;
+  publishDay: string | null;
 }
 
 export function getConfig(): Promise<AppConfig> {

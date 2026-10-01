@@ -10,6 +10,12 @@ export interface AppConfig {
   hoursPerDay: number | null;
   /** Tracejar em vermelho a parte da barra que representa atraso. Nulo usa o padrão do sistema (desligado). */
   dashDelayBar: boolean | null;
+  /** Data (YYYY-MM-DD) do último dia de publicação. Nulo = não configurado, régua não aparece. */
+  lastPublishDay: string | null;
+  /** Data (YYYY-MM-DD) do último dia de testes. Nulo = não configurado, régua não aparece. */
+  lastTestDay: string | null;
+  /** Data (YYYY-MM-DD) do dia da publicação. Nulo = não configurado, régua não aparece. */
+  publishDay: string | null;
 }
 
 export async function readConfig(configPath: string): Promise<AppConfig> {
@@ -23,10 +29,23 @@ export async function readConfig(configPath: string): Promise<AppConfig> {
       hoursPerPf: parsed.hoursPerPf ?? null,
       hoursPerDay: parsed.hoursPerDay ?? null,
       dashDelayBar: parsed.dashDelayBar ?? null,
+      lastPublishDay: parsed.lastPublishDay ?? null,
+      lastTestDay: parsed.lastTestDay ?? null,
+      publishDay: parsed.publishDay ?? null,
     };
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return { vertical: null, jiraUsername: null, jiraPassword: null, hoursPerPf: null, hoursPerDay: null, dashDelayBar: null };
+      return {
+        vertical: null,
+        jiraUsername: null,
+        jiraPassword: null,
+        hoursPerPf: null,
+        hoursPerDay: null,
+        dashDelayBar: null,
+        lastPublishDay: null,
+        lastTestDay: null,
+        publishDay: null,
+      };
     }
     throw err;
   }

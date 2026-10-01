@@ -120,3 +120,17 @@ body {
 .timeline-row:hover > .timeline-row-bars {
   background-color: color-mix(in srgb, var(--series-impl) 12%, var(--surface-1)) !important;
 }
+
+@keyframes deadline-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.deadline-ruler {
+  animation: deadline-pulse 1.4s ease-in-out infinite;
+}

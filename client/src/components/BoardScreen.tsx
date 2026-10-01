@@ -23,9 +23,17 @@ export default function BoardScreen({
   const [tab, setTab] = useState<Tab>('timeline');
   const [sprintFilter, setSprintFilter] = useState<string[]>([]);
   const [dashDelayBar, setDashDelayBar] = useState(false);
+  const [deadlines, setDeadlines] = useState<{ lastPublishDay: string | null; lastTestDay: string | null; publishDay: string | null }>({
+    lastPublishDay: null,
+    lastTestDay: null,
+    publishDay: null,
+  });
 
   useEffect(() => {
-    getConfig().then((config) => setDashDelayBar(config.dashDelayBar));
+    getConfig().then((config) => {
+      setDashDelayBar(config.dashDelayBar);
+      setDeadlines({ lastPublishDay: config.lastPublishDay, lastTestDay: config.lastTestDay, publishDay: config.publishDay });
+    });
   }, []);
 
   // Clique normal seleciona só aquela sprint; shift+clique soma/remove da seleção atual,
@@ -119,6 +127,7 @@ export default function BoardScreen({
                 sprintFilter={sprintFilter}
                 onSprintClick={handleSprintClick}
                 dashDelayBar={dashDelayBar}
+                deadlines={deadlines}
               />
             </div>
           ) : (

@@ -24,6 +24,9 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
   const [hoursPerPf, setHoursPerPf] = useState('');
   const [hoursPerDay, setHoursPerDay] = useState('');
   const [dashDelayBar, setDashDelayBar] = useState(false);
+  const [lastPublishDay, setLastPublishDay] = useState('');
+  const [lastTestDay, setLastTestDay] = useState('');
+  const [publishDay, setPublishDay] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hoursPerDayClock = formatHoursAsClock(hoursPerDay);
@@ -39,6 +42,9 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
       setHoursPerPf(String(Math.round(config.hoursPerPf * 100) / 100));
       setHoursPerDay(String(Math.round(config.hoursPerDay * 100) / 100));
       setDashDelayBar(config.dashDelayBar);
+      setLastPublishDay(config.lastPublishDay ?? '');
+      setLastTestDay(config.lastTestDay ?? '');
+      setPublishDay(config.publishDay ?? '');
     });
   }, []);
 
@@ -74,6 +80,9 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
         hoursPerPf: parsedHoursPerPf,
         hoursPerDay: parsedHoursPerDay,
         dashDelayBar,
+        lastPublishDay: lastPublishDay || null,
+        lastTestDay: lastTestDay || null,
+        publishDay: publishDay || null,
       });
       onSaved(config.vertical!);
     } catch (err) {
@@ -189,6 +198,18 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
           />
           Tracejar barra de atraso
         </label>
+
+        <Field label="Último dia implementação">
+          <input type="date" value={lastPublishDay} onChange={(e) => setLastPublishDay(e.target.value)} style={inputStyle} />
+        </Field>
+
+        <Field label="Último dia de testes">
+          <input type="date" value={lastTestDay} onChange={(e) => setLastTestDay(e.target.value)} style={inputStyle} />
+        </Field>
+
+        <Field label="Dia da publicação">
+          <input type="date" value={publishDay} onChange={(e) => setPublishDay(e.target.value)} style={inputStyle} />
+        </Field>
 
         {error && <p style={{ color: 'var(--status-critical)', fontSize: 13, margin: 0 }}>{error}</p>}
 

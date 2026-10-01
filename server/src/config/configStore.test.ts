@@ -26,6 +26,9 @@ describe('configStore', () => {
       hoursPerPf: null,
       hoursPerDay: null,
       dashDelayBar: null,
+      lastPublishDay: null,
+      lastTestDay: null,
+      publishDay: null,
     });
   });
 
@@ -38,6 +41,9 @@ describe('configStore', () => {
       hoursPerPf: 6,
       hoursPerDay: 8,
       dashDelayBar: true,
+      lastPublishDay: '2026-10-01',
+      lastTestDay: '2026-10-03',
+      publishDay: '2026-10-05',
     });
     expect(await readConfig(configPath)).toEqual({
       vertical: 'CONTRATOS',
@@ -46,6 +52,9 @@ describe('configStore', () => {
       hoursPerPf: 6,
       hoursPerDay: 8,
       dashDelayBar: true,
+      lastPublishDay: '2026-10-01',
+      lastTestDay: '2026-10-03',
+      publishDay: '2026-10-05',
     });
   });
 
@@ -58,6 +67,9 @@ describe('configStore', () => {
       hoursPerPf: 6,
       hoursPerDay: 8,
       dashDelayBar: true,
+      lastPublishDay: '2026-10-01',
+      lastTestDay: '2026-10-03',
+      publishDay: '2026-10-05',
     });
     await writeConfig(configPath, {
       vertical: 'FINANCAS',
@@ -66,6 +78,9 @@ describe('configStore', () => {
       hoursPerPf: 8,
       hoursPerDay: 6,
       dashDelayBar: false,
+      lastPublishDay: null,
+      lastTestDay: null,
+      publishDay: null,
     });
     expect(await readConfig(configPath)).toEqual({
       vertical: 'FINANCAS',
@@ -74,6 +89,9 @@ describe('configStore', () => {
       hoursPerPf: 8,
       hoursPerDay: 6,
       dashDelayBar: false,
+      lastPublishDay: null,
+      lastTestDay: null,
+      publishDay: null,
     });
   });
 });

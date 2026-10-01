@@ -7,15 +7,31 @@ import {
   computeTestFillRange,
   dayFillRatio,
   formatConsumedPercent,
+  formatFullDate,
   formatStatusBreakdownTooltip,
   groupBugsByArtifact,
+  groupDeadlineBadges,
   isDeveloperAvailable,
   isWorkingOnBugs,
   lastWorklogDate,
   matchesLegendFilter,
   projectTestWindow,
+  resolveDeadlineRulers,
+  type DeadlineRuler,
 } from './TimelineView.js';
-import type { Activity, BugSubtask, WorklogEntry } from '../types.js';
+import type { Activity, BugSubtask, SprintInfo, WorklogEntry } from '../types.js';
+
+function sprintInfo(overrides: Partial<SprintInfo>): SprintInfo {
+  return {
+    id: 'S1',
+    name: 'Sprint 1',
+    startDate: '2026-09-01',
+    endDate: '2026-09-15',
+    startDateTime: '2026-09-01T00:00:00.000-03:00',
+    endDateTime: '2026-09-15T23:59:00.000-03:00',
+    ...overrides,
+  };
+}
 
 function entry(overrides: Partial<WorklogEntry>): WorklogEntry {
   return {
@@ -653,5 +669,110 @@ describe('groupBugsByArtifact', () => {
     const resolved = bug({ key: 'B2', artifact: 'requisito', status: 'Atendida' });
     const groups = groupBugsByArtifact([unresolved, resolved]);
     expect(groups[0].bugs.map((b) => b.key)).toEqual(['B2', 'B1']);
+  });
+});
+
+describe('formatFullDate', () => {
+  test('formats an ISO date as DD/MM/YYYY', () => {
+    expect(formatFullDate('2026-10-05')).toBe('05/10/2026');
+  });
+});
+
+describe('resolveDeadlineRulers', () => {
+  const deadlines = { lastPublishDay: '2026-09-10', lastTestDay: '2026-09-12', publishDay: '2026-09-15' };
+
+  test('returns nothing when the switch is off, regardless of configured dates', () => {
+    expect(resolveDeadlineRulers(false, deadlines, [], [])).toEqual([]);
+  });
+
+  test('returns the 3 configured deadlines when the switch is on and no sprint is selected', () => {
+    const rulers = resolveDeadlineRulers(true, deadlines, [], []);
+    expect(rulers.map((r) => r.key)).toEqual(['lastPublishDay', 'lastTestDay', 'publishDay']);
+    expect(rulers.map((r) => r.date)).toEqual(['2026-09-10', '2026-09-12', '2026-09-15']);
+  });
+
+  test('omits a deadline ruler whose date is not configured', () => {
+    const rulers = resolveDeadlineRulers(true, { ...deadlines, lastTestDay: null }, [], []);
+    expect(rulers.map((r) => r.key)).toEqual(['lastPublishDay', 'publishDay']);
+  });
+
+  test('adds a 4th ruler for the sprint end date when exactly one sprint is selected', () => {
+    const sprints = [sprintInfo({ id: 'S1', name: 'Sprint 1', endDate: '2026-09-20' })];
+    const rulers = resolveDeadlineRulers(true, deadlines, ['S1'], sprints);
+    expect(rulers.map((r) => r.key)).toEqual(['lastPublishDay', 'lastTestDay', 'publishDay', 'sprintEnd']);
+    expect(rulers[3].date).toBe('2026-09-20');
+  });
+
+  test('does not add the sprint end ruler when no sprint or more than one sprint is selected', () => {
+    const sprints = [sprintInfo({ id: 'S1', endDate: '2026-09-20' }), sprintInfo({ id: 'S2', endDate: '2026-10-05' })];
+    expect(resolveDeadlineRulers(true, deadlines, [], sprints).some((r) => r.key === 'sprintEnd')).toBe(false);
+    expect(resolveDeadlineRulers(true, deadlines, ['S1', 'S2'], sprints).some((r) => r.key === 'sprintEnd')).toBe(false);
+  });
+
+  test('gives each ruler a distinct color and only the sprint end ruler pulses', () => {
+    const sprints = [sprintInfo({ id: 'S1', endDate: '2026-09-20' })];
+    const rulers = resolveDeadlineRulers(true, deadlines, ['S1'], sprints);
+    const byKey = Object.fromEntries(rulers.map((r) => [r.key, r]));
+    expect(byKey.lastPublishDay).toMatchObject({ color: 'var(--text-muted)', pulse: false });
+    expect(byKey.lastTestDay).toMatchObject({ color: 'var(--series-test)', pulse: false });
+    expect(byKey.publishDay).toMatchObject({ color: 'var(--status-critical)', pulse: false });
+    expect(byKey.sprintEnd).toMatchObject({ color: 'var(--status-good)', pulse: true });
+  });
+
+  test('the 3 configured deadlines render as badges; only the sprint end ruler renders as a bar', () => {
+    const sprints = [sprintInfo({ id: 'S1', endDate: '2026-09-20' })];
+    const rulers = resolveDeadlineRulers(true, deadlines, ['S1'], sprints);
+    const byKey = Object.fromEntries(rulers.map((r) => [r.key, r]));
+    expect(byKey.lastPublishDay).toMatchObject({ display: 'badge', badgeText: 'ddl imp', label: 'Último dia implementação' });
+    expect(byKey.lastTestDay).toMatchObject({ display: 'badge', badgeText: 'ddl qa' });
+    expect(byKey.publishDay).toMatchObject({ display: 'badge', badgeText: 'deploy' });
+    expect(byKey.sprintEnd).toMatchObject({ display: 'bar' });
+  });
+});
+
+describe('groupDeadlineBadges', () => {
+  function ruler(overrides: Partial<DeadlineRuler>): DeadlineRuler {
+    return {
+      key: 'lastPublishDay',
+      label: 'Último dia implementação',
+      date: '2026-09-10',
+      color: 'var(--text-muted)',
+      pulse: false,
+      display: 'badge',
+      badgeText: 'ddl imp',
+      ...overrides,
+    };
+  }
+
+  test('groups badge rulers by their exact date when it is a visible business day', () => {
+    const dayIndexByDate = new Map([
+      ['2026-09-10', 0],
+      ['2026-09-11', 1],
+    ]);
+    const groups = groupDeadlineBadges([ruler({ date: '2026-09-10' })], dayIndexByDate);
+    expect(groups).toEqual([{ date: '2026-09-10', badges: [ruler({ date: '2026-09-10' })] }]);
+  });
+
+  test('snaps a weekend date forward to the next visible business day, same as the ruler bars do', () => {
+    // 2026-09-12 is a Saturday; next business day in the map is Monday 2026-09-14.
+    const dayIndexByDate = new Map([
+      ['2026-09-11', 0],
+      ['2026-09-14', 1],
+    ]);
+    const groups = groupDeadlineBadges([ruler({ key: 'lastTestDay', badgeText: 'ddl qa', date: '2026-09-12' })], dayIndexByDate);
+    expect(groups).toEqual([{ date: '2026-09-14', badges: [ruler({ key: 'lastTestDay', badgeText: 'ddl qa', date: '2026-09-12' })] }]);
+  });
+
+  test('stacks multiple badges that land on the same visible day, preserving ruler order', () => {
+    const dayIndexByDate = new Map([['2026-09-10', 0]]);
+    const a = ruler({ key: 'lastPublishDay', badgeText: 'ddl imp', date: '2026-09-10' });
+    const b = ruler({ key: 'publishDay', badgeText: 'deploy', date: '2026-09-10', color: 'var(--status-critical)' });
+    expect(groupDeadlineBadges([a, b], dayIndexByDate)).toEqual([{ date: '2026-09-10', badges: [a, b] }]);
+  });
+
+  test('ignores bar-display rulers (e.g. sprint end) entirely', () => {
+    const dayIndexByDate = new Map([['2026-09-10', 0]]);
+    const bar = ruler({ key: 'sprintEnd', display: 'bar', badgeText: '', date: '2026-09-10' });
+    expect(groupDeadlineBadges([bar], dayIndexByDate)).toEqual([]);
   });
 });

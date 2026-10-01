@@ -17,6 +17,8 @@ const TEST_BAND_TOP = PHASE_BAND_HEIGHT + PHASE_BAND_GAP;
 // Espaço em branco reservado após o último dia real, para garantir que dê para rolar até o
 // início do mês atual mesmo quando ele estiver perto do fim do período (poucos dias futuros).
 const RIGHT_SCROLL_BUFFER = 3200;
+// Altura de cada badge de deadline empilhado embaixo do dia no cabeçalho (ex.: "ddl imp", "ddl qa").
+const DEADLINE_BADGE_ROW_HEIGHT = 13;
 
 const MONTH_ABBREV = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
@@ -94,6 +96,7 @@ export default function TimelineView({
   sprintFilter,
   onSprintClick,
   dashDelayBar,
+  deadlines,
 }: {
   activities: Activity[];
   sprints: SprintInfo[];
@@ -102,12 +105,14 @@ export default function TimelineView({
   sprintFilter: string[];
   onSprintClick: (id: string, shiftKey: boolean) => void;
   dashDelayBar: boolean;
+  deadlines: { lastPublishDay: string | null; lastTestDay: string | null; publishDay: string | null };
 }) {
   const [expandedBugs, setExpandedBugs] = useState<Set<string>>(new Set());
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
   const [dayWidth, setDayWidth] = useState(MIN_COLUMN_WIDTH);
   const [searchQuery, setSearchQuery] = useState('');
   const [hideDone, setHideDone] = useState(false);
+  const [deadlinesActive, setDeadlinesActive] = useState(false);
   // Filtro por clique na legenda: Implementação/Teste isolam uma fase (mutuamente exclusivas entre
   // si); Bug/Atraso são toggles independentes que se combinam entre si e com a fase (E lógico).
   const [phaseFilter, setPhaseFilter] = useState<'impl' | 'test' | null>(null);
@@ -153,10 +158,27 @@ export default function TimelineView({
     return { completion: computeSprintCompletion(selectedActivities), tooltip: formatStatusBreakdownTooltip(selectedActivities) };
   }, [activities, sprintFilter]);
 
-  const { minDate, maxDate } = useMemo(() => computeDomain(activities, sprints, today), [activities, sprints, today]);
+  const deadlineRulers = useMemo(
+    () => resolveDeadlineRulers(deadlinesActive, deadlines, sprintFilter, sprints),
+    [deadlinesActive, deadlines, sprintFilter, sprints],
+  );
+
+  const { minDate, maxDate } = useMemo(
+    () => computeDomain(activities, sprints, today, deadlineRulers.map((r) => r.date)),
+    [activities, sprints, today, deadlineRulers],
+  );
   const days = useMemo(() => buildDayList(minDate, maxDate, today), [minDate, maxDate, today]);
   const dayIndexByDate = useMemo(() => new Map(days.map((d) => [d.date, d.index])), [days]);
   const currentMonthDays = useMemo(() => days.filter((d) => d.isCurrentMonth), [days]);
+
+  const deadlineBarRulers = useMemo(() => deadlineRulers.filter((r) => r.display === 'bar'), [deadlineRulers]);
+  const deadlineBadgeGroups = useMemo(() => groupDeadlineBadges(deadlineRulers, dayIndexByDate), [deadlineRulers, dayIndexByDate]);
+  const deadlineBadgesByDate = useMemo(() => new Map(deadlineBadgeGroups.map((g) => [g.date, g.badges])), [deadlineBadgeGroups]);
+  const maxDeadlineBadgeStack = useMemo(
+    () => deadlineBadgeGroups.reduce((max, g) => Math.max(max, g.badges.length), 0),
+    [deadlineBadgeGroups],
+  );
+  const dayHeaderHeight = 34 + maxDeadlineBadgeStack * DEADLINE_BADGE_ROW_HEIGHT;
 
   // Calcula a largura das colunas para que o mês atual (duração da sprint) preencha bem a tela
   // disponível, em vez de ficar com colunas estreitas de tamanho fixo em telas largas.
@@ -326,6 +348,7 @@ export default function TimelineView({
           )}
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginLeft: 'auto' }}>
             <SwitchPill active={hideDone} onClick={() => setHideDone((v) => !v)} label="Ocultar concluídas/Ag. liberação" />
+            <SwitchPill active={deadlinesActive} onClick={() => setDeadlinesActive((v) => !v)} label="Mostrar deadlines" />
             <div style={{ position: 'relative' }}>
               <input
                 value={searchQuery}
@@ -445,7 +468,16 @@ export default function TimelineView({
             >
               Atividade
             </div>
-            <div style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--surface-1)', height: 34, borderBottom: '1px solid var(--gridline)' }}>
+            <div
+              style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 2,
+                background: 'var(--surface-1)',
+                height: dayHeaderHeight,
+                borderBottom: '1px solid var(--gridline)',
+              }}
+            >
               {days.map((day) => (
                 <div
                   key={day.date}
@@ -481,6 +513,24 @@ export default function TimelineView({
                       {day.monthLabel}
                     </div>
                   )}
+                  {(deadlineBadgesByDate.get(day.date) ?? []).map((badge) => (
+                    <div
+                      key={badge.key}
+                      title={`${badge.label} (${formatFullDate(badge.date)})`}
+                      style={{
+                        fontSize: 7.5,
+                        fontWeight: 700,
+                        lineHeight: '10px',
+                        color: '#fff',
+                        background: badge.color,
+                        borderRadius: 3,
+                        padding: '1px 3px',
+                        margin: '2px 2px 0',
+                      }}
+                    >
+                      {badge.badgeText}
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
@@ -545,7 +595,7 @@ export default function TimelineView({
                   key={day.date}
                   style={{
                     position: 'absolute',
-                    top: 34,
+                    top: dayHeaderHeight,
                     bottom: 0,
                     left: LABEL_COL_WIDTH + day.index * dayPixelWidth,
                     width: 1,
@@ -567,6 +617,24 @@ export default function TimelineView({
               pointerEvents: 'none',
             }}
           />
+
+          {deadlineBarRulers.map((ruler) => (
+            <div
+              key={ruler.key}
+              className={ruler.pulse ? 'deadline-ruler' : undefined}
+              title={`${ruler.label} (${formatFullDate(ruler.date)})`}
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: LABEL_COL_WIDTH + x(ruler.date),
+                width: 2,
+                background: ruler.color,
+                pointerEvents: 'none',
+                zIndex: 3,
+              }}
+            />
+          ))}
 
           {hoverDate && hover && hoverColumnLeft !== null && (
             <>
@@ -1531,6 +1599,116 @@ function formatShort(iso: string): string {
   return `${d}/${m}`;
 }
 
+export function formatFullDate(iso: string): string {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+export interface DeadlineRuler {
+  key: string;
+  label: string;
+  date: string;
+  color: string;
+  pulse: boolean;
+  display: 'bar' | 'badge';
+  /** Texto curto exibido no badge embaixo do dia. Vazio quando display === 'bar'. */
+  badgeText: string;
+}
+
+/** Réguas de prazo exibidas na timeline quando "Mostrar deadlines" está ligado. */
+export function resolveDeadlineRulers(
+  deadlinesActive: boolean,
+  deadlines: { lastPublishDay: string | null; lastTestDay: string | null; publishDay: string | null },
+  sprintFilter: string[],
+  sprints: SprintInfo[],
+): DeadlineRuler[] {
+  if (!deadlinesActive) return [];
+
+  const rulers: DeadlineRuler[] = [];
+  if (deadlines.lastPublishDay) {
+    rulers.push({
+      key: 'lastPublishDay',
+      label: 'Último dia implementação',
+      date: deadlines.lastPublishDay,
+      color: 'var(--text-muted)',
+      pulse: false,
+      display: 'badge',
+      badgeText: 'ddl imp',
+    });
+  }
+  if (deadlines.lastTestDay) {
+    rulers.push({
+      key: 'lastTestDay',
+      label: 'Último dia de testes',
+      date: deadlines.lastTestDay,
+      color: 'var(--series-test)',
+      pulse: false,
+      display: 'badge',
+      badgeText: 'ddl qa',
+    });
+  }
+  if (deadlines.publishDay) {
+    rulers.push({
+      key: 'publishDay',
+      label: 'Dia da publicação',
+      date: deadlines.publishDay,
+      color: 'var(--status-critical)',
+      pulse: false,
+      display: 'badge',
+      badgeText: 'deploy',
+    });
+  }
+
+  if (sprintFilter.length === 1) {
+    const sprint = sprints.find((s) => s.id === sprintFilter[0]);
+    if (sprint) {
+      rulers.push({
+        key: 'sprintEnd',
+        label: `Fim da sprint "${sprint.name}"`,
+        date: sprint.endDate,
+        color: 'var(--status-good)',
+        pulse: true,
+        display: 'bar',
+        badgeText: '',
+      });
+    }
+  }
+
+  return rulers;
+}
+
+/**
+ * Agrupa as réguas em modo "badge" pelo dia útil visível em que devem aparecer — a mesma
+ * lógica de "cair num fim de semana/feriado, avança pro próximo dia útil" usada por `x()`, mas
+ * devolvendo a data em vez de um pixel, para posicionar o badge sob a coluna certa do cabeçalho.
+ */
+export function groupDeadlineBadges(
+  rulers: DeadlineRuler[],
+  dayIndexByDate: Map<string, number>,
+): { date: string; badges: DeadlineRuler[] }[] {
+  const groups = new Map<string, DeadlineRuler[]>();
+  for (const ruler of rulers) {
+    if (ruler.display !== 'badge') continue;
+    const visibleDate = resolveVisibleDate(ruler.date, dayIndexByDate);
+    if (visibleDate === null) continue;
+    const arr = groups.get(visibleDate) ?? [];
+    arr.push(ruler);
+    groups.set(visibleDate, arr);
+  }
+  return [...groups.entries()].map(([date, badges]) => ({ date, badges }));
+}
+
+/** Avança até o próximo dia útil visível no eixo (fim de semana/feriado caem no dia útil seguinte). */
+function resolveVisibleDate(dateISO: string, dayIndexByDate: Map<string, number>): string | null {
+  if (dayIndexByDate.has(dateISO)) return dateISO;
+  let cursor = dateISO;
+  for (let i = 0; i < 14; i++) {
+    cursor = addDays(cursor, 1);
+    if (dayIndexByDate.has(cursor)) return cursor;
+  }
+  return null;
+}
+
 function maxDateStr(a: string, b: string): string {
   return a > b ? a : b;
 }
@@ -1740,8 +1918,13 @@ function buildDayList(minDate: string, maxDate: string, todayISO: string): DayIn
  * dia (com rolagem horizontal), um período longo não esmaga as barras atuais
  * — o scroll inicial já foca em torno de hoje (ver useEffect no componente).
  */
-function computeDomain(activities: Activity[], sprints: SprintInfo[], today: string): { minDate: string; maxDate: string } {
-  const dates: string[] = [today, ...sprints.flatMap((s) => [s.startDate, s.endDate])];
+function computeDomain(
+  activities: Activity[],
+  sprints: SprintInfo[],
+  today: string,
+  extraDates: string[] = [],
+): { minDate: string; maxDate: string } {
+  const dates: string[] = [today, ...sprints.flatMap((s) => [s.startDate, s.endDate]), ...extraDates];
   for (const a of activities) {
     // Sem subtarefa de Implementação ainda, `startDate` é só a data de criação da story — não é
     // um início real e não deve esticar o período exibido no eixo de dias.
