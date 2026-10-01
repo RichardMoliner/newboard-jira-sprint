@@ -80,7 +80,7 @@ function isNegligibleWorklog(worklog: RawWorklogEntry): boolean {
 }
 
 /** Agrupa subtarefas (Implementação/Teste/Bug) buscadas em lote pela atividade (Story) pai. */
-export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
+export function groupSubtasks(subtasks: RawSubtask[], baseUrl = ''): GroupedSubtasks {
   const implStartByParent = new Map<string, string>();
   const implStatusesByParent = new Map<string, string[]>();
   const implUpdatedByParent = new Map<string, string>();
@@ -171,6 +171,7 @@ export function groupSubtasks(subtasks: RawSubtask[]): GroupedSubtasks {
         worklogEntries: bugWorklogEntries,
         artifact,
         labels: subtask.labels ?? [],
+        url: `${baseUrl}/browse/${subtask.key}`,
       };
       const list = bugsByParent.get(parentKey) ?? [];
       list.push(bug);

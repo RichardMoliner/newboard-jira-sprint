@@ -10,6 +10,7 @@ import {
   formatFullDate,
   formatStatusBreakdownTooltip,
   groupBugsByArtifact,
+  groupBugsByStatus,
   groupDeadlineBadges,
   isDeveloperAvailable,
   isWorkingOnBugs,
@@ -96,6 +97,7 @@ function bug(overrides: Partial<BugSubtask> = {}): BugSubtask {
     worklogEntries: [],
     artifact: null,
     labels: [],
+    url: 'https://jira.example.com/browse/EC-1983',
     ...overrides,
   };
 }
@@ -669,6 +671,52 @@ describe('groupBugsByArtifact', () => {
     const resolved = bug({ key: 'B2', artifact: 'requisito', status: 'Atendida' });
     const groups = groupBugsByArtifact([unresolved, resolved]);
     expect(groups[0].bugs.map((b) => b.key)).toEqual(['B2', 'B1']);
+  });
+});
+
+describe('groupBugsByStatus', () => {
+  test('returns an empty array for no bugs', () => {
+    expect(groupBugsByStatus([])).toEqual([]);
+  });
+
+  test('puts a bug with an active status (e.g. "Em correção") under "Em andamento", expanded by default', () => {
+    const groups = groupBugsByStatus([bug({ key: 'B1', status: 'Em correção' })]);
+    expect(groups).toEqual([{ key: 'em-andamento', label: 'Em andamento', collapsedByDefault: false, bugs: [expect.objectContaining({ key: 'B1' })] }]);
+  });
+
+  test('puts a bug with status "Não atendida" in its own group, expanded by default', () => {
+    const groups = groupBugsByStatus([bug({ key: 'B1', status: 'Não atendida' })]);
+    expect(groups).toEqual([{ key: 'nao-atendida', label: 'Não atendida', collapsedByDefault: false, bugs: [expect.objectContaining({ key: 'B1' })] }]);
+  });
+
+  test('puts a bug with status "Atendida" under "Atendidos", collapsed by default', () => {
+    const groups = groupBugsByStatus([bug({ key: 'B1', status: 'Atendida' })]);
+    expect(groups).toEqual([{ key: 'atendida', label: 'Atendidos', collapsedByDefault: true, bugs: [expect.objectContaining({ key: 'B1' })] }]);
+  });
+
+  test('treats other active statuses (e.g. "Em testes", "Disponível para testes") as "Em andamento" too', () => {
+    const groups = groupBugsByStatus([bug({ key: 'B1', status: 'Em testes' }), bug({ key: 'B2', status: 'Disponível para testes' })]);
+    expect(groups.map((g) => g.key)).toEqual(['em-andamento']);
+    expect(groups[0].bugs.map((b) => b.key)).toEqual(['B1', 'B2']);
+  });
+
+  test('omits a group entirely when it has no bugs', () => {
+    const groups = groupBugsByStatus([bug({ status: 'Atendida' })]);
+    expect(groups.map((g) => g.key)).toEqual(['atendida']);
+  });
+
+  test('orders groups as Em andamento, Não atendida, Atendidos regardless of input order', () => {
+    const groups = groupBugsByStatus([
+      bug({ key: 'B1', status: 'Atendida' }),
+      bug({ key: 'B2', status: 'Não atendida' }),
+      bug({ key: 'B3', status: 'Em correção' }),
+    ]);
+    expect(groups.map((g) => g.key)).toEqual(['em-andamento', 'nao-atendida', 'atendida']);
+  });
+
+  test('is case/accent-insensitive when matching status text', () => {
+    const groups = groupBugsByStatus([bug({ status: 'ATENDIDA' })]);
+    expect(groups.map((g) => g.key)).toEqual(['atendida']);
   });
 });
 

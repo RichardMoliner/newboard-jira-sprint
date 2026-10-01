@@ -40,6 +40,7 @@ function bug(overrides: Partial<BugSubtask> = {}): BugSubtask {
     worklogEntries: [],
     artifact: null,
     labels: [],
+    url: 'https://desenv.betha.com.br/browse/EC-11983',
     ...overrides,
   };
 }
@@ -839,7 +840,7 @@ describe('mapActivity', () => {
 
   test('passes bugs through untouched', () => {
     const bugs = [
-      { key: 'EC-11983', title: 'Bug X', developer: 'Fulano', status: 'Em correção', startDate: '2026-08-27', endDate: '2026-09-03', worklogEntries: [], artifact: null, labels: [] },
+      { key: 'EC-11983', title: 'Bug X', developer: 'Fulano', status: 'Em correção', startDate: '2026-08-27', endDate: '2026-09-03', worklogEntries: [], artifact: null, labels: [], url: 'https://desenv.betha.com.br/browse/EC-11983' },
     ];
     const activity = mapActivity({
       story: baseStory(),
@@ -866,6 +867,7 @@ describe('mapActivity', () => {
         ],
         artifact: null,
         labels: [],
+        url: 'https://desenv.betha.com.br/browse/EC-11983',
       },
     ];
     const activity = mapActivity({
@@ -894,6 +896,7 @@ describe('mapActivity', () => {
         worklogEntries: [{ subtaskType: 'Bug' as const, author: 'Luana de Souza Bez Batti', date: '2026-08-28', hours: 1.5, comment: null }],
         artifact: null,
         labels: [],
+        url: 'https://desenv.betha.com.br/browse/EC-11983',
       },
     ];
     const activity = mapActivity({
@@ -922,6 +925,7 @@ describe('mapActivity', () => {
         worklogEntries: [{ subtaskType: 'Bug' as const, author: 'Guilherme Henrique Gibim de Mello', date: '2026-08-28', hours: 2, comment: null }],
         artifact: null,
         labels: [],
+        url: 'https://desenv.betha.com.br/browse/EC-11983',
       },
     ];
     const activity = mapActivity({

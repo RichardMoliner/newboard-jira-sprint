@@ -74,7 +74,7 @@ describe('computeKpis', () => {
 
   test('counts open bugs and computes the average bugs per activity', () => {
     const activities = [
-      activity({ key: 'A', bugs: [{ key: 'B1', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels: [] }] }),
+      activity({ key: 'A', bugs: [{ key: 'B1', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels: [], url: '' }] }),
       activity({ key: 'B', bugs: [] }),
     ];
 
@@ -95,6 +95,7 @@ describe('computeKpis', () => {
       worklogEntries: [],
       artifact,
       labels: [],
+      url: '',
     });
     const activities = [
       activity({ key: 'A', bugs: [bug('requisito'), bug('requisito')] }),
@@ -325,7 +326,7 @@ describe('computePersonSummaries', () => {
         developer: 'Alicio',
         storyPoints: 5,
         isOverdue: true,
-        bugs: [{ key: 'B1', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels: [] }],
+        bugs: [{ key: 'B1', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels: [], url: '' }],
       }),
       activity({ key: 'C', developer: 'Bia', storyPoints: null }),
     ];
@@ -523,7 +524,7 @@ describe('computeStatusSummaries', () => {
   });
 
   function openBug(overrides: Partial<Activity['bugs'][number]> = {}) {
-    return { key: 'B-1', title: 'Bug', developer: null, status: 'Em correção', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels: [], ...overrides };
+    return { key: 'B-1', title: 'Bug', developer: null, status: 'Em correção', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels: [], url: '', ...overrides };
   }
 
   test('keeps an in-progress activity under its normal status even with an open bug — matches the timeline badge, which never shows a bug-specific status', () => {
@@ -595,7 +596,7 @@ describe('foldStatusSummariesForChart', () => {
 
 describe('topActivitiesByBugCount', () => {
   test('returns activities sorted by bug count descending, limited to N', () => {
-    const bug = { key: 'B', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels: [] };
+    const bug = { key: 'B', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels: [], url: '' };
     const activities = [
       activity({ key: 'A', title: 'Poucos bugs', bugs: [bug] }),
       activity({ key: 'B', title: 'Muitos bugs', bugs: [bug, bug, bug] }),
@@ -618,7 +619,7 @@ describe('topActivitiesByBugCount', () => {
 
 describe('computeBugLabelSummaries', () => {
   function bug(labels: string[]) {
-    return { key: 'B', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels };
+    return { key: 'B', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels, url: '' };
   }
 
   test('counts one occurrence per label across all bugs', () => {

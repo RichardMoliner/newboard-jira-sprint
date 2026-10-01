@@ -961,8 +961,8 @@ function ActivityRow({
         groupBugsByArtifact(activity.bugs).map((group) => (
           <div key={String(group.key)} style={{ display: 'contents' }}>
             <BugArtifactHeader group={group} />
-            {group.bugs.map((bug) => (
-              <BugRow key={bug.key} bug={bug} x={x} />
+            {groupBugsByStatus(group.bugs).map((statusGroup) => (
+              <BugStatusSection key={statusGroup.key} group={statusGroup} x={x} />
             ))}
           </div>
         ))}
@@ -1000,6 +1000,37 @@ export function groupBugsByArtifact(bugs: Activity['bugs']): BugArtifactGroup[] 
   return ARTIFACT_ORDER.map(({ key, label }) => ({ key, label, bugs: sorted.filter((b) => b.artifact === key) })).filter(
     (group) => group.bugs.length > 0,
   );
+}
+
+export interface BugStatusGroup {
+  key: 'em-andamento' | 'nao-atendida' | 'atendida';
+  label: string;
+  collapsedByDefault: boolean;
+  bugs: Activity['bugs'];
+}
+
+const BUG_STATUS_GROUP_ORDER: { key: BugStatusGroup['key']; label: string; collapsedByDefault: boolean }[] = [
+  { key: 'em-andamento', label: 'Em andamento', collapsedByDefault: false },
+  { key: 'nao-atendida', label: 'Não atendida', collapsedByDefault: false },
+  { key: 'atendida', label: 'Atendidos', collapsedByDefault: true },
+];
+
+function classifyBugStatus(status: string): BugStatusGroup['key'] {
+  const normalized = normalizeStatus(status);
+  if (normalized === 'atendida') return 'atendida';
+  if (normalized === 'nao atendida') return 'nao-atendida';
+  return 'em-andamento';
+}
+
+/** Subdivide os bugs de uma swimlane de artefato por status: em andamento, não atendida (ainda não
+ * começou) e atendidos — estes últimos vêm retraídos por padrão, precisa expandir pra ver. */
+export function groupBugsByStatus(bugs: Activity['bugs']): BugStatusGroup[] {
+  return BUG_STATUS_GROUP_ORDER.map(({ key, label, collapsedByDefault }) => ({
+    key,
+    label,
+    collapsedByDefault,
+    bugs: bugs.filter((b) => classifyBugStatus(b.status) === key),
+  })).filter((group) => group.bugs.length > 0);
 }
 
 function Badge({ children, color }: { children: React.ReactNode; color: string }) {
@@ -1045,6 +1076,41 @@ function BugArtifactHeader({ group }: { group: BugArtifactGroup }) {
   );
 }
 
+function BugStatusSection({ group, x }: { group: BugStatusGroup; x: (d: string) => number }) {
+  const [expanded, setExpanded] = useState(!group.collapsedByDefault);
+  const onToggle = group.collapsedByDefault ? () => setExpanded((v) => !v) : undefined;
+  return (
+    <div style={{ display: 'contents' }}>
+      <div style={{ display: 'contents' }}>
+        <div
+          onClick={onToggle}
+          style={{
+            position: 'sticky',
+            left: 0,
+            zIndex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            background: 'var(--page-plane)',
+            color: 'var(--text-muted)',
+            fontWeight: 700,
+            fontSize: 9.5,
+            padding: '3px 14px 3px 48px',
+            borderBottom: '1px solid var(--gridline)',
+            borderRight: '1px solid var(--gridline)',
+            cursor: onToggle ? 'pointer' : 'default',
+          }}
+        >
+          {onToggle && <span style={{ display: 'inline-block', transform: expanded ? 'rotate(90deg)' : 'none' }}>▸</span>}
+          {group.label} ({group.bugs.length})
+        </div>
+        <div style={{ background: 'var(--page-plane)', borderBottom: '1px solid var(--gridline)' }} />
+      </div>
+      {expanded && group.bugs.map((bug) => <BugRow key={bug.key} bug={bug} x={x} />)}
+    </div>
+  );
+}
+
 function BugRow({ bug, x }: { bug: Activity['bugs'][number]; x: (d: string) => number }) {
   const isResolved = isResolvedBug(bug.status);
   const textColor = isResolved ? 'var(--status-good)' : 'var(--text-muted)';
@@ -1052,7 +1118,14 @@ function BugRow({ bug, x }: { bug: Activity['bugs'][number]; x: (d: string) => n
     <>
       <div className="timeline-row-info" style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--page-plane)', padding: '5px 14px 5px 34px', borderBottom: '1px solid var(--gridline)', borderRight: '1px solid var(--gridline)', fontSize: 10.5, color: isResolved ? 'var(--status-good)' : 'var(--text-secondary)' }}>
         <div>
-          <span style={{ color: textColor, fontWeight: 700, marginRight: 4 }}>{bug.key}</span>
+          <a
+            href={bug.url}
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: textColor, fontWeight: 700, marginRight: 4, textDecoration: 'none' }}
+          >
+            {bug.key}
+          </a>
           {bug.title}
         </div>
         <div style={{ color: textColor, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>

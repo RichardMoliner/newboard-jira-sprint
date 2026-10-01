@@ -231,8 +231,14 @@ describe('groupSubtasks', () => {
         worklogEntries: [],
         artifact: null,
         labels: [],
+        url: '/browse/EC-11983',
       },
     ]);
+  });
+
+  test('builds the bug url from the given baseUrl', () => {
+    const { bugsByParent } = groupSubtasks([subtask({ key: 'EC-11983', type: 'Bug' })], 'https://desenv.betha.com.br');
+    expect(bugsByParent.get('EC-11420')?.[0].url).toBe('https://desenv.betha.com.br/browse/EC-11983');
   });
 
   test('classifies the bug artifact as "requisito" when customfield_10232 is "Requisitos"', () => {

@@ -88,7 +88,7 @@ export async function fetchBoardData(
     worklogEntriesByParent,
     bugsByParent,
     testerByParent,
-  } = groupSubtasks(subtasksWithFullWorklogs);
+  } = groupSubtasks(subtasksWithFullWorklogs, baseUrl);
   const developerRoles = inferDeveloperRoles(subtasksWithFullWorklogs);
 
   report('Buscando detalhes das stories...');

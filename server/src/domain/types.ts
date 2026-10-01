@@ -19,6 +19,8 @@ export interface BugSubtask {
   artifact: 'requisito' | 'implementacao' | null;
   /** Rótulos (labels) do bug no Jira, ex.: bug_devolvido, bug_impeditivo. Pode ter mais de um. */
   labels: string[];
+  /** Link direto para o bug no Jira. */
+  url: string;
 }
 
 export interface TimelineWindow {
