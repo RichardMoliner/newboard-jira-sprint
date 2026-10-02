@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Activity, SprintInfo } from '../types.js';
 import {
   computeBugLabelSummaries,
+  computeBurndown,
   computeHoursPerPfByDeveloper,
   computeHoursSummary,
   computeKpis,
@@ -14,6 +15,7 @@ import {
 import { FilterPill } from './TimelineView.js';
 import StatusPieChart from './StatusPieChart.js';
 import BugLabelsPieChart from './BugLabelsPieChart.js';
+import BurndownChart from './BurndownChart.js';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -73,6 +75,9 @@ export default function IndicatorsView({
 
   const atRisk = filtered.filter((a) => a.isOverdue);
   const carried = filtered.filter((a) => a.isCarried);
+  // Sempre usa `filtered` (ignora a checkbox "Considerar herdadas") — é sobre o escopo real da
+  // sprint, mesmo racional de "Em risco"/"Herdadas" acima.
+  const burndown = useMemo(() => computeBurndown(filtered, sprints, sprintFilter, today), [filtered, sprints, sprintFilter, today]);
 
   const maxBugs = Math.max(1, ...people.map((p) => p.bugs));
   const maxStoryPoints = Math.max(1, ...people.map((p) => p.storyPoints));
@@ -303,6 +308,10 @@ export default function IndicatorsView({
             <BugLabelsPieChart summaries={bugLabelSummaries} />
           </Section>
         </div>
+
+        <Section title="Sprint burndown">
+          {burndown ? <BurndownChart data={burndown} /> : <Empty text="Selecione 1 ou mais sprints para ver o burndown." />}
+        </Section>
       </div>
 
       <div title={`Horas de Implementação apontadas dividido pelo PF de Implementação (Story Points × fração de Implementação, hoje ${(100 - assumedTestSharePercent).toFixed(0)}%) — considera TODAS as tarefas do dev, concluídas ou não. Ordenado do mais eficiente (menos horas por PF) para o menos.`}>

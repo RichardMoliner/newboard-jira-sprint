@@ -1,4 +1,5 @@
-import type { Activity } from '../types.js';
+import type { Activity, SprintInfo } from '../types.js';
+import { listBusinessDays } from '../businessDays.js';
 
 export interface Kpis {
   totalActivities: number;
@@ -361,6 +362,51 @@ export function computeHoursSummary(activities: Activity[], hoursPerPf: number, 
  * mesmo critério "funcionalmente concluída" usado na Assertividade e nos botões de sprint. */
 function isCompleted(activity: Activity): boolean {
   return activity.isDone || activity.testDone;
+}
+
+export interface BurndownPoint {
+  date: string;
+  /** Restante previsto, numa reta do total até 0 ao longo dos dias úteis da sprint. */
+  ideal: number;
+  /** Restante real (total − SP já entregues até esse dia); null para dias futuros, ainda não conhecidos. */
+  actual: number | null;
+}
+
+export interface BurndownData {
+  totalStoryPoints: number;
+  points: BurndownPoint[];
+}
+
+/**
+ * Reconstrói o burndown a partir da data de entrega de cada atividade (deliveredDate, quando
+ * funcionalmente concluída) — o painel não guarda um histórico diário real do backlog. Combina
+ * todas as sprints selecionadas num único período (do início mais cedo ao fim mais tarde) e um
+ * único total; sempre conta todas as atividades recebidas, independente de herdada ou da checkbox
+ * "Considerar herdadas" (é sobre o escopo real da sprint, não uma métrica de produtividade — mesmo
+ * racional dos cards "Em risco"/"Herdadas"). Retorna null sem nenhuma sprint selecionada.
+ */
+export function computeBurndown(activities: Activity[], sprints: SprintInfo[], sprintFilter: string[], today: string): BurndownData | null {
+  if (sprintFilter.length === 0) return null;
+  const selectedSprints = sprints.filter((s) => sprintFilter.includes(s.id));
+  if (selectedSprints.length === 0) return null;
+
+  const startDate = selectedSprints.map((s) => s.startDate).sort()[0];
+  const endDate = selectedSprints.map((s) => s.endDate).sort().slice(-1)[0];
+
+  const totalStoryPoints = sum(activities.map((a) => a.storyPoints ?? 0));
+  const days = listBusinessDays(startDate, endDate);
+  const lastIndex = days.length - 1;
+
+  const points = days.map((date, i) => {
+    const ideal = lastIndex <= 0 ? 0 : totalStoryPoints * (1 - i / lastIndex);
+    if (date > today) return { date, ideal, actual: null };
+    const deliveredByDate = sum(
+      activities.filter((a) => isCompleted(a) && a.deliveredDate !== null && a.deliveredDate <= date).map((a) => a.storyPoints ?? 0),
+    );
+    return { date, ideal, actual: totalStoryPoints - deliveredByDate };
+  });
+
+  return { totalStoryPoints, points };
 }
 
 function sum(values: number[]): number {

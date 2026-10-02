@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   computeBugLabelSummaries,
+  computeBurndown,
   computeHoursPerPfByDeveloper,
   computeHoursSummary,
   computeKpis,
@@ -11,7 +12,19 @@ import {
   computeRealizedProductivity,
   topActivitiesByBugCount,
 } from './computeIndicators.js';
-import type { Activity } from '../types.js';
+import type { Activity, SprintInfo } from '../types.js';
+
+function sprintInfo(overrides: Partial<SprintInfo> = {}): SprintInfo {
+  return {
+    id: '7590',
+    name: 'ALM S09 2026 Edital',
+    startDate: '2026-09-03',
+    endDate: '2026-09-08',
+    startDateTime: '2026-09-03T00:00:00.000-03:00',
+    endDateTime: '2026-09-08T23:59:00.000-03:00',
+    ...overrides,
+  };
+}
 
 function activity(overrides: Partial<Activity>): Activity {
   return {
@@ -722,5 +735,71 @@ describe('computeHoursSummary', () => {
       bugFixHours: 0,
       bugTestHours: 0,
     });
+  });
+});
+
+describe('computeBurndown', () => {
+  // Sprint padrão: 2026-09-03 (qui) a 2026-09-08 (ter) -> dias úteis 03, 04, 08
+  // (pula sábado 05, domingo 06 e o feriado de 07/09 - Independência).
+  const sprints = [sprintInfo()];
+
+  test('returns null when no sprint is selected', () => {
+    const activities = [activity({ storyPoints: 10 })];
+    expect(computeBurndown(activities, sprints, [], '2026-09-04')).toBeNull();
+  });
+
+  test('returns null when the selected sprint id does not match any known sprint', () => {
+    const activities = [activity({ storyPoints: 10 })];
+    expect(computeBurndown(activities, sprints, ['unknown'], '2026-09-04')).toBeNull();
+  });
+
+  test('computes total story points and a linear ideal line from total to 0 across business days', () => {
+    const activities = [activity({ storyPoints: 10 })];
+    const result = computeBurndown(activities, sprints, ['7590'], '2026-09-01');
+    expect(result?.totalStoryPoints).toBe(10);
+    expect(result?.points.map((p) => p.date)).toEqual(['2026-09-03', '2026-09-04', '2026-09-08']);
+    expect(result?.points.map((p) => p.ideal)).toEqual([10, 5, 0]);
+  });
+
+  test('leaves actual null for days after today (the future is unknown)', () => {
+    const activities = [activity({ storyPoints: 10 })];
+    const result = computeBurndown(activities, sprints, ['7590'], '2026-09-01');
+    expect(result?.points.map((p) => p.actual)).toEqual([null, null, null]);
+  });
+
+  test('subtracts story points of activities delivered by each day from the actual remaining', () => {
+    const activities = [
+      activity({ key: 'A', storyPoints: 4, isDone: true, deliveredDate: '2026-09-03' }),
+      activity({ key: 'B', storyPoints: 6, isDone: false, testDone: false }),
+    ];
+    const result = computeBurndown(activities, sprints, ['7590'], '2026-09-08');
+    // total = 10; dia 03: A já entregue (-4) -> 6 restantes; dias seguintes: B nunca entregue -> continua 6.
+    expect(result?.points.map((p) => p.actual)).toEqual([6, 6, 6]);
+  });
+
+  test('treats testDone (with deliveredDate) as delivered too, not just isDone', () => {
+    const activities = [activity({ storyPoints: 10, isDone: false, testDone: true, deliveredDate: '2026-09-04' })];
+    const result = computeBurndown(activities, sprints, ['7590'], '2026-09-08');
+    expect(result?.points.map((p) => p.actual)).toEqual([10, 0, 0]);
+  });
+
+  test('treats storyPoints null as 0 in the total and in delivered sums', () => {
+    const activities = [activity({ storyPoints: null, isDone: true, deliveredDate: '2026-09-03' })];
+    const result = computeBurndown(activities, sprints, ['7590'], '2026-09-08');
+    expect(result?.totalStoryPoints).toBe(0);
+    expect(result?.points.map((p) => p.actual)).toEqual([0, 0, 0]);
+  });
+
+  test('combines multiple selected sprints into one date range and one total', () => {
+    const multiSprints = [sprintInfo({ id: 'A', startDate: '2026-09-03', endDate: '2026-09-04' }), sprintInfo({ id: 'B', startDate: '2026-09-08', endDate: '2026-09-08' })];
+    const activities = [activity({ storyPoints: 10 })];
+    const result = computeBurndown(activities, multiSprints, ['A', 'B'], '2026-09-01');
+    expect(result?.points.map((p) => p.date)).toEqual(['2026-09-03', '2026-09-04', '2026-09-08']);
+  });
+
+  test('always counts every given activity toward the total, regardless of isCarried', () => {
+    const activities = [activity({ storyPoints: 7, isCarried: true })];
+    const result = computeBurndown(activities, sprints, ['7590'], '2026-09-01');
+    expect(result?.totalStoryPoints).toBe(7);
   });
 });
