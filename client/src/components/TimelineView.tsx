@@ -1397,7 +1397,7 @@ function firstName(fullName: string): string {
 }
 
 /** Converte horas decimais para "Xh" ou "XhMM" — não existe "137,7h", só 137h42min. */
-function formatHoursMinutes(hours: number): string {
+export function formatHoursMinutes(hours: number): string {
   const totalMinutes = Math.round(hours * 60);
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
@@ -1405,7 +1405,7 @@ function formatHoursMinutes(hours: number): string {
 }
 
 /** "Apontado / Previsto" — '—' de cada lado quando não há dado (sem subtarefa ainda / sem estimativa). */
-function formatHoursPair(logged: number | null, estimated: number | null): string {
+export function formatHoursPair(logged: number | null, estimated: number | null): string {
   if (logged === null && estimated === null) return '—';
   return `${logged !== null ? formatHoursMinutes(logged) : '—'} / ${estimated !== null ? formatHoursMinutes(estimated) : '—'}`;
 }

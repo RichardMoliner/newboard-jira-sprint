@@ -134,3 +134,51 @@ body {
 .deadline-ruler {
   animation: deadline-pulse 1.4s ease-in-out infinite;
 }
+
+@media print {
+  /* Força o tema claro na impressão/PDF, independente do tema escolhido na tela — texto claro
+     sobre fundo escuro vira ilegível em papel, e a maioria dos navegadores já omite backgrounds
+     coloridos por padrão ao imprimir. */
+  :root {
+    color-scheme: light;
+    --page-plane: #f9f9f7;
+    --surface-1: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --gridline: #e1e0d9;
+    --baseline: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.1);
+    --series-impl: #2a78d6;
+    --series-test: #9333ea;
+    --series-bug: #898781;
+    --status-good: #0ca30c;
+    --status-warning: #fab219;
+    --status-serious: #ec835a;
+    --status-critical: #e6231e;
+    --cat-1: #2a78d6;
+    --cat-2: #eb6834;
+    --cat-3: #1baf7a;
+    --cat-4: #eda100;
+    --cat-5: #e87ba4;
+    --cat-6: #008300;
+    --cat-7: #4a3aa7;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* html/body/#root e os containers de rolagem da página têm altura fixa (100vh) + overflow:auto
+     pra rolar na tela — sem isso, a impressão só "fotografa" o que está visível no momento do
+     Ctrl+P/window.print() e corta o resto do conteúdo. Forçando altura automática e overflow
+     visível aqui, o conteúdo todo se desdobra e pagina normalmente na impressão/PDF. */
+  html,
+  body,
+  #root,
+  .board-root,
+  .report-scroll {
+    height: auto !important;
+    overflow: visible !important;
+  }
+}

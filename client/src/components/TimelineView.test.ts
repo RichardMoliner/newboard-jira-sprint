@@ -8,6 +8,8 @@ import {
   dayFillRatio,
   formatConsumedPercent,
   formatFullDate,
+  formatHoursMinutes,
+  formatHoursPair,
   formatStatusBreakdownTooltip,
   groupBugsByArtifact,
   groupBugsByStatus,
@@ -282,6 +284,38 @@ describe('formatConsumedPercent', () => {
 
   test('returns 0% when logged is zero but there is an estimate — live from day one, no need to wait for completion', () => {
     expect(formatConsumedPercent(0, 45.5)).toBe('0%');
+  });
+});
+
+describe('formatHoursMinutes', () => {
+  test('formats a whole number of hours as "Xh"', () => {
+    expect(formatHoursMinutes(4)).toBe('4h');
+  });
+
+  test('formats a fractional hour as "XhMM"', () => {
+    expect(formatHoursMinutes(4.5)).toBe('4h30');
+  });
+
+  test('pads minutes below 10 with a leading zero', () => {
+    expect(formatHoursMinutes(4 + 5 / 60)).toBe('4h05');
+  });
+});
+
+describe('formatHoursPair', () => {
+  test('formats "apontado / previsto" when both are known', () => {
+    expect(formatHoursPair(4, 8)).toBe('4h / 8h');
+  });
+
+  test('uses "—" on the logged side when null', () => {
+    expect(formatHoursPair(null, 8)).toBe('— / 8h');
+  });
+
+  test('uses "—" on the estimated side when null', () => {
+    expect(formatHoursPair(4, null)).toBe('4h / —');
+  });
+
+  test('returns a single "—" when both sides are null', () => {
+    expect(formatHoursPair(null, null)).toBe('—');
   });
 });
 

@@ -4,6 +4,7 @@ import { useBoardData } from '../api/useBoardData.js';
 import type { Theme } from '../App.js';
 import TimelineView from './TimelineView.js';
 import IndicatorsView from './IndicatorsView.js';
+import ReportView from './ReportView.js';
 import ProgressModal from './ProgressModal.js';
 
 type Tab = 'timeline' | 'indicators';
@@ -20,6 +21,7 @@ export default function BoardScreen({
   onToggleTheme: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('timeline');
+  const [showReport, setShowReport] = useState(false);
   const [sprintFilter, setSprintFilter] = useState<string[]>([]);
   const [dashDelayBar, setDashDelayBar] = useState(false);
   const [deadlines, setDeadlines] = useState<{ lastPublishDay: string | null; lastTestDay: string | null; publishDay: string | null }>({
@@ -53,9 +55,10 @@ export default function BoardScreen({
   }
 
   return (
-    <div style={{ height: '100vh', boxSizing: 'border-box', padding: '24px 32px 0', display: 'flex', flexDirection: 'column' }}>
+    <div className="board-root" style={{ height: '100vh', boxSizing: 'border-box', padding: '24px 32px 0', display: 'flex', flexDirection: 'column' }}>
       {loading && <ProgressModal messages={progressMessages} />}
       <header
+        className="no-print"
         style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20, flexShrink: 0 }}
       >
         <h1 style={{ fontSize: 20, margin: 0 }}>Painel de acompanhamento — {vertical}</h1>
@@ -72,6 +75,11 @@ export default function BoardScreen({
             <button onClick={onChangeVertical} style={secondaryButtonStyle}>
               Configurações
             </button>
+            {data && (
+              <button onClick={() => setShowReport(true)} style={secondaryButtonStyle}>
+                Gerar relatório
+              </button>
+            )}
             <button onClick={refresh} disabled={loading} style={primaryButtonStyle(loading)}>
               {loading ? 'Atualizando...' : 'Atualizar'}
             </button>
@@ -110,7 +118,23 @@ export default function BoardScreen({
 
       {!data && loading && <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Carregando painel...</p>}
 
-      {data && (
+      {data && showReport && (
+        <div className="report-scroll" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+          <ReportView
+            activities={data.activities}
+            sprints={data.sprints}
+            today={data.today}
+            sprintFilter={sprintFilter}
+            onSprintClick={handleSprintClick}
+            hoursPerPf={data.hoursPerPf}
+            assumedTestSharePercent={data.assumedTestSharePercent}
+            vertical={vertical}
+            onClose={() => setShowReport(false)}
+          />
+        </div>
+      )}
+
+      {data && !showReport && (
         <>
           <nav style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--gridline)', marginBottom: 20, flexShrink: 0 }}>
             <TabButton active={tab === 'timeline'} onClick={() => setTab('timeline')} label="Linha do tempo" />
