@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { getHistoricalSprints, getHistoricalBoardData, getBoardDataProgress } from '../api/client.js';
 import type { BoardDataResponse, SprintInfo } from '../types.js';
-import { FilterPill } from './TimelineView.js';
 import IndicatorsView from './IndicatorsView.js';
 import ProgressModal from './ProgressModal.js';
 
@@ -13,6 +12,11 @@ function defaultSince(): string {
   return d.toISOString().slice(0, 10);
 }
 
+function formatBr(isoDate: string): string {
+  const [, m, d] = isoDate.split('-');
+  return `${d}/${m}`;
+}
+
 export default function HistoryView() {
   const [since, setSince] = useState(defaultSince());
   const [discovering, setDiscovering] = useState(false);
@@ -20,6 +24,11 @@ export default function HistoryView() {
   const [searched, setSearched] = useState(false);
   const [availableSprints, setAvailableSprints] = useState<SprintInfo[]>([]);
   const [selectedSprintIds, setSelectedSprintIds] = useState<string[]>([]);
+  const [sprintSearch, setSprintSearch] = useState('');
+  // Depois de carregar, recolhe o bloco de seleção num resumo — evita duas fileiras de controles
+  // parecidos (a seleção de sprints pra buscar e os filtros do próprio painel de Indicadores)
+  // disputando atenção ao mesmo tempo. "Alterar seleção" reabre pra ajustar e buscar de novo.
+  const [editingSelection, setEditingSelection] = useState(true);
 
   const [loadingData, setLoadingData] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -27,11 +36,23 @@ export default function HistoryView() {
   const [historicalData, setHistoricalData] = useState<BoardDataResponse | null>(null);
   const [historicalSprintFilter, setHistoricalSprintFilter] = useState<string[]>([]);
 
+  const filteredSprints = useMemo(() => {
+    const query = sprintSearch.trim().toLowerCase();
+    if (!query) return availableSprints;
+    return availableSprints.filter((s) => s.name.toLowerCase().includes(query));
+  }, [availableSprints, sprintSearch]);
+
+  const selectedSprints = useMemo(
+    () => availableSprints.filter((s) => selectedSprintIds.includes(s.id)),
+    [availableSprints, selectedSprintIds],
+  );
+
   async function handleDiscover() {
     setDiscovering(true);
     setDiscoverError(null);
     setAvailableSprints([]);
     setSelectedSprintIds([]);
+    setSprintSearch('');
     setHistoricalData(null);
     try {
       const { sprints } = await getHistoricalSprints(since);
@@ -68,6 +89,7 @@ export default function HistoryView() {
     try {
       const data = await getHistoricalBoardData<BoardDataResponse>(selectedSprintIds);
       setHistoricalData(data);
+      setEditingSelection(false);
     } catch (err) {
       setDataError(err instanceof Error ? err.message : 'Erro ao buscar indicadores históricos.');
     } finally {
@@ -90,55 +112,131 @@ export default function HistoryView() {
     }
   }
 
+  const showSelectionPanel = !historicalData || editingSelection;
+
   return (
     <div style={{ paddingBottom: 60 }}>
       {loadingData && <ProgressModal messages={progressMessages} />}
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          gap: 12,
-          marginBottom: 16,
-          flexWrap: 'wrap',
-        }}
-      >
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12.5, color: 'var(--text-secondary)' }}>
-          Mostrar sprints encerradas a partir de:
-          <input type="date" value={since} onChange={(e) => setSince(e.target.value)} style={inputStyle} />
-        </label>
-        <button onClick={handleDiscover} disabled={discovering} style={primaryButtonStyle(discovering)}>
-          {discovering ? 'Buscando...' : 'Buscar sprints'}
-        </button>
-      </div>
-
-      {discoverError && <p style={{ color: 'var(--status-critical)', fontSize: 13 }}>{discoverError}</p>}
-
-      {searched && !discovering && !discoverError && availableSprints.length === 0 && (
-        <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Nenhuma sprint encerrada encontrada a partir dessa data.</p>
+      {!showSelectionPanel && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 8,
+            marginBottom: 20,
+            padding: '10px 14px',
+            borderRadius: 8,
+            background: 'var(--surface-1)',
+            border: '1px solid var(--gridline)',
+            fontSize: 13,
+          }}
+        >
+          <span style={{ color: 'var(--text-secondary)' }}>Exibindo indicadores de:</span>
+          <strong style={{ color: 'var(--text-primary)' }}>{selectedSprints.map((s) => s.name).join(', ')}</strong>
+          <button onClick={() => setEditingSelection(true)} style={linkButtonStyle}>
+            Alterar seleção
+          </button>
+        </div>
       )}
 
-      {availableSprints.length > 0 && (
-        <>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-            {availableSprints.map((sprint) => (
-              <FilterPill
-                key={sprint.id}
-                label={sprint.name}
-                active={selectedSprintIds.includes(sprint.id)}
-                onClick={() => toggleSprint(sprint.id)}
-                tooltip={`${sprint.startDate} a ${sprint.endDate}`}
-              />
-            ))}
+      {showSelectionPanel && (
+        <div style={{ marginBottom: 20 }}>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 12px' }}>
+            Veja os mesmos indicadores da aba Indicadores, mas para sprints já encerradas.
+          </p>
+
+          <div style={{ marginBottom: 16 }}>
+            <p style={stepLabelStyle}>1. Escolha a partir de quando buscar sprints encerradas</p>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12.5, color: 'var(--text-secondary)' }}>
+                Data de abertura da sprint
+                <input type="date" value={since} onChange={(e) => setSince(e.target.value)} style={inputStyle} />
+              </label>
+              <button onClick={handleDiscover} disabled={discovering} style={primaryButtonStyle(discovering)}>
+                {discovering ? 'Buscando...' : 'Buscar sprints'}
+              </button>
+            </div>
           </div>
-          <button
-            onClick={handleLoadIndicators}
-            disabled={selectedSprintIds.length === 0 || loadingData}
-            style={{ ...primaryButtonStyle(loadingData), marginBottom: 20 }}
-          >
-            {loadingData ? 'Carregando...' : 'Carregar indicadores'}
-          </button>
-        </>
+
+          {discoverError && <p style={{ color: 'var(--status-critical)', fontSize: 13 }}>{discoverError}</p>}
+
+          {searched && !discovering && !discoverError && availableSprints.length === 0 && (
+            <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Nenhuma sprint encerrada encontrada a partir dessa data.</p>
+          )}
+
+          {availableSprints.length > 0 && (
+            <div>
+              <p style={stepLabelStyle}>2. Selecione as sprints que deseja analisar</p>
+
+              <input
+                type="text"
+                value={sprintSearch}
+                onChange={(e) => setSprintSearch(e.target.value)}
+                placeholder="Buscar sprint pelo nome..."
+                style={{ ...inputStyle, width: '100%', maxWidth: 360, marginBottom: 10, display: 'block' }}
+              />
+
+              <div
+                style={{
+                  maxHeight: 280,
+                  overflowY: 'auto',
+                  border: '1px solid var(--gridline)',
+                  borderRadius: 8,
+                  background: 'var(--page-plane)',
+                  marginBottom: 10,
+                }}
+              >
+                {filteredSprints.length === 0 ? (
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)', padding: '10px 12px', margin: 0 }}>
+                    Nenhuma sprint corresponde à busca.
+                  </p>
+                ) : (
+                  filteredSprints.map((sprint) => {
+                    const checked = selectedSprintIds.includes(sprint.id);
+                    return (
+                      <label
+                        key={sprint.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          padding: '9px 12px',
+                          borderBottom: '1px solid var(--gridline)',
+                          cursor: 'pointer',
+                          background: checked ? 'var(--surface-1)' : 'transparent',
+                        }}
+                      >
+                        <input type="checkbox" checked={checked} onChange={() => toggleSprint(sprint.id)} style={{ cursor: 'pointer' }} />
+                        <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>{sprint.name}</span>
+                        <span className="tabular-nums" style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                          {formatBr(sprint.startDate)} – {formatBr(sprint.endDate)}
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button
+                  onClick={handleLoadIndicators}
+                  disabled={selectedSprintIds.length === 0 || loadingData}
+                  title={selectedSprintIds.length === 0 ? 'Selecione ao menos uma sprint' : undefined}
+                  style={primaryButtonStyle(selectedSprintIds.length === 0 || loadingData)}
+                >
+                  {loadingData ? 'Carregando...' : 'Carregar indicadores'}
+                </button>
+                <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                  {selectedSprintIds.length === 0
+                    ? 'Nenhuma sprint selecionada'
+                    : `${selectedSprintIds.length} sprint${selectedSprintIds.length > 1 ? 's' : ''} selecionada${selectedSprintIds.length > 1 ? 's' : ''}`}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {dataError && <p style={{ color: 'var(--status-critical)', fontSize: 13 }}>{dataError}</p>}
@@ -157,6 +255,15 @@ export default function HistoryView() {
     </div>
   );
 }
+
+const stepLabelStyle: React.CSSProperties = {
+  fontSize: 12.5,
+  fontWeight: 700,
+  color: 'var(--text-secondary)',
+  textTransform: 'uppercase',
+  letterSpacing: 0.3,
+  margin: '0 0 8px',
+};
 
 const inputStyle: React.CSSProperties = {
   padding: '8px 10px',
@@ -178,3 +285,14 @@ const primaryButtonStyle = (disabled: boolean): React.CSSProperties => ({
   cursor: disabled ? 'default' : 'pointer',
   opacity: disabled ? 0.7 : 1,
 });
+
+const linkButtonStyle: React.CSSProperties = {
+  padding: 0,
+  border: 'none',
+  background: 'none',
+  color: 'var(--series-impl)',
+  fontSize: 13,
+  fontWeight: 600,
+  cursor: 'pointer',
+  textDecoration: 'underline',
+};
