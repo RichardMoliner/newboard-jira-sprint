@@ -718,9 +718,9 @@ describe('groupBugsByStatus', () => {
     expect(groups).toEqual([{ key: 'em-andamento', label: 'Em andamento', collapsedByDefault: false, bugs: [expect.objectContaining({ key: 'B1' })] }]);
   });
 
-  test('puts a bug with status "Não atendida" in its own group, expanded by default', () => {
+  test('puts a bug with status "Não atendida" in its own group, collapsed by default', () => {
     const groups = groupBugsByStatus([bug({ key: 'B1', status: 'Não atendida' })]);
-    expect(groups).toEqual([{ key: 'nao-atendida', label: 'Não atendida', collapsedByDefault: false, bugs: [expect.objectContaining({ key: 'B1' })] }]);
+    expect(groups).toEqual([{ key: 'nao-atendida', label: 'Não atendida', collapsedByDefault: true, bugs: [expect.objectContaining({ key: 'B1' })] }]);
   });
 
   test('puts a bug with status "Atendida" under "Atendidos", collapsed by default', () => {

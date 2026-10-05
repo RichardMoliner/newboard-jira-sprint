@@ -946,7 +946,7 @@ export interface BugStatusGroup {
 
 const BUG_STATUS_GROUP_ORDER: { key: BugStatusGroup['key']; label: string; collapsedByDefault: boolean }[] = [
   { key: 'em-andamento', label: 'Em andamento', collapsedByDefault: false },
-  { key: 'nao-atendida', label: 'Não atendida', collapsedByDefault: false },
+  { key: 'nao-atendida', label: 'Não atendida', collapsedByDefault: true },
   { key: 'atendida', label: 'Atendidos', collapsedByDefault: true },
 ];
 
@@ -957,8 +957,9 @@ function classifyBugStatus(status: string): BugStatusGroup['key'] {
   return 'em-andamento';
 }
 
-/** Subdivide os bugs de uma swimlane de artefato por status: em andamento, não atendida (ainda não
- * começou) e atendidos — estes últimos vêm retraídos por padrão, precisa expandir pra ver. */
+/** Subdivide os bugs de uma swimlane de artefato por status: em andamento, não atendida e
+ * atendidos — só "em andamento" vem expandido por padrão; os outros dois vêm retraídos, precisa
+ * expandir pra ver. */
 export function groupBugsByStatus(bugs: Activity['bugs']): BugStatusGroup[] {
   return BUG_STATUS_GROUP_ORDER.map(({ key, label, collapsedByDefault }) => ({
     key,
