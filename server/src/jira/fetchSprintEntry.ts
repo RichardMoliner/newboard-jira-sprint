@@ -27,9 +27,27 @@ export function findSprintEntryDate(histories: ChangelogHistory[], sprintName: s
   return matches[matches.length - 1].created;
 }
 
+/**
+ * Acha o timestamp da transição mais recente para o status atual da issue, a partir do changelog —
+ * usado como a data real de entrega de uma story concluída (`story.updated` não serve: a issue
+ * pode ser tocada bem depois da entrega de fato, por algo sem relação, e isso infla a data).
+ * Pega a transição mais recente (não a primeira) pra lidar com reabertura/refechamento.
+ */
+export function findDoneTransitionDate(histories: ChangelogHistory[], currentStatus: string): string | null {
+  const matches = histories
+    .flatMap((h) => h.items.map((item) => ({ created: h.created, item })))
+    .filter(({ item }) => item.field === 'status' && item.toString === currentStatus);
+
+  if (matches.length === 0) return null;
+
+  matches.sort((a, b) => a.created.localeCompare(b.created));
+  return matches[matches.length - 1].created;
+}
+
 interface CacheEntry {
   updated: string;
   sprintEnteredAt: string | null;
+  doneTransitionDate: string | null;
 }
 
 // Cache em memória (nível de módulo, sobrevive entre requisições mas não a restarts) — evita
@@ -57,32 +75,42 @@ async function fetchIssueChangelog(issueKey: string, credentials: JiraCredential
   return data.changelog?.histories ?? [];
 }
 
+export interface IssueHistoryFacts {
+  sprintEnteredAt: string | null;
+  doneTransitionDate: string | null;
+}
+
 /**
- * Data em que a issue entrou na sprint atual, buscando o changelog só quando necessário: se o
- * `updated` da issue não mudou desde a última chamada, reaproveita o valor em cache (nenhuma
- * chamada extra ao Jira). Falha ao buscar o changelog não derruba o board inteiro — cai para
- * `null` (não marca como "adicionada depois") e loga o erro.
+ * Busca o changelog da issue uma única vez e extrai dele os dois fatos que o board precisa:
+ * quando ela entrou na sprint atual e quando transicionou pro status atual (usado como data real
+ * de entrega quando a story está concluída). Busca só quando necessário: se o `updated` da issue
+ * não mudou desde a última chamada, reaproveita o cache (nenhuma chamada extra ao Jira). Falha ao
+ * buscar o changelog não derruba o board inteiro — cai pra `null` nos dois fatos e loga o erro.
  */
-export async function getSprintEntryDate(
+export async function getIssueHistoryFacts(
   issueKey: string,
   updated: string,
   sprintName: string,
+  currentStatus: string,
   credentials: JiraCredentials,
-): Promise<string | null> {
+): Promise<IssueHistoryFacts> {
   const cached = cache.get(issueKey);
   if (cached && cached.updated === updated) {
-    return cached.sprintEnteredAt;
+    return { sprintEnteredAt: cached.sprintEnteredAt, doneTransitionDate: cached.doneTransitionDate };
   }
 
   let sprintEnteredAt: string | null;
+  let doneTransitionDate: string | null;
   try {
     const histories = await fetchIssueChangelog(issueKey, credentials);
     sprintEnteredAt = findSprintEntryDate(histories, sprintName);
+    doneTransitionDate = findDoneTransitionDate(histories, currentStatus);
   } catch (err) {
     console.error(`[fetchSprintEntry] Falha ao buscar changelog de ${issueKey}, ignorando:`, err instanceof Error ? err.message : err);
     sprintEnteredAt = null;
+    doneTransitionDate = null;
   }
 
-  cache.set(issueKey, { updated, sprintEnteredAt });
-  return sprintEnteredAt;
+  cache.set(issueKey, { updated, sprintEnteredAt, doneTransitionDate });
+  return { sprintEnteredAt, doneTransitionDate };
 }

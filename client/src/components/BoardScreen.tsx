@@ -4,10 +4,11 @@ import { useBoardData } from '../api/useBoardData.js';
 import type { Theme } from '../App.js';
 import TimelineView from './TimelineView.js';
 import IndicatorsView from './IndicatorsView.js';
+import HistoryView from './HistoryView.js';
 import ReportView from './ReportView.js';
 import ProgressModal from './ProgressModal.js';
 
-type Tab = 'timeline' | 'indicators';
+type Tab = 'timeline' | 'indicators' | 'history';
 
 export default function BoardScreen({
   vertical,
@@ -139,9 +140,14 @@ export default function BoardScreen({
           <nav style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--gridline)', marginBottom: 20, flexShrink: 0 }}>
             <TabButton active={tab === 'timeline'} onClick={() => setTab('timeline')} label="Linha do tempo" />
             <TabButton active={tab === 'indicators'} onClick={() => setTab('indicators')} label="Indicadores" />
+            <TabButton active={tab === 'history'} onClick={() => setTab('history')} label="Histórico" />
           </nav>
 
-          {tab === 'timeline' ? (
+          {tab === 'history' ? (
+            <div style={{ paddingBottom: 60, overflow: 'auto' }}>
+              <HistoryView />
+            </div>
+          ) : tab === 'timeline' ? (
             // Só a timeline ganha altura contida com scroll próprio (cabeçalho fixo dentro dela) —
             // os Indicadores continuam no fluxo normal, a página inteira rola como antes.
             <div style={{ flex: 1, minHeight: 0, paddingBottom: 24 }}>

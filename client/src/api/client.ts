@@ -1,3 +1,5 @@
+import type { SprintInfo } from '../types.js';
+
 export class ApiError extends Error {}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -53,4 +55,12 @@ export function getBoardData<T>(): Promise<T> {
 
 export function getBoardDataProgress(): Promise<{ messages: string[] }> {
   return request<{ messages: string[] }>('/board-data/progress');
+}
+
+export function getHistoricalSprints(since: string): Promise<{ sprints: SprintInfo[] }> {
+  return request<{ sprints: SprintInfo[] }>(`/historical-sprints?since=${encodeURIComponent(since)}`);
+}
+
+export function getHistoricalBoardData<T>(sprintIds: string[]): Promise<T> {
+  return request<T>(`/historical-board-data?sprintIds=${encodeURIComponent(sprintIds.join(','))}`);
 }

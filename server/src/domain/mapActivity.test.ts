@@ -608,6 +608,32 @@ describe('mapActivity', () => {
     expect(activity.deliveredOnTime).toBe(false);
   });
 
+  test('prefers doneTransitionDate over story.updated as deliveredDate when both are provided', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Concluído', status: 'Atendida', updated: '2026-09-08T16:37:55.000-0300' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      doneTransitionDate: '2026-08-14T11:00:00.000-0300',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.deliveredDate).toBe('2026-08-14');
+  });
+
+  test('falls back to story.updated as deliveredDate when doneTransitionDate is not provided (no changelog match)', () => {
+    const activity = mapActivity({
+      story: baseStory({ storyPoints: 10, statusCategory: 'Concluído', status: 'Atendida', updated: '2026-09-08T16:37:55.000-0300' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      doneTransitionDate: null,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.deliveredDate).toBe('2026-09-08');
+  });
+
   test('flags a done activity delivered on or before its dueDate as on time', () => {
     const activity = mapActivity({
       story: baseStory({ storyPoints: 10, statusCategory: 'Concluído', status: 'Atendida', updated: '2026-08-10T16:37:55.000-0300' }),

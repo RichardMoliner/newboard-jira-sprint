@@ -5,7 +5,7 @@ import { groupSubtasks, type RawSubtask, type RawWorklogEntry } from './groupSub
 import { inferDeveloperRoles } from './inferRoles.js';
 import { fillTruncatedWorklogs } from './fillTruncatedWorklogs.js';
 import { parseSprintField } from './parseSprintField.js';
-import { getSprintEntryDate } from './fetchSprintEntry.js';
+import { getIssueHistoryFacts } from './fetchSprintEntry.js';
 import { report } from './progressLog.js';
 import { mapActivity, type RawStory } from '../domain/mapActivity.js';
 import type { Activity, BoardDataResponse, SprintInfo } from '../domain/types.js';
@@ -40,28 +40,42 @@ function todayISO(): string {
   return `${year}-${month}-${day}`;
 }
 
-function quoteJql(value: string): string {
+export function quoteJql(value: string): string {
   return `"${value.replace(/"/g, '\\"')}"`;
 }
 
-export async function fetchBoardData(
+interface SprintScopeResult {
+  sprints: SprintInfo[];
+  activities: Activity[];
+  today: string;
+}
+
+/**
+ * Núcleo do fetch, parametrizado pelo recorte de sprint em JQL (`sprint in openSprints()` pro board
+ * ao vivo, `sprint = X`/`sprint in (X, Y)` pra sprints fechadas no Histórico) e por como calcular
+ * "hoje" — data real pro board ao vivo, mas a data de fim da sprint mais recente entre as buscadas
+ * quando é histórico (senão tarefas de uma sprint fechada há meses apareceriam com cálculos de
+ * atraso/prazo comparados com a data real de hoje, sem sentido pra uma foto congelada do passado).
+ */
+async function fetchActivitiesForSprintScope(
   vertical: string,
+  sprintScopeJql: string,
+  todayStrategy: 'now' | 'latest-sprint-end',
   credentials: JiraCredentials,
   hoursPerPf: number | undefined,
   hoursPerDay: number | undefined,
-): Promise<BoardDataResponse> {
+): Promise<SprintScopeResult> {
   const baseUrl = requireEnv('JIRA_BASE_URL').replace(/\/$/, '');
-  const today = todayISO();
 
   report('Buscando atividades da sprint...');
   const [storyHits, subtasks] = await Promise.all([
     searchAllIssues<StorySearchHit>(
-      `vertical = ${quoteJql(vertical)} AND issuetype = Story AND sprint in openSprints()`,
+      `vertical = ${quoteJql(vertical)} AND issuetype = Story AND ${sprintScopeJql}`,
       ['customfield_10001'],
       credentials,
     ),
     searchAllIssues<RawSubtask>(
-      `vertical = ${quoteJql(vertical)} AND issuetype in (Bug, Implementação, Teste) AND sprint in openSprints()`,
+      `vertical = ${quoteJql(vertical)} AND issuetype in (Bug, Implementação, Teste) AND ${sprintScopeJql}`,
       ['parent', 'worklog', 'customfield_10232', 'labels'],
       credentials,
     ),
@@ -103,38 +117,45 @@ export async function fetchBoardData(
 
   const sprintByStoryKey = new Map(storyHits.map((hit) => [hit.key, parseSprintField(hit.customfield_10001)]));
 
+  const sprints = new Map<string, SprintInfo>();
+  for (const parsed of sprintByStoryKey.values()) {
+    if (parsed && !sprints.has(parsed.id)) {
+      sprints.set(parsed.id, {
+        id: parsed.id,
+        name: parsed.name,
+        startDate: parsed.startDate,
+        endDate: parsed.endDate,
+        startDateTime: parsed.startDateTime,
+        endDateTime: parsed.endDateTime,
+      });
+    }
+  }
+
+  const today =
+    todayStrategy === 'now'
+      ? todayISO()
+      : ([...sprints.values()].map((s) => s.endDate).sort().slice(-1)[0] ?? todayISO());
+
   // Data em que cada story entrou na sprint atual (via changelog do Jira, com cache por `updated`
   // dentro de getSprintEntryDate) — usada para marcar atividades adicionadas depois do início da
   // sprint. Buscada para todas as stories resolvidas; `mapActivity` já suprime a marcação para
   // herdadas, então não precisa duplicar aqui a lógica de "é herdada".
   const resolvedStories = (storyDetails.filter((s): s is StoryDetail => s !== null)).filter((s) => sprintByStoryKey.get(s.key));
   report('Buscando histórico de sprint...');
-  const sprintEntryPairs = await mapWithConcurrency(resolvedStories, CHANGELOG_CONCURRENCY, async (story) => {
+  const historyFactPairs = await mapWithConcurrency(resolvedStories, CHANGELOG_CONCURRENCY, async (story) => {
     const sprint = sprintByStoryKey.get(story.key)!;
-    const sprintEnteredAt = await getSprintEntryDate(story.key, story.updated, sprint.name, credentials);
-    return [story.key, sprintEnteredAt] as const;
+    const facts = await getIssueHistoryFacts(story.key, story.updated, sprint.name, story.status, credentials);
+    return [story.key, facts] as const;
   });
-  const sprintEntryByStoryKey = new Map(sprintEntryPairs);
+  const historyFactsByStoryKey = new Map(historyFactPairs);
 
-  const sprints = new Map<string, SprintInfo>();
   const activities: Activity[] = [];
 
   for (const story of storyDetails as (RawStory & { key: string } | null)[]) {
     if (!story) continue; // busca dessa issue falhou (ver log do servidor); segue sem ela
 
     const sprint = sprintByStoryKey.get(story.key);
-    if (!sprint) continue; // issue sem sprint ativa resolvida (não deveria ocorrer dada a JQL)
-
-    if (!sprints.has(sprint.id)) {
-      sprints.set(sprint.id, {
-        id: sprint.id,
-        name: sprint.name,
-        startDate: sprint.startDate,
-        endDate: sprint.endDate,
-        startDateTime: sprint.startDateTime,
-        endDateTime: sprint.endDateTime,
-      });
-    }
+    if (!sprint) continue; // issue sem sprint resolvida (não deveria ocorrer dada a JQL)
 
     activities.push(
       mapActivity({
@@ -157,7 +178,8 @@ export async function fetchBoardData(
         worklogEntries: worklogEntriesByParent.get(story.key) ?? [],
         bugs: bugsByParent.get(story.key) ?? [],
         developerRoles,
-        sprintEnteredAt: sprintEntryByStoryKey.get(story.key) ?? null,
+        sprintEnteredAt: historyFactsByStoryKey.get(story.key)?.sprintEnteredAt ?? null,
+        doneTransitionDate: historyFactsByStoryKey.get(story.key)?.doneTransitionDate ?? null,
         baseUrl,
         today,
         hoursPerPf,
@@ -170,6 +192,24 @@ export async function fetchBoardData(
 
   report('Concluído.');
 
+  return { sprints: [...sprints.values()].sort((a, b) => a.name.localeCompare(b.name)), activities, today };
+}
+
+export async function fetchBoardData(
+  vertical: string,
+  credentials: JiraCredentials,
+  hoursPerPf: number | undefined,
+  hoursPerDay: number | undefined,
+): Promise<BoardDataResponse> {
+  const { sprints, activities, today } = await fetchActivitiesForSprintScope(
+    vertical,
+    'sprint in openSprints()',
+    'now',
+    credentials,
+    hoursPerPf,
+    hoursPerDay,
+  );
+
   return {
     generatedAt: new Date().toISOString(),
     today,
@@ -177,7 +217,38 @@ export async function fetchBoardData(
     hoursPerPf: hoursPerPf ?? DEFAULT_HOURS_PER_PF,
     hoursPerDay: hoursPerDay ?? DEFAULT_HOURS_PER_DAY,
     assumedTestSharePercent: (1 - IMPL_SHARE) * 100,
-    sprints: [...sprints.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    sprints,
+    activities,
+  };
+}
+
+/** Mesmo pipeline do board ao vivo, mas para uma ou mais sprints já fechadas (aba Histórico) — veja
+ * o comentário de `fetchActivitiesForSprintScope` sobre a âncora de "hoje" usada nesse caso. */
+export async function fetchClosedSprintsData(
+  vertical: string,
+  sprintIds: string[],
+  credentials: JiraCredentials,
+  hoursPerPf: number | undefined,
+  hoursPerDay: number | undefined,
+): Promise<BoardDataResponse> {
+  const sprintScopeJql = `sprint in (${sprintIds.join(',')})`;
+  const { sprints, activities, today } = await fetchActivitiesForSprintScope(
+    vertical,
+    sprintScopeJql,
+    'latest-sprint-end',
+    credentials,
+    hoursPerPf,
+    hoursPerDay,
+  );
+
+  return {
+    generatedAt: new Date().toISOString(),
+    today,
+    vertical,
+    hoursPerPf: hoursPerPf ?? DEFAULT_HOURS_PER_PF,
+    hoursPerDay: hoursPerDay ?? DEFAULT_HOURS_PER_DAY,
+    assumedTestSharePercent: (1 - IMPL_SHARE) * 100,
+    sprints,
     activities,
   };
 }

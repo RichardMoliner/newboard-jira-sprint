@@ -41,14 +41,23 @@ function parseAttributes(raw: string): Record<string, string> {
 function toParsedSprint(raw: string): ParsedSprint | null {
   const attrs = parseAttributes(raw);
   if (!attrs.id || !attrs.name || !attrs.startDate) return null;
+
+  // Uma sprint fechada costuma fechar de fato um pouco depois do endDate planejado (completeDate
+  // registra esse fechamento real, geralmente horas depois — às vezes já no dia seguinte). Usar
+  // completeDate quando presente evita cortar o burndown/cálculos históricos antes do fim real da
+  // sprint. Sprints ainda não fechadas vêm com completeDate=<null> (literal, do toString() do
+  // greenhopper) — nesse caso mantém o endDate planejado.
+  const completeDate = attrs.completeDate && attrs.completeDate !== '<null>' ? attrs.completeDate : undefined;
+  const endDateTime = completeDate ?? attrs.endDate ?? attrs.startDate;
+
   return {
     id: attrs.id,
     name: attrs.name,
     state: attrs.state ?? 'UNKNOWN',
     startDate: attrs.startDate.slice(0, 10),
-    endDate: attrs.endDate ? attrs.endDate.slice(0, 10) : attrs.startDate.slice(0, 10),
+    endDate: endDateTime.slice(0, 10),
     startDateTime: attrs.startDate,
-    endDateTime: attrs.endDate ?? attrs.startDate,
+    endDateTime,
   };
 }
 
@@ -61,8 +70,18 @@ function toParsedSprint(raw: string): ParsedSprint | null {
 export function parseSprintField(raw: string[] | undefined): ParsedSprint | null {
   if (!raw || raw.length === 0) return null;
 
-  const parsed = raw.map(toParsedSprint).filter((s): s is ParsedSprint => s !== null);
+  const parsed = parseAllSprintFields(raw);
   if (parsed.length === 0) return null;
 
   return parsed.find((s) => s.state === 'ACTIVE') ?? parsed[parsed.length - 1];
+}
+
+/**
+ * Faz o parse de TODAS as sprints do campo raw, sem escolher uma só — usado na descoberta de
+ * sprints fechadas (aba Histórico), onde uma issue pode ter passado por várias sprints ao longo do
+ * tempo e queremos conhecer cada uma, não só a mais relevante pro estado atual da issue.
+ */
+export function parseAllSprintFields(raw: string[] | undefined): ParsedSprint[] {
+  if (!raw || raw.length === 0) return [];
+  return raw.map(toParsedSprint).filter((s): s is ParsedSprint => s !== null);
 }

@@ -83,6 +83,10 @@ export function mapActivity(params: {
   developerRoles?: Map<string, DeveloperRole>;
   /** Timestamp ISO de quando a issue entrou na sprint atual (via changelog do Jira); null sem esse histórico. */
   sprintEnteredAt?: string | null;
+  /** Timestamp ISO de quando a issue transicionou pro status atual (via changelog do Jira); usado
+   * como deliveredDate quando a story está concluída, em vez de `story.updated` (que pode ter sido
+   * tocado bem depois da entrega real, por algo sem relação). Null sem esse histórico. */
+  doneTransitionDate?: string | null;
   baseUrl: string;
   today: string;
   hoursPerPf?: number;
@@ -102,6 +106,7 @@ export function mapActivity(params: {
     bugs,
     developerRoles = new Map(),
     sprintEnteredAt = null,
+    doneTransitionDate = null,
     baseUrl,
     today,
     hoursPerPf = DEFAULT_HOURS_PER_PF,
@@ -112,7 +117,14 @@ export function mapActivity(params: {
   const isDone = isDoneStatusCategory(story.statusCategory);
   // Sem a story formalmente concluída no Jira, mas com a subtarefa de Teste já atendida, usamos a
   // data dela como entrega — o trabalho terminou de fato, só falta a liberação/fechamento formal.
-  const deliveredDate = isDone ? dateOnly(story.updated) : testDone && testDoneDate !== null ? testDoneDate : null;
+  // Concluída: prioriza a data real da transição pro status atual (changelog) — `story.updated`
+  // pode ter sido tocado bem depois da entrega de fato, por algo sem relação (ex.: campo mexido em
+  // lote), inflando a data. Sem esse histórico, cai pro `story.updated` como antes.
+  const deliveredDate = isDone
+    ? dateOnly(doneTransitionDate ?? story.updated)
+    : testDone && testDoneDate !== null
+      ? testDoneDate
+      : null;
   // Sem subtarefa de Implementação ainda e não concluída: `startDate` é só a data de criação da
   // story, não um início real — não dá pra projetar prazo nem considerar herdada a partir dela.
   const notStarted = !isDone && implStartDate === null;
