@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { getConfig, saveConfig } from '../api/client.js';
+import { getConfig, saveConfig, type AppConfig } from '../api/client.js';
 
 const VERTICAL_OPTIONS = ['Contratos', 'Contábil', 'Arrecadação', 'Saúde', 'Educação', 'ISS', 'Pessoal'];
 
@@ -16,7 +16,17 @@ function formatHoursAsClock(rawValue: string): string | null {
   return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}min`;
 }
 
-export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string) => void }) {
+export default function SettingsScreen({
+  onSaved,
+  onCancel,
+}: {
+  onSaved: (config: AppConfig) => void;
+  /** Quando informado, mostra um botão "Fechar" que sai sem salvar — usado quando a tela é aberta
+   * por cima de um board já carregado, só pra conferir algo (sem isso, só dava pra sair salvando,
+   * o que disparava uma busca nova no Jira à toa). Omitido na configuração inicial, onde não há
+   * pra onde "fechar" sem salvar. */
+  onCancel?: () => void;
+}) {
   const [vertical, setVertical] = useState('');
   const [jiraUsername, setJiraUsername] = useState('');
   const [jiraPassword, setJiraPassword] = useState('');
@@ -87,7 +97,7 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
         publishDay: publishDay || null,
         autoRefreshEnabled,
       });
-      onSaved(config.vertical!);
+      onSaved(config);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar.');
       setSaving(false);
@@ -97,10 +107,16 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
   return (
     <div
       style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1000,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        height: '100vh',
+        // Com onCancel, a tela abre por cima de um board já carregado — um fundo escurecido deixa
+        // claro que é uma sobreposição temporária. Na configuração inicial (sem onCancel) é a única
+        // coisa na página, então usa a cor normal de fundo em vez de escurecer o nada.
+        background: onCancel ? 'rgba(0, 0, 0, 0.45)' : 'var(--page-plane)',
       }}
     >
       <form
@@ -226,23 +242,44 @@ export default function SettingsScreen({ onSaved }: { onSaved: (vertical: string
 
         {error && <p style={{ color: 'var(--status-critical)', fontSize: 13, margin: 0 }}>{error}</p>}
 
-        <button
-          type="submit"
-          disabled={saving}
-          style={{
-            padding: '10px 16px',
-            borderRadius: 8,
-            border: 'none',
-            background: 'var(--series-impl)',
-            color: '#fff',
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: saving ? 'default' : 'pointer',
-            opacity: saving ? 0.7 : 1,
-          }}
-        >
-          {saving ? 'Salvando...' : 'Salvar e continuar'}
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              style={{
+                padding: '10px 16px',
+                borderRadius: 8,
+                border: '1px solid var(--baseline)',
+                background: 'var(--surface-1)',
+                color: 'var(--text-secondary)',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Fechar
+            </button>
+          )}
+          <button
+            type="submit"
+            disabled={saving}
+            style={{
+              flex: 1,
+              padding: '10px 16px',
+              borderRadius: 8,
+              border: 'none',
+              background: 'var(--series-impl)',
+              color: '#fff',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: saving ? 'default' : 'pointer',
+              opacity: saving ? 0.7 : 1,
+            }}
+          >
+            {saving ? 'Salvando...' : 'Salvar e continuar'}
+          </button>
+        </div>
       </form>
     </div>
   );

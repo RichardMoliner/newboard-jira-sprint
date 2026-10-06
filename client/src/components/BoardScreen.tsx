@@ -7,22 +7,24 @@ import IndicatorsView from './IndicatorsView.js';
 import HistoryView from './HistoryView.js';
 import ReportView from './ReportView.js';
 import ProgressModal from './ProgressModal.js';
+import SettingsScreen from './SettingsScreen.js';
 
 type Tab = 'timeline' | 'indicators' | 'history';
 
 export default function BoardScreen({
   vertical,
-  onChangeVertical,
+  onVerticalChange,
   theme,
   onToggleTheme,
 }: {
   vertical: string;
-  onChangeVertical: () => void;
+  onVerticalChange: (vertical: string) => void;
   theme: Theme;
   onToggleTheme: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('timeline');
   const [showReport, setShowReport] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [sprintFilter, setSprintFilter] = useState<string[]>([]);
   const [dashDelayBar, setDashDelayBar] = useState(false);
   const [deadlines, setDeadlines] = useState<{ lastPublishDay: string | null; lastTestDay: string | null; publishDay: string | null }>({
@@ -58,6 +60,19 @@ export default function BoardScreen({
   return (
     <div className="board-root" style={{ height: '100vh', boxSizing: 'border-box', padding: '24px 32px 0', display: 'flex', flexDirection: 'column' }}>
       {loading && <ProgressModal messages={progressMessages} />}
+      {showSettings && (
+        <SettingsScreen
+          onCancel={() => setShowSettings(false)}
+          onSaved={(config) => {
+            setShowSettings(false);
+            setDashDelayBar(config.dashDelayBar);
+            setDeadlines({ lastPublishDay: config.lastPublishDay, lastTestDay: config.lastTestDay, publishDay: config.publishDay });
+            setAutoRefreshEnabled(config.autoRefreshEnabled);
+            if (config.vertical && config.vertical !== vertical) onVerticalChange(config.vertical);
+            refresh();
+          }}
+        />
+      )}
       <header
         className="no-print"
         style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20, flexShrink: 0 }}
@@ -73,7 +88,7 @@ export default function BoardScreen({
             >
               {theme === 'dark' ? '🌙' : '☀️'}
             </button>
-            <button onClick={onChangeVertical} style={secondaryButtonStyle}>
+            <button onClick={() => setShowSettings(true)} style={secondaryButtonStyle}>
               Configurações
             </button>
             {data && (

@@ -50,13 +50,13 @@ export default function App() {
   }
 
   if (state.status === 'needs-setup') {
-    return <SettingsScreen onSaved={(vertical) => setState({ status: 'ready', vertical })} />;
+    return <SettingsScreen onSaved={(config) => setState({ status: 'ready', vertical: config.vertical! })} />;
   }
 
   return (
     <BoardScreen
       vertical={state.vertical}
-      onChangeVertical={() => setState({ status: 'needs-setup' })}
+      onVerticalChange={(vertical) => setState({ status: 'ready', vertical })}
       theme={theme}
       onToggleTheme={toggleTheme}
     />
