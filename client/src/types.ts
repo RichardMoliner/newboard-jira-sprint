@@ -63,6 +63,8 @@ export interface Activity {
   bugs: BugSubtask[];
   addedAfterSprintStart: boolean;
   sprintEnteredAt: string | null;
+  /** True quando a story carrega o rótulo "não-impacta-deploy" — pode ficar de fora de um deploy sem bloquear a publicação. */
+  notImpactsDeploy: boolean;
 }
 
 export interface SprintInfo {

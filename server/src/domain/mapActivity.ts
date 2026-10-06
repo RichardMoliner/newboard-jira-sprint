@@ -18,7 +18,12 @@ export interface RawStory {
   testador: string | null;
   created: string;
   updated: string;
+  /** Rótulos (labels) da story. */
+  labels?: string[];
 }
+
+/** Rótulo usado pra marcar tarefas que podem ficar de fora de um deploy sem bloquear a publicação. */
+const NOT_IMPACTS_DEPLOY_LABEL = 'não-impacta-deploy';
 
 function dateOnly(isoDateTime: string): string {
   return isoDateTime.slice(0, 10);
@@ -217,5 +222,6 @@ export function mapActivity(params: {
     bugs,
     addedAfterSprintStart: isAddedAfterSprintStart(carried, sprintEnteredAt, sprint.startDateTime),
     sprintEnteredAt,
+    notImpactsDeploy: (story.labels ?? []).includes(NOT_IMPACTS_DEPLOY_LABEL),
   };
 }

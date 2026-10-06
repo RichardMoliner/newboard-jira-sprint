@@ -493,6 +493,42 @@ describe('mapActivity', () => {
     expect(activity.deliveredDate).toBeNull();
   });
 
+  test('flags notImpactsDeploy when the story carries the "não-impacta-deploy" label', () => {
+    const activity = mapActivity({
+      story: baseStory({ labels: ['não-impacta-deploy'] }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.notImpactsDeploy).toBe(true);
+  });
+
+  test('does not flag notImpactsDeploy for unrelated labels', () => {
+    const activity = mapActivity({
+      story: baseStory({ labels: ['outra-label'] }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.notImpactsDeploy).toBe(false);
+  });
+
+  test('defaults notImpactsDeploy to false when the story has no labels at all', () => {
+    const activity = mapActivity({
+      story: baseStory({ labels: undefined }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.notImpactsDeploy).toBe(false);
+  });
+
   test('computes implEstimatedHours/testEstimatedHours as the exact 70/30 split of the PF-based estimate', () => {
     const activity = mapActivity({
       story: baseStory({ storyPoints: 10 }),

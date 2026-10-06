@@ -78,6 +78,8 @@ export interface Activity {
   addedAfterSprintStart: boolean;
   /** Timestamp ISO de quando a atividade entrou na sprint atual (via changelog do Jira); null quando não há esse histórico (ex: já criada dentro da sprint). */
   sprintEnteredAt: string | null;
+  /** True quando a story carrega o rótulo "não-impacta-deploy" — pode ficar de fora de um deploy sem bloquear a publicação. */
+  notImpactsDeploy: boolean;
 }
 
 export interface SprintInfo {

@@ -39,6 +39,7 @@ function activity(overrides: Partial<Activity> = {}): Activity {
     bugs: [],
     addedAfterSprintStart: false,
     sprintEnteredAt: null,
+    notImpactsDeploy: false,
     ...overrides,
   };
 }

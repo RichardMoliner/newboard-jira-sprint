@@ -30,6 +30,8 @@ interface StoryDetail {
   testador: string | null;
   created: string;
   updated: string;
+  /** Rótulos (labels) da story — já vem no response_format "detailed" do get_issue, sem custo extra. */
+  labels?: string[];
 }
 
 function todayISO(): string {

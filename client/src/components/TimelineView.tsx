@@ -773,6 +773,14 @@ function ActivityRow({
           fontSize: 11.5,
         }}
       >
+        {activity.notImpactsDeploy && (
+          <div
+            style={{ position: 'absolute', top: 4, right: 6 }}
+            title='Rótulo "não-impacta-deploy": pode ficar de fora de um deploy sem bloquear a publicação.'
+          >
+            <Badge color="var(--status-good)">Não impacta deploy</Badge>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 14 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <a
