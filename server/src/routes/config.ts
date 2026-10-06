@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { readConfig, writeConfig, type AppConfig } from '../config/configStore.js';
-import { DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY } from '../compute/timeline.js';
+import { DEFAULT_HOURS_PER_DAY } from '../compute/timeline.js';
 
 function toPublicConfig(config: AppConfig) {
   // Nunca devolve a senha em texto puro para o cliente — só se ela já está configurada.
@@ -8,12 +8,8 @@ function toPublicConfig(config: AppConfig) {
     vertical: config.vertical,
     jiraUsername: config.jiraUsername,
     jiraPasswordSet: Boolean(config.jiraPassword),
-    hoursPerPf: config.hoursPerPf ?? DEFAULT_HOURS_PER_PF,
     hoursPerDay: config.hoursPerDay ?? DEFAULT_HOURS_PER_DAY,
     dashDelayBar: config.dashDelayBar ?? false,
-    lastPublishDay: config.lastPublishDay ?? null,
-    lastTestDay: config.lastTestDay ?? null,
-    publishDay: config.publishDay ?? null,
     autoRefreshEnabled: config.autoRefreshEnabled ?? true,
   };
 }
@@ -78,12 +74,6 @@ export function configRouter(configPath: string): Router {
       return;
     }
 
-    const hoursPerPf = parsePositiveNumberField(req.body?.hoursPerPf, existing.hoursPerPf ?? DEFAULT_HOURS_PER_PF);
-    if (hoursPerPf.error) {
-      res.status(400).json({ error: `Horas por PF ${hoursPerPf.error}` });
-      return;
-    }
-
     const hoursPerDay = parsePositiveNumberField(req.body?.hoursPerDay, existing.hoursPerDay ?? DEFAULT_HOURS_PER_DAY);
     if (hoursPerDay.error) {
       res.status(400).json({ error: `Horas produtivas por dia ${hoursPerDay.error}` });
@@ -92,38 +82,17 @@ export function configRouter(configPath: string): Router {
 
     const dashDelayBar = req.body?.dashDelayBar === undefined ? (existing.dashDelayBar ?? false) : Boolean(req.body.dashDelayBar);
 
-    const lastPublishDay = parseOptionalDateField(req.body?.lastPublishDay, existing.lastPublishDay);
-    if (lastPublishDay.error) {
-      res.status(400).json({ error: `Último dia de publicação ${lastPublishDay.error}` });
-      return;
-    }
-
-    const lastTestDay = parseOptionalDateField(req.body?.lastTestDay, existing.lastTestDay);
-    if (lastTestDay.error) {
-      res.status(400).json({ error: `Último dia de testes ${lastTestDay.error}` });
-      return;
-    }
-
-    const publishDay = parseOptionalDateField(req.body?.publishDay, existing.publishDay);
-    if (publishDay.error) {
-      res.status(400).json({ error: `Dia da publicação ${publishDay.error}` });
-      return;
-    }
-
     const autoRefreshEnabled =
       req.body?.autoRefreshEnabled === undefined ? (existing.autoRefreshEnabled ?? true) : Boolean(req.body.autoRefreshEnabled);
 
-    const next = {
+    const next: AppConfig = {
       vertical,
       jiraUsername,
       jiraPassword,
-      hoursPerPf: hoursPerPf.value,
       hoursPerDay: hoursPerDay.value,
       dashDelayBar,
-      lastPublishDay: lastPublishDay.value,
-      lastTestDay: lastTestDay.value,
-      publishDay: publishDay.value,
       autoRefreshEnabled,
+      sprintSettings: existing.sprintSettings,
     };
     await writeConfig(configPath, next);
     res.json(toPublicConfig(next));

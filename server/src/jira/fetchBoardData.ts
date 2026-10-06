@@ -17,6 +17,10 @@ const CHANGELOG_CONCURRENCY = 6;
 interface StorySearchHit {
   key: string;
   customfield_10001?: string[];
+  /** Campo "Exigência": nome da exigência legal/regulatória atendida, quando a story é uma. */
+  customfield_10212?: { value: string } | null;
+  /** Campo "Data final": data-limite (YYYY-MM-DD) de entrega da exigência. */
+  customfield_21800?: string | null;
 }
 
 interface StoryDetail {
@@ -64,7 +68,7 @@ async function fetchActivitiesForSprintScope(
   sprintScopeJql: string,
   todayStrategy: 'now' | 'latest-sprint-end',
   credentials: JiraCredentials,
-  hoursPerPf: number | undefined,
+  hoursPerPfBySprintId: Record<string, number | null>,
   hoursPerDay: number | undefined,
 ): Promise<SprintScopeResult> {
   const baseUrl = requireEnv('JIRA_BASE_URL').replace(/\/$/, '');
@@ -73,7 +77,7 @@ async function fetchActivitiesForSprintScope(
   const [storyHits, subtasks] = await Promise.all([
     searchAllIssues<StorySearchHit>(
       `vertical = ${quoteJql(vertical)} AND issuetype = Story AND ${sprintScopeJql}`,
-      ['customfield_10001'],
+      ['customfield_10001', 'customfield_10212', 'customfield_21800'],
       credentials,
     ),
     searchAllIssues<RawSubtask>(
@@ -118,6 +122,12 @@ async function fetchActivitiesForSprintScope(
   });
 
   const sprintByStoryKey = new Map(storyHits.map((hit) => [hit.key, parseSprintField(hit.customfield_10001)]));
+  const legalInfoByStoryKey = new Map(
+    storyHits.map((hit) => [
+      hit.key,
+      { legalRequirement: hit.customfield_10212?.value ?? null, legalDeadline: hit.customfield_21800 ?? null },
+    ]),
+  );
 
   const sprints = new Map<string, SprintInfo>();
   for (const parsed of sprintByStoryKey.values()) {
@@ -182,9 +192,11 @@ async function fetchActivitiesForSprintScope(
         developerRoles,
         sprintEnteredAt: historyFactsByStoryKey.get(story.key)?.sprintEnteredAt ?? null,
         doneTransitionDate: historyFactsByStoryKey.get(story.key)?.doneTransitionDate ?? null,
+        legalRequirement: legalInfoByStoryKey.get(story.key)?.legalRequirement ?? null,
+        legalDeadline: legalInfoByStoryKey.get(story.key)?.legalDeadline ?? null,
         baseUrl,
         today,
-        hoursPerPf,
+        hoursPerPf: hoursPerPfBySprintId[sprint.id] ?? undefined,
         hoursPerDay,
       }),
     );
@@ -200,7 +212,7 @@ async function fetchActivitiesForSprintScope(
 export async function fetchBoardData(
   vertical: string,
   credentials: JiraCredentials,
-  hoursPerPf: number | undefined,
+  hoursPerPfBySprintId: Record<string, number | null>,
   hoursPerDay: number | undefined,
 ): Promise<BoardDataResponse> {
   const { sprints, activities, today } = await fetchActivitiesForSprintScope(
@@ -208,7 +220,7 @@ export async function fetchBoardData(
     'sprint in openSprints()',
     'now',
     credentials,
-    hoursPerPf,
+    hoursPerPfBySprintId,
     hoursPerDay,
   );
 
@@ -216,8 +228,8 @@ export async function fetchBoardData(
     generatedAt: new Date().toISOString(),
     today,
     vertical,
-    hoursPerPf: hoursPerPf ?? DEFAULT_HOURS_PER_PF,
     hoursPerDay: hoursPerDay ?? DEFAULT_HOURS_PER_DAY,
+    defaultHoursPerPf: DEFAULT_HOURS_PER_PF,
     assumedTestSharePercent: (1 - IMPL_SHARE) * 100,
     sprints,
     activities,
@@ -225,12 +237,14 @@ export async function fetchBoardData(
 }
 
 /** Mesmo pipeline do board ao vivo, mas para uma ou mais sprints já fechadas (aba Histórico) — veja
- * o comentário de `fetchActivitiesForSprintScope` sobre a âncora de "hoje" usada nesse caso. */
+ * o comentário de `fetchActivitiesForSprintScope` sobre a âncora de "hoje" usada nesse caso. Usa as
+ * mesmas configurações por sprint (horas/PF) salvas pra cada uma — uma sprint fechada continua
+ * usando o valor que estava configurado nela, mesmo depois de encerrada. */
 export async function fetchClosedSprintsData(
   vertical: string,
   sprintIds: string[],
   credentials: JiraCredentials,
-  hoursPerPf: number | undefined,
+  hoursPerPfBySprintId: Record<string, number | null>,
   hoursPerDay: number | undefined,
 ): Promise<BoardDataResponse> {
   const sprintScopeJql = `sprint in (${sprintIds.join(',')})`;
@@ -239,7 +253,7 @@ export async function fetchClosedSprintsData(
     sprintScopeJql,
     'latest-sprint-end',
     credentials,
-    hoursPerPf,
+    hoursPerPfBySprintId,
     hoursPerDay,
   );
 
@@ -247,8 +261,8 @@ export async function fetchClosedSprintsData(
     generatedAt: new Date().toISOString(),
     today,
     vertical,
-    hoursPerPf: hoursPerPf ?? DEFAULT_HOURS_PER_PF,
     hoursPerDay: hoursPerDay ?? DEFAULT_HOURS_PER_DAY,
+    defaultHoursPerPf: DEFAULT_HOURS_PER_PF,
     assumedTestSharePercent: (1 - IMPL_SHARE) * 100,
     sprints,
     activities,

@@ -6,6 +6,7 @@ import cors from 'cors';
 import { configRouter } from './routes/config.js';
 import { boardDataRouter } from './routes/boardData.js';
 import { historicalSprintsRouter } from './routes/historicalSprints.js';
+import { sprintSettingsRouter } from './routes/sprintSettings.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '../..');
@@ -20,6 +21,7 @@ app.use(express.json());
 app.use('/api', configRouter(CONFIG_PATH));
 app.use('/api', boardDataRouter(CONFIG_PATH));
 app.use('/api', historicalSprintsRouter(CONFIG_PATH, SPRINT_CACHE_DIR));
+app.use('/api', sprintSettingsRouter(CONFIG_PATH));
 
 const port = Number(process.env.PORT ?? 3001);
 const server = app.listen(port, () => {

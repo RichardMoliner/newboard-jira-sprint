@@ -92,6 +92,10 @@ export function mapActivity(params: {
    * como deliveredDate quando a story está concluída, em vez de `story.updated` (que pode ter sido
    * tocado bem depois da entrega real, por algo sem relação). Null sem esse histórico. */
   doneTransitionDate?: string | null;
+  /** Nome da exigência legal/regulatória (campo "Exigência" do Jira); null quando a story não é uma exigência legal. */
+  legalRequirement?: string | null;
+  /** Data-limite de entrega da exigência (campo "Data final" do Jira); null sem prazo definido. */
+  legalDeadline?: string | null;
   baseUrl: string;
   today: string;
   hoursPerPf?: number;
@@ -112,6 +116,8 @@ export function mapActivity(params: {
     developerRoles = new Map(),
     sprintEnteredAt = null,
     doneTransitionDate = null,
+    legalRequirement = null,
+    legalDeadline = null,
     baseUrl,
     today,
     hoursPerPf = DEFAULT_HOURS_PER_PF,
@@ -223,5 +229,7 @@ export function mapActivity(params: {
     addedAfterSprintStart: isAddedAfterSprintStart(carried, sprintEnteredAt, sprint.startDateTime),
     sprintEnteredAt,
     notImpactsDeploy: (story.labels ?? []).includes(NOT_IMPACTS_DEPLOY_LABEL),
+    legalRequirement,
+    legalDeadline,
   };
 }

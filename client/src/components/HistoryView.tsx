@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getHistoricalSprints, getHistoricalBoardData, getBoardDataProgress } from '../api/client.js';
-import type { BoardDataResponse, SprintInfo } from '../types.js';
+import type { BoardDataResponse, SprintInfo, SprintSettings } from '../types.js';
 import IndicatorsView from './IndicatorsView.js';
 import ProgressModal from './ProgressModal.js';
 
@@ -17,7 +17,7 @@ function formatBr(isoDate: string): string {
   return `${d}/${m}`;
 }
 
-export default function HistoryView() {
+export default function HistoryView({ sprintSettingsById }: { sprintSettingsById: Record<string, SprintSettings> }) {
   const [since, setSince] = useState(defaultSince());
   const [discovering, setDiscovering] = useState(false);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
@@ -134,6 +134,13 @@ export default function HistoryView() {
   }
 
   const showSelectionPanel = !historicalData || editingSelection;
+
+  const hoursPerPfBySprintId = useMemo(() => {
+    if (!historicalData) return {};
+    return Object.fromEntries(
+      historicalData.sprints.map((s) => [s.id, sprintSettingsById[s.id]?.hoursPerPf ?? historicalData.defaultHoursPerPf]),
+    );
+  }, [historicalData, sprintSettingsById]);
 
   return (
     <div style={{ paddingBottom: 60 }}>
@@ -291,7 +298,7 @@ export default function HistoryView() {
           activities={historicalData.activities}
           sprints={historicalData.sprints}
           today={historicalData.today}
-          hoursPerPf={historicalData.hoursPerPf}
+          hoursPerPfBySprintId={hoursPerPfBySprintId}
           assumedTestSharePercent={historicalData.assumedTestSharePercent}
           sprintFilter={historicalSprintFilter}
           onSprintClick={handleHistoricalSprintClick}

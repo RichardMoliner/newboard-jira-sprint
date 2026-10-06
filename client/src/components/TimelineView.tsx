@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { Activity, SprintInfo, TimelineWindow, WorklogEntry } from '../types.js';
+import type { Activity, SprintInfo, SprintSettings, TimelineWindow, WorklogEntry } from '../types.js';
 import { computeStatusSummaries } from '../indicators/computeIndicators.js';
 import { describeBugLabel } from '../bugLabels.js';
 import { addDays, isBusinessDay } from '../businessDays.js';
+import SprintSettingsPopup from './SprintSettingsPopup.js';
 
 const MIN_COLUMN_WIDTH = 28;
 const MAX_COLUMN_WIDTH = 96;
@@ -39,7 +40,8 @@ export default function TimelineView({
   sprintFilter,
   onSprintClick,
   dashDelayBar,
-  deadlines,
+  sprintSettingsById,
+  onSprintSettingsSaved,
 }: {
   activities: Activity[];
   sprints: SprintInfo[];
@@ -48,8 +50,14 @@ export default function TimelineView({
   sprintFilter: string[];
   onSprintClick: (id: string, shiftKey: boolean) => void;
   dashDelayBar: boolean;
-  deadlines: { lastPublishDay: string | null; lastTestDay: string | null; publishDay: string | null };
+  /** Configuração (horas/PF e prazos) por sprint — sem entrada aqui, a sprint usa o padrão do
+   * sistema pra horas/PF e não tem nenhuma régua de prazo. Editável pelo ícone de engrenagem ao
+   * lado da pill de cada sprint. */
+  sprintSettingsById: Record<string, SprintSettings>;
+  onSprintSettingsSaved: (sprintId: string, settings: SprintSettings) => void;
 }) {
+  // Sprint cujo pop-up de configuração (engrenagem) está aberto no momento; null = nenhum.
+  const [gearSprintId, setGearSprintId] = useState<string | null>(null);
   const [expandedBugs, setExpandedBugs] = useState<Set<string>>(new Set());
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
   const [dayWidth, setDayWidth] = useState(MIN_COLUMN_WIDTH);
@@ -105,8 +113,8 @@ export default function TimelineView({
   }, [activities, sprintFilter]);
 
   const deadlineRulers = useMemo(
-    () => resolveDeadlineRulers(deadlinesActive, deadlines, sprintFilter, sprints),
-    [deadlinesActive, deadlines, sprintFilter, sprints],
+    () => resolveDeadlineRulers(deadlinesActive, sprintSettingsById, sprintFilter, sprints),
+    [deadlinesActive, sprintSettingsById, sprintFilter, sprints],
   );
 
   const { minDate, maxDate } = useMemo(
@@ -234,11 +242,22 @@ export default function TimelineView({
   const hoverColumnWidth = dayPixelWidth;
   const hoverColumnLeft = hoverDate !== null ? x(hoverDate) : null;
 
+  const gearSprint = gearSprintId ? sprints.find((s) => s.id === gearSprintId) ?? null : null;
+
   return (
-    // Um único painel contínuo (sem gap entre as partes) do topo até o fim da tela: filtros +
-    // legenda ficam fixos aqui em cima, encostados na régua de dias — só a tabela por baixo rola,
-    // aproveitando o máximo de altura possível.
-    <div
+    <>
+      {gearSprint && (
+        <SprintSettingsPopup
+          sprint={gearSprint}
+          settings={sprintSettingsById[gearSprint.id]}
+          onClose={() => setGearSprintId(null)}
+          onSaved={onSprintSettingsSaved}
+        />
+      )}
+      {/* Um único painel contínuo (sem gap entre as partes) do topo até o fim da tela: filtros +
+          legenda ficam fixos aqui em cima, encostados na régua de dias — só a tabela por baixo rola,
+          aproveitando o máximo de altura possível. */}
+      <div
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -262,14 +281,22 @@ export default function TimelineView({
           {sprints.map((s) => {
             const sprintActivities = activitiesBySprintId.get(s.id) ?? [];
             return (
-              <FilterPill
-                key={s.id}
-                label={s.name}
-                active={sprintFilter.includes(s.id)}
-                onClick={(e) => onSprintClick(s.id, e.shiftKey)}
-                completion={computeSprintCompletion(sprintActivities)}
-                tooltip={formatStatusBreakdownTooltip(sprintActivities)}
-              />
+              <span key={s.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                <FilterPill
+                  label={s.name}
+                  active={sprintFilter.includes(s.id)}
+                  onClick={(e) => onSprintClick(s.id, e.shiftKey)}
+                  completion={computeSprintCompletion(sprintActivities)}
+                  tooltip={formatStatusBreakdownTooltip(sprintActivities)}
+                />
+                <button
+                  onClick={() => setGearSprintId(s.id)}
+                  title={`Configurar horas/PF e prazos de "${s.name}"`}
+                  style={gearButtonStyle}
+                >
+                  ⚙️
+                </button>
+              </span>
             );
           })}
           {selectedSprintsCompletion && (
@@ -620,6 +647,7 @@ export default function TimelineView({
         )}
       </div>
     </div>
+    </>
   );
 }
 
@@ -811,6 +839,16 @@ function ActivityRow({
                   <Tag color="var(--status-warning)">➕ Adicionada</Tag>
                 </span>
               )}
+              {activity.legalRequirement && (
+                <span title={`Exigência: ${activity.legalRequirement}${activity.legalDeadline ? ` · Data final: ${formatShort(activity.legalDeadline)}` : ''}`}>
+                  <Tag color="var(--status-serious)">
+                    ⚖️ Exigência legal
+                    {/* Data final fora do mês atual não fica marcada na raia (longe demais pra ser
+                        útil sem rolar) — mostra a data direto ao lado do badge em vez disso. */}
+                    {activity.legalDeadline && !isSameMonth(activity.legalDeadline, today) ? ` · ${formatShort(activity.legalDeadline)}` : ''}
+                  </Tag>
+                </span>
+              )}
               {(activity.isDone || activity.testDone) && activity.deliveredOnTime !== null && (
                 <Tag color={activity.deliveredOnTime ? 'var(--status-good)' : 'var(--status-critical)'}>
                   {activity.deliveredOnTime ? '✓ No prazo' : '✗ Fora do prazo'}
@@ -907,6 +945,19 @@ function ActivityRow({
             <span style={{ position: 'absolute', left: x(activity.startDate) + 4, top: 10, fontSize: 10, color: 'var(--text-muted)' }}>
               sem estimativa
             </span>
+          )}
+          {activity.legalDeadline && isSameMonth(activity.legalDeadline, today) && (
+            <div
+              title={`Data final: ${formatShort(activity.legalDeadline)}${activity.legalRequirement ? ` (${activity.legalRequirement})` : ''}`}
+              style={{
+                position: 'absolute',
+                left: x(activity.legalDeadline) - 1,
+                top: 0,
+                width: 2,
+                height: '100%',
+                background: 'var(--status-serious)',
+              }}
+            />
           )}
         </div>
       </div>
@@ -1534,6 +1585,16 @@ function SideList({ activity }: { activity: Activity }) {
   );
 }
 
+const gearButtonStyle: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  padding: '2px 4px',
+  fontSize: 12,
+  lineHeight: 1,
+  cursor: 'pointer',
+  opacity: 0.6,
+};
+
 const toggleButtonStyle: React.CSSProperties = {
   background: 'var(--page-plane)',
   color: 'var(--text-secondary)',
@@ -1621,6 +1682,12 @@ function formatShort(iso: string): string {
   return `${d}/${m}`;
 }
 
+/** Compara apenas ano+mês (YYYY-MM) de duas datas ISO — usado pra decidir se a Data final de uma
+ * exigência legal cai no mês corrente (marca na raia) ou não (mostra só o texto ao lado do badge). */
+export function isSameMonth(a: string, b: string): boolean {
+  return a.slice(0, 7) === b.slice(0, 7);
+}
+
 export function formatFullDate(iso: string): string {
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y}`;
@@ -1637,48 +1704,60 @@ export interface DeadlineRuler {
   badgeText: string;
 }
 
-/** Réguas de prazo exibidas na timeline quando "Mostrar deadlines" está ligado. */
+/** Réguas de prazo exibidas na timeline quando "Mostrar deadlines" está ligado — uma por sprint em
+ * escopo (as selecionadas no filtro, ou todas quando nenhuma está selecionada) que tenha a própria
+ * configuração salva; sprints sem configuração não contribuem réguas. O nome da sprint só entra no
+ * rótulo quando há mais de uma sprint em escopo (evita redundância no caso comum de 1 só). */
 export function resolveDeadlineRulers(
   deadlinesActive: boolean,
-  deadlines: { lastPublishDay: string | null; lastTestDay: string | null; publishDay: string | null },
+  sprintSettingsById: Record<string, SprintSettings>,
   sprintFilter: string[],
   sprints: SprintInfo[],
 ): DeadlineRuler[] {
   if (!deadlinesActive) return [];
 
+  const inScopeSprints = sprintFilter.length === 0 ? sprints : sprints.filter((s) => sprintFilter.includes(s.id));
+  const showSprintName = inScopeSprints.length > 1;
+
   const rulers: DeadlineRuler[] = [];
-  if (deadlines.lastPublishDay) {
-    rulers.push({
-      key: 'lastPublishDay',
-      label: 'Último dia implementação',
-      date: deadlines.lastPublishDay,
-      color: 'var(--text-muted)',
-      pulse: false,
-      display: 'badge',
-      badgeText: 'ddl imp',
-    });
-  }
-  if (deadlines.lastTestDay) {
-    rulers.push({
-      key: 'lastTestDay',
-      label: 'Último dia de testes',
-      date: deadlines.lastTestDay,
-      color: 'var(--series-test)',
-      pulse: false,
-      display: 'badge',
-      badgeText: 'ddl qa',
-    });
-  }
-  if (deadlines.publishDay) {
-    rulers.push({
-      key: 'publishDay',
-      label: 'Dia da publicação',
-      date: deadlines.publishDay,
-      color: 'var(--status-critical)',
-      pulse: false,
-      display: 'badge',
-      badgeText: 'deploy',
-    });
+  for (const sprint of inScopeSprints) {
+    const settings = sprintSettingsById[sprint.id];
+    if (!settings) continue;
+    const suffix = showSprintName ? ` (${sprint.name})` : '';
+
+    if (settings.lastPublishDay) {
+      rulers.push({
+        key: `lastPublishDay-${sprint.id}`,
+        label: `Último dia implementação${suffix}`,
+        date: settings.lastPublishDay,
+        color: 'var(--text-muted)',
+        pulse: false,
+        display: 'badge',
+        badgeText: 'ddl imp',
+      });
+    }
+    if (settings.lastTestDay) {
+      rulers.push({
+        key: `lastTestDay-${sprint.id}`,
+        label: `Último dia de testes${suffix}`,
+        date: settings.lastTestDay,
+        color: 'var(--series-test)',
+        pulse: false,
+        display: 'badge',
+        badgeText: 'ddl qa',
+      });
+    }
+    if (settings.publishDay) {
+      rulers.push({
+        key: `publishDay-${sprint.id}`,
+        label: `Dia da publicação${suffix}`,
+        date: settings.publishDay,
+        color: 'var(--status-critical)',
+        pulse: false,
+        display: 'badge',
+        badgeText: 'deploy',
+      });
+    }
   }
 
   if (sprintFilter.length === 1) {

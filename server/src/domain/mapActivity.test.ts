@@ -529,6 +529,49 @@ describe('mapActivity', () => {
     expect(activity.notImpactsDeploy).toBe(false);
   });
 
+  test('carries legalRequirement and legalDeadline through when provided', () => {
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint,
+      implStartDate: '2026-08-04',
+      legalRequirement: 'Lei 14.133/2021',
+      legalDeadline: '2026-12-31',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.legalRequirement).toBe('Lei 14.133/2021');
+    expect(activity.legalDeadline).toBe('2026-12-31');
+  });
+
+  test('defaults legalRequirement and legalDeadline to null when not provided', () => {
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.legalRequirement).toBeNull();
+    expect(activity.legalDeadline).toBeNull();
+  });
+
+  test('allows legalDeadline to be null even when legalRequirement is set (exigência sem prazo definido)', () => {
+    const activity = mapActivity({
+      story: baseStory(),
+      sprint,
+      implStartDate: '2026-08-04',
+      legalRequirement: 'e-SFINGE',
+      legalDeadline: null,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.legalRequirement).toBe('e-SFINGE');
+    expect(activity.legalDeadline).toBeNull();
+  });
+
   test('computes implEstimatedHours/testEstimatedHours as the exact 70/30 split of the PF-based estimate', () => {
     const activity = mapActivity({
       story: baseStory({ storyPoints: 10 }),

@@ -43,7 +43,7 @@ export default function ReportView({
   today,
   sprintFilter,
   onSprintClick,
-  hoursPerPf,
+  hoursPerPfBySprintId,
   assumedTestSharePercent,
   vertical,
   onClose,
@@ -53,7 +53,7 @@ export default function ReportView({
   today: string;
   sprintFilter: string[];
   onSprintClick: (id: string, shiftKey: boolean) => void;
-  hoursPerPf: number;
+  hoursPerPfBySprintId: Record<string, number>;
   assumedTestSharePercent: number;
   vertical: string;
   onClose: () => void;
@@ -91,7 +91,7 @@ export default function ReportView({
         today={today}
         sprintFilter={sprintFilter}
         onSprintClick={onSprintClick}
-        hoursPerPf={hoursPerPf}
+        hoursPerPfBySprintId={hoursPerPfBySprintId}
         assumedTestSharePercent={assumedTestSharePercent}
       />
 

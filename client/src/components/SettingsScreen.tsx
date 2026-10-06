@@ -31,12 +31,8 @@ export default function SettingsScreen({
   const [jiraUsername, setJiraUsername] = useState('');
   const [jiraPassword, setJiraPassword] = useState('');
   const [passwordAlreadySet, setPasswordAlreadySet] = useState(false);
-  const [hoursPerPf, setHoursPerPf] = useState('');
   const [hoursPerDay, setHoursPerDay] = useState('');
   const [dashDelayBar, setDashDelayBar] = useState(false);
-  const [lastPublishDay, setLastPublishDay] = useState('');
-  const [lastTestDay, setLastTestDay] = useState('');
-  const [publishDay, setPublishDay] = useState('');
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,12 +46,8 @@ export default function SettingsScreen({
       }
       if (config.jiraUsername) setJiraUsername(config.jiraUsername);
       setPasswordAlreadySet(config.jiraPasswordSet);
-      setHoursPerPf(String(Math.round(config.hoursPerPf * 100) / 100));
       setHoursPerDay(String(Math.round(config.hoursPerDay * 100) / 100));
       setDashDelayBar(config.dashDelayBar);
-      setLastPublishDay(config.lastPublishDay ?? '');
-      setLastTestDay(config.lastTestDay ?? '');
-      setPublishDay(config.publishDay ?? '');
       setAutoRefreshEnabled(config.autoRefreshEnabled);
     });
   }, []);
@@ -64,7 +56,6 @@ export default function SettingsScreen({
     e.preventDefault();
     const trimmedVertical = vertical.trim();
     const trimmedUsername = jiraUsername.trim();
-    const parsedHoursPerPf = Number(hoursPerPf.replace(',', '.'));
     const parsedHoursPerDay = Number(hoursPerDay.replace(',', '.'));
     if (!trimmedVertical || !trimmedUsername) {
       setError('Informe a vertical e o usuário do Jira.');
@@ -72,10 +63,6 @@ export default function SettingsScreen({
     }
     if (!passwordAlreadySet && !jiraPassword.trim()) {
       setError('Informe a senha do Jira.');
-      return;
-    }
-    if (!Number.isFinite(parsedHoursPerPf) || parsedHoursPerPf <= 0) {
-      setError('Informe um valor válido para horas por PF.');
       return;
     }
     if (!Number.isFinite(parsedHoursPerDay) || parsedHoursPerDay <= 0) {
@@ -89,12 +76,8 @@ export default function SettingsScreen({
         vertical: trimmedVertical,
         jiraUsername: trimmedUsername,
         jiraPassword,
-        hoursPerPf: parsedHoursPerPf,
         hoursPerDay: parsedHoursPerDay,
         dashDelayBar,
-        lastPublishDay: lastPublishDay || null,
-        lastTestDay: lastTestDay || null,
-        publishDay: publishDay || null,
         autoRefreshEnabled,
       });
       onSaved(config);
@@ -174,22 +157,6 @@ export default function SettingsScreen({
           />
         </Field>
 
-        <Field label="Horas por PF">
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            value={hoursPerPf}
-            onChange={(e) => setHoursPerPf(e.target.value)}
-            placeholder="5.71"
-            style={inputStyle}
-          />
-          <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-            Produtividade da vertical: quantas horas de trabalho equivalem a 1 Ponto de Função. Usado para projetar os
-            prazos de implementação e teste.
-          </span>
-        </Field>
-
         <Field label="Horas produtivas por dia">
           <input
             type="number"
@@ -203,8 +170,8 @@ export default function SettingsScreen({
           />
           <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
             Quantas horas de trabalho efetivo consideramos em 1 dia útil (descontando reuniões, pausas etc)
-            {hoursPerDayClock ? ` — equivale a ${hoursPerDayClock}` : ''}. Usado junto com as horas por PF nas
-            previsões de prazo.
+            {hoursPerDayClock ? ` — equivale a ${hoursPerDayClock}` : ''}. Usado junto com as horas por PF de cada
+            sprint (configuráveis na própria sprint, na Linha do tempo) nas previsões de prazo.
           </span>
         </Field>
 
@@ -227,18 +194,6 @@ export default function SettingsScreen({
           />
           Atualizar automaticamente a cada 5 minutos
         </label>
-
-        <Field label="Último dia implementação">
-          <input type="date" value={lastPublishDay} onChange={(e) => setLastPublishDay(e.target.value)} style={inputStyle} />
-        </Field>
-
-        <Field label="Último dia de testes">
-          <input type="date" value={lastTestDay} onChange={(e) => setLastTestDay(e.target.value)} style={inputStyle} />
-        </Field>
-
-        <Field label="Dia da publicação">
-          <input type="date" value={publishDay} onChange={(e) => setPublishDay(e.target.value)} style={inputStyle} />
-        </Field>
 
         {error && <p style={{ color: 'var(--status-critical)', fontSize: 13, margin: 0 }}>{error}</p>}
 

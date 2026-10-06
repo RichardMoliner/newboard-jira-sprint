@@ -17,47 +17,42 @@ afterEach(async () => {
 });
 
 describe('configStore', () => {
-  test('returns all fields null when the config file does not exist yet', async () => {
+  test('returns all fields null (and sprintSettings empty) when the config file does not exist yet', async () => {
     const configPath = await tempConfigPath();
     expect(await readConfig(configPath)).toEqual({
       vertical: null,
       jiraUsername: null,
       jiraPassword: null,
-      hoursPerPf: null,
       hoursPerDay: null,
       dashDelayBar: null,
-      lastPublishDay: null,
-      lastTestDay: null,
-      publishDay: null,
       autoRefreshEnabled: null,
+      sprintSettings: {},
     });
   });
 
-  test('round-trips a saved config', async () => {
+  test('round-trips a saved config, including per-sprint settings', async () => {
     const configPath = await tempConfigPath();
     await writeConfig(configPath, {
       vertical: 'CONTRATOS',
       jiraUsername: 'richard.junior',
       jiraPassword: 'segredo',
-      hoursPerPf: 6,
       hoursPerDay: 8,
       dashDelayBar: true,
-      lastPublishDay: '2026-10-01',
-      lastTestDay: '2026-10-03',
-      publishDay: '2026-10-05',
       autoRefreshEnabled: false,
+      sprintSettings: {
+        '7590': { hoursPerPf: 6, lastPublishDay: '2026-10-01', lastTestDay: '2026-10-03', publishDay: '2026-10-05' },
+      },
     });
     expect(await readConfig(configPath)).toEqual({
       vertical: 'CONTRATOS',
       jiraUsername: 'richard.junior',
       jiraPassword: 'segredo',
-      hoursPerPf: 6,
       hoursPerDay: 8,
       dashDelayBar: true,
-      lastPublishDay: '2026-10-01',
-      lastTestDay: '2026-10-03',
-      publishDay: '2026-10-05',
       autoRefreshEnabled: false,
+      sprintSettings: {
+        '7590': { hoursPerPf: 6, lastPublishDay: '2026-10-01', lastTestDay: '2026-10-03', publishDay: '2026-10-05' },
+      },
     });
   });
 
@@ -67,37 +62,42 @@ describe('configStore', () => {
       vertical: 'CONTRATOS',
       jiraUsername: 'richard.junior',
       jiraPassword: 'segredo',
-      hoursPerPf: 6,
       hoursPerDay: 8,
       dashDelayBar: true,
-      lastPublishDay: '2026-10-01',
-      lastTestDay: '2026-10-03',
-      publishDay: '2026-10-05',
       autoRefreshEnabled: false,
+      sprintSettings: { '7590': { hoursPerPf: 6, lastPublishDay: null, lastTestDay: null, publishDay: null } },
     });
     await writeConfig(configPath, {
       vertical: 'FINANCAS',
       jiraUsername: 'outro.usuario',
       jiraPassword: 'outrasenha',
-      hoursPerPf: 8,
       hoursPerDay: 6,
       dashDelayBar: false,
-      lastPublishDay: null,
-      lastTestDay: null,
-      publishDay: null,
       autoRefreshEnabled: true,
+      sprintSettings: {},
     });
     expect(await readConfig(configPath)).toEqual({
       vertical: 'FINANCAS',
       jiraUsername: 'outro.usuario',
       jiraPassword: 'outrasenha',
-      hoursPerPf: 8,
       hoursPerDay: 6,
       dashDelayBar: false,
-      lastPublishDay: null,
-      lastTestDay: null,
-      publishDay: null,
       autoRefreshEnabled: true,
+      sprintSettings: {},
     });
+  });
+
+  test('defaults sprintSettings to an empty object when missing from a saved file (older config)', async () => {
+    const configPath = await tempConfigPath();
+    await writeConfig(configPath, {
+      vertical: 'CONTRATOS',
+      jiraUsername: 'richard.junior',
+      jiraPassword: 'segredo',
+      hoursPerDay: 8,
+      dashDelayBar: true,
+      autoRefreshEnabled: false,
+      sprintSettings: undefined as unknown as Record<string, never>,
+    });
+    expect((await readConfig(configPath)).sprintSettings).toEqual({});
   });
 });

@@ -55,6 +55,10 @@ export function historicalSprintsRouter(configPath: string, cacheDir: string): R
       const cached = await Promise.all(sprintIds.map((id) => readCachedSprintData(cacheDir, id)));
       const missingIds = sprintIds.filter((_, i) => cached[i] === null);
 
+      const hoursPerPfBySprintId = Object.fromEntries(
+        Object.entries(config.sprintSettings).map(([sprintId, settings]) => [sprintId, settings.hoursPerPf]),
+      );
+
       const freshBySprintId = new Map<string, CachedSprintData>();
       if (missingIds.length > 0) {
         startProgress();
@@ -62,7 +66,7 @@ export function historicalSprintsRouter(configPath: string, cacheDir: string): R
           config.vertical,
           missingIds,
           { username: config.jiraUsername, password: config.jiraPassword },
-          config.hoursPerPf ?? undefined,
+          hoursPerPfBySprintId,
           config.hoursPerDay ?? undefined,
         );
         for (const sprint of data.sprints) {
@@ -88,8 +92,8 @@ export function historicalSprintsRouter(configPath: string, cacheDir: string): R
         generatedAt: new Date().toISOString(),
         today,
         vertical: config.vertical,
-        hoursPerPf: config.hoursPerPf ?? DEFAULT_HOURS_PER_PF,
         hoursPerDay: config.hoursPerDay ?? DEFAULT_HOURS_PER_DAY,
+        defaultHoursPerPf: DEFAULT_HOURS_PER_PF,
         assumedTestSharePercent: (1 - IMPL_SHARE) * 100,
         sprints,
         activities,

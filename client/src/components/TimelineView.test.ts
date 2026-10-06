@@ -8,6 +8,7 @@ import {
   dayFillRatio,
   formatConsumedPercent,
   formatFullDate,
+  isSameMonth,
   formatHoursMinutes,
   formatHoursPair,
   formatStatusBreakdownTooltip,
@@ -85,6 +86,8 @@ function activity(overrides: Partial<Activity> = {}): Activity {
     addedAfterSprintStart: false,
     sprintEnteredAt: null,
     notImpactsDeploy: false,
+    legalRequirement: null,
+    legalDeadline: null,
     ...overrides,
   };
 }
@@ -761,54 +764,95 @@ describe('formatFullDate', () => {
   });
 });
 
-describe('resolveDeadlineRulers', () => {
-  const deadlines = { lastPublishDay: '2026-09-10', lastTestDay: '2026-09-12', publishDay: '2026-09-15' };
-
-  test('returns nothing when the switch is off, regardless of configured dates', () => {
-    expect(resolveDeadlineRulers(false, deadlines, [], [])).toEqual([]);
+describe('isSameMonth', () => {
+  test('returns true for two dates in the same year and month', () => {
+    expect(isSameMonth('2026-10-01', '2026-10-31')).toBe(true);
   });
 
-  test('returns the 3 configured deadlines when the switch is on and no sprint is selected', () => {
-    const rulers = resolveDeadlineRulers(true, deadlines, [], []);
-    expect(rulers.map((r) => r.key)).toEqual(['lastPublishDay', 'lastTestDay', 'publishDay']);
+  test('returns false for dates in different months', () => {
+    expect(isSameMonth('2026-10-31', '2026-11-01')).toBe(false);
+  });
+
+  test('returns false for the same month in different years', () => {
+    expect(isSameMonth('2025-10-05', '2026-10-05')).toBe(false);
+  });
+});
+
+describe('resolveDeadlineRulers', () => {
+  const s1 = sprintInfo({ id: 'S1', name: 'Sprint 1', endDate: '2026-09-20' });
+  const s2 = sprintInfo({ id: 'S2', name: 'Sprint 2', endDate: '2026-10-05' });
+  const settingsS1 = {
+    S1: { hoursPerPf: 5, lastPublishDay: '2026-09-10', lastTestDay: '2026-09-12', publishDay: '2026-09-15' },
+  };
+
+  test('returns nothing when the switch is off, regardless of configured dates', () => {
+    expect(resolveDeadlineRulers(false, settingsS1, [], [s1])).toEqual([]);
+  });
+
+  test('returns the 3 configured deadlines for the only sprint, when no sprint filter is applied (all sprints in scope)', () => {
+    const rulers = resolveDeadlineRulers(true, settingsS1, [], [s1]);
+    expect(rulers.map((r) => r.key)).toEqual(['lastPublishDay-S1', 'lastTestDay-S1', 'publishDay-S1']);
     expect(rulers.map((r) => r.date)).toEqual(['2026-09-10', '2026-09-12', '2026-09-15']);
   });
 
   test('omits a deadline ruler whose date is not configured', () => {
-    const rulers = resolveDeadlineRulers(true, { ...deadlines, lastTestDay: null }, [], []);
-    expect(rulers.map((r) => r.key)).toEqual(['lastPublishDay', 'publishDay']);
+    const settings = { S1: { ...settingsS1.S1, lastTestDay: null } };
+    const rulers = resolveDeadlineRulers(true, settings, [], [s1]);
+    expect(rulers.map((r) => r.key)).toEqual(['lastPublishDay-S1', 'publishDay-S1']);
   });
 
-  test('adds a 4th ruler for the sprint end date when exactly one sprint is selected', () => {
-    const sprints = [sprintInfo({ id: 'S1', name: 'Sprint 1', endDate: '2026-09-20' })];
-    const rulers = resolveDeadlineRulers(true, deadlines, ['S1'], sprints);
-    expect(rulers.map((r) => r.key)).toEqual(['lastPublishDay', 'lastTestDay', 'publishDay', 'sprintEnd']);
+  test('omits every ruler for a sprint with no saved settings at all', () => {
+    expect(resolveDeadlineRulers(true, {}, [], [s1])).toEqual([]);
+  });
+
+  test('does not include the sprint name in the label when only one sprint is in scope', () => {
+    const rulers = resolveDeadlineRulers(true, settingsS1, ['S1'], [s1]);
+    expect(rulers.find((r) => r.key === 'lastPublishDay-S1')?.label).toBe('Último dia implementação');
+  });
+
+  test('includes each sprint name in the label when combining multiple sprints with their own settings', () => {
+    const settings = {
+      S1: settingsS1.S1,
+      S2: { hoursPerPf: 6, lastPublishDay: '2026-09-28', lastTestDay: null, publishDay: null },
+    };
+    const rulers = resolveDeadlineRulers(true, settings, [], [s1, s2]);
+    expect(rulers.map((r) => r.key)).toEqual(['lastPublishDay-S1', 'lastTestDay-S1', 'publishDay-S1', 'lastPublishDay-S2']);
+    expect(rulers.find((r) => r.key === 'lastPublishDay-S1')?.label).toBe('Último dia implementação (Sprint 1)');
+    expect(rulers.find((r) => r.key === 'lastPublishDay-S2')?.label).toBe('Último dia implementação (Sprint 2)');
+  });
+
+  test('only considers sprints inside the current sprintFilter, ignoring other sprints\' settings', () => {
+    const settings = { S1: settingsS1.S1, S2: { hoursPerPf: 6, lastPublishDay: '2026-09-28', lastTestDay: null, publishDay: null } };
+    const rulers = resolveDeadlineRulers(true, settings, ['S1'], [s1, s2]);
+    expect(rulers.filter((r) => r.key !== 'sprintEnd').every((r) => r.key.endsWith('-S1'))).toBe(true);
+  });
+
+  test('adds a ruler for the sprint end date when exactly one sprint is selected', () => {
+    const rulers = resolveDeadlineRulers(true, settingsS1, ['S1'], [s1]);
+    expect(rulers.map((r) => r.key)).toEqual(['lastPublishDay-S1', 'lastTestDay-S1', 'publishDay-S1', 'sprintEnd']);
     expect(rulers[3].date).toBe('2026-09-20');
   });
 
   test('does not add the sprint end ruler when no sprint or more than one sprint is selected', () => {
-    const sprints = [sprintInfo({ id: 'S1', endDate: '2026-09-20' }), sprintInfo({ id: 'S2', endDate: '2026-10-05' })];
-    expect(resolveDeadlineRulers(true, deadlines, [], sprints).some((r) => r.key === 'sprintEnd')).toBe(false);
-    expect(resolveDeadlineRulers(true, deadlines, ['S1', 'S2'], sprints).some((r) => r.key === 'sprintEnd')).toBe(false);
+    expect(resolveDeadlineRulers(true, settingsS1, [], [s1, s2]).some((r) => r.key === 'sprintEnd')).toBe(false);
+    expect(resolveDeadlineRulers(true, settingsS1, ['S1', 'S2'], [s1, s2]).some((r) => r.key === 'sprintEnd')).toBe(false);
   });
 
   test('gives each ruler a distinct color and only the sprint end ruler pulses', () => {
-    const sprints = [sprintInfo({ id: 'S1', endDate: '2026-09-20' })];
-    const rulers = resolveDeadlineRulers(true, deadlines, ['S1'], sprints);
+    const rulers = resolveDeadlineRulers(true, settingsS1, ['S1'], [s1]);
     const byKey = Object.fromEntries(rulers.map((r) => [r.key, r]));
-    expect(byKey.lastPublishDay).toMatchObject({ color: 'var(--text-muted)', pulse: false });
-    expect(byKey.lastTestDay).toMatchObject({ color: 'var(--series-test)', pulse: false });
-    expect(byKey.publishDay).toMatchObject({ color: 'var(--status-critical)', pulse: false });
+    expect(byKey['lastPublishDay-S1']).toMatchObject({ color: 'var(--text-muted)', pulse: false });
+    expect(byKey['lastTestDay-S1']).toMatchObject({ color: 'var(--series-test)', pulse: false });
+    expect(byKey['publishDay-S1']).toMatchObject({ color: 'var(--status-critical)', pulse: false });
     expect(byKey.sprintEnd).toMatchObject({ color: 'var(--status-good)', pulse: true });
   });
 
-  test('the 3 configured deadlines render as badges; only the sprint end ruler renders as a bar', () => {
-    const sprints = [sprintInfo({ id: 'S1', endDate: '2026-09-20' })];
-    const rulers = resolveDeadlineRulers(true, deadlines, ['S1'], sprints);
+  test('the configured deadlines render as badges; only the sprint end ruler renders as a bar', () => {
+    const rulers = resolveDeadlineRulers(true, settingsS1, ['S1'], [s1]);
     const byKey = Object.fromEntries(rulers.map((r) => [r.key, r]));
-    expect(byKey.lastPublishDay).toMatchObject({ display: 'badge', badgeText: 'ddl imp', label: 'Último dia implementação' });
-    expect(byKey.lastTestDay).toMatchObject({ display: 'badge', badgeText: 'ddl qa' });
-    expect(byKey.publishDay).toMatchObject({ display: 'badge', badgeText: 'deploy' });
+    expect(byKey['lastPublishDay-S1']).toMatchObject({ display: 'badge', badgeText: 'ddl imp' });
+    expect(byKey['lastTestDay-S1']).toMatchObject({ display: 'badge', badgeText: 'ddl qa' });
+    expect(byKey['publishDay-S1']).toMatchObject({ display: 'badge', badgeText: 'deploy' });
     expect(byKey.sprintEnd).toMatchObject({ display: 'bar' });
   });
 });

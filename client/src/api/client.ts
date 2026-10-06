@@ -1,4 +1,4 @@
-import type { SprintInfo } from '../types.js';
+import type { SprintInfo, SprintSettings } from '../types.js';
 
 export class ApiError extends Error {}
 
@@ -18,12 +18,8 @@ export interface AppConfig {
   vertical: string | null;
   jiraUsername: string | null;
   jiraPasswordSet: boolean;
-  hoursPerPf: number;
   hoursPerDay: number;
   dashDelayBar: boolean;
-  lastPublishDay: string | null;
-  lastTestDay: string | null;
-  publishDay: string | null;
   autoRefreshEnabled: boolean;
 }
 
@@ -32,12 +28,8 @@ export interface SaveConfigInput {
   jiraUsername: string;
   /** Em branco na edição mantém a senha já salva. */
   jiraPassword: string;
-  hoursPerPf: number;
   hoursPerDay: number;
   dashDelayBar: boolean;
-  lastPublishDay: string | null;
-  lastTestDay: string | null;
-  publishDay: string | null;
   autoRefreshEnabled: boolean;
 }
 
@@ -63,4 +55,16 @@ export function getHistoricalSprints(since: string): Promise<{ sprints: SprintIn
 
 export function getHistoricalBoardData<T>(sprintIds: string[]): Promise<T> {
   return request<T>(`/historical-board-data?sprintIds=${encodeURIComponent(sprintIds.join(','))}`);
+}
+
+/** Configuração (horas/PF e prazos) de todas as sprints já salvas, chaveada pelo id da sprint. */
+export function getSprintSettings(): Promise<Record<string, SprintSettings>> {
+  return request<Record<string, SprintSettings>>('/sprint-settings');
+}
+
+export function saveSprintSettings(sprintId: string, input: SprintSettings): Promise<SprintSettings> {
+  return request<SprintSettings>(`/sprint-settings/${encodeURIComponent(sprintId)}`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 }

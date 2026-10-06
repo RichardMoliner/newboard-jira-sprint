@@ -65,6 +65,10 @@ export interface Activity {
   sprintEnteredAt: string | null;
   /** True quando a story carrega o rótulo "não-impacta-deploy" — pode ficar de fora de um deploy sem bloquear a publicação. */
   notImpactsDeploy: boolean;
+  /** Nome da exigência legal/regulatória que esta story atende (ex.: "Lei 14.133/2021"). Null quando não é uma exigência legal. */
+  legalRequirement: string | null;
+  /** Data-limite (YYYY-MM-DD) de entrega da exigência ("Data final" no Jira). Pode ser null mesmo com legalRequirement preenchido. */
+  legalDeadline: string | null;
 }
 
 export interface SprintInfo {
@@ -80,10 +84,20 @@ export interface BoardDataResponse {
   generatedAt: string;
   today: string;
   vertical: string;
-  hoursPerPf: number;
   hoursPerDay: number;
+  /** Horas por PF padrão do sistema — usado como fallback pra sprints sem configuração própria salva. */
+  defaultHoursPerPf: number;
   /** % do tempo total (Implementação + Teste) assumido como Teste ao projetar a janela prevista (hoje fixo em 30%). */
   assumedTestSharePercent: number;
   sprints: SprintInfo[];
   activities: Activity[];
+}
+
+/** Configuração por sprint (horas/PF e prazos), chaveada pelo id da sprint no Jira — sem entrada
+ * aqui, a sprint usa o padrão do sistema pra horas/PF e não tem nenhuma régua de prazo. */
+export interface SprintSettings {
+  hoursPerPf: number | null;
+  lastPublishDay: string | null;
+  lastTestDay: string | null;
+  publishDay: string | null;
 }

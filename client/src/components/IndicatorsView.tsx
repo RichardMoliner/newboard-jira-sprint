@@ -25,7 +25,7 @@ export default function IndicatorsView({
   today,
   sprintFilter,
   onSprintClick,
-  hoursPerPf,
+  hoursPerPfBySprintId,
   assumedTestSharePercent,
 }: {
   activities: Activity[];
@@ -33,7 +33,8 @@ export default function IndicatorsView({
   today: string;
   sprintFilter: string[];
   onSprintClick: (id: string, shiftKey: boolean) => void;
-  hoursPerPf: number;
+  /** Horas/PF efetivo de cada sprint (já com o padrão do sistema aplicado pra quem não configurou a própria). */
+  hoursPerPfBySprintId: Record<string, number>;
   assumedTestSharePercent: number;
 }) {
   const filtered = useMemo(
@@ -56,8 +57,8 @@ export default function IndicatorsView({
   const kpis = useMemo(() => computeKpis(indicatorActivities, today), [indicatorActivities, today]);
 
   const realizedProductivity = useMemo(
-    () => computeRealizedProductivity(indicatorActivities, hoursPerPf, assumedTestSharePercent),
-    [indicatorActivities, hoursPerPf, assumedTestSharePercent],
+    () => computeRealizedProductivity(indicatorActivities, hoursPerPfBySprintId, assumedTestSharePercent),
+    [indicatorActivities, hoursPerPfBySprintId, assumedTestSharePercent],
   );
   const people = useMemo(() => computePersonSummaries(indicatorActivities), [indicatorActivities]);
   const hoursPerPfByDeveloper = useMemo(
@@ -69,8 +70,8 @@ export default function IndicatorsView({
   const topBuggy = useMemo(() => topActivitiesByBugCount(indicatorActivities, 10), [indicatorActivities]);
   const bugLabelSummaries = useMemo(() => computeBugLabelSummaries(indicatorActivities), [indicatorActivities]);
   const hoursSummary = useMemo(
-    () => computeHoursSummary(indicatorActivities, hoursPerPf, assumedTestSharePercent),
-    [indicatorActivities, hoursPerPf, assumedTestSharePercent],
+    () => computeHoursSummary(indicatorActivities, hoursPerPfBySprintId, assumedTestSharePercent),
+    [indicatorActivities, hoursPerPfBySprintId, assumedTestSharePercent],
   );
 
   const atRisk = filtered.filter((a) => a.isOverdue);
@@ -206,30 +207,30 @@ export default function IndicatorsView({
           value={realizedProductivity.hoursPerPf !== null ? realizedProductivity.hoursPerPf.toFixed(2) : '—'}
           suffix={
             realizedProductivity.sampleSize > 0
-              ? `${realizedProductivity.sampleSize} concluída${realizedProductivity.sampleSize > 1 ? 's' : ''} · estimado ${hoursPerPf.toFixed(2)}`
+              ? `${realizedProductivity.sampleSize} concluída${realizedProductivity.sampleSize > 1 ? 's' : ''}${estimadoSuffix(realizedProductivity.effectiveHoursPerPf)}`
               : 'sem concluídas com apontamento'
           }
           accent={
-            realizedProductivity.hoursPerPf === null
+            realizedProductivity.hoursPerPf === null || realizedProductivity.effectiveHoursPerPf === null
               ? undefined
-              : realizedProductivity.hoursPerPf > hoursPerPf
+              : realizedProductivity.hoursPerPf > realizedProductivity.effectiveHoursPerPf
                 ? 'var(--status-warning)'
                 : 'var(--status-good)'
           }
-          title="Média de horas por Ponto de Função realmente apontadas (worklog de Implementação + Teste) nas tarefas concluídas, ponderada pelos PFs de cada tarefa e comparada com a estimativa configurada. Atualiza sozinho conforme mais tarefas são concluídas e mais apontamentos são lançados."
+          title="Média de horas por Ponto de Função realmente apontadas (worklog de Implementação + Teste) nas tarefas concluídas, ponderada pelos PFs de cada tarefa e comparada com a estimativa configurada (de cada sprint). Atualiza sozinho conforme mais tarefas são concluídas e mais apontamentos são lançados."
         />
         <Kpi
           label={`Horas / PF (Impl., ${(100 - assumedTestSharePercent).toFixed(0)}%)`}
           value={realizedProductivity.hoursPerPfImpl !== null ? realizedProductivity.hoursPerPfImpl.toFixed(2) : '—'}
           suffix={
             realizedProductivity.sampleSize > 0
-              ? `${realizedProductivity.sampleSize} concluída${realizedProductivity.sampleSize > 1 ? 's' : ''} · estimado ${hoursPerPf.toFixed(2)}`
+              ? `${realizedProductivity.sampleSize} concluída${realizedProductivity.sampleSize > 1 ? 's' : ''}${estimadoSuffix(realizedProductivity.effectiveHoursPerPf)}`
               : 'sem concluídas com apontamento'
           }
           accent={
-            realizedProductivity.hoursPerPfImpl === null
+            realizedProductivity.hoursPerPfImpl === null || realizedProductivity.effectiveHoursPerPf === null
               ? undefined
-              : realizedProductivity.hoursPerPfImpl > hoursPerPf
+              : realizedProductivity.hoursPerPfImpl > realizedProductivity.effectiveHoursPerPf
                 ? 'var(--status-warning)'
                 : 'var(--status-good)'
           }
@@ -240,13 +241,13 @@ export default function IndicatorsView({
           value={realizedProductivity.hoursPerPfTest !== null ? realizedProductivity.hoursPerPfTest.toFixed(2) : '—'}
           suffix={
             realizedProductivity.sampleSize > 0
-              ? `${realizedProductivity.sampleSize} concluída${realizedProductivity.sampleSize > 1 ? 's' : ''} · estimado ${hoursPerPf.toFixed(2)}`
+              ? `${realizedProductivity.sampleSize} concluída${realizedProductivity.sampleSize > 1 ? 's' : ''}${estimadoSuffix(realizedProductivity.effectiveHoursPerPf)}`
               : 'sem concluídas com apontamento'
           }
           accent={
-            realizedProductivity.hoursPerPfTest === null
+            realizedProductivity.hoursPerPfTest === null || realizedProductivity.effectiveHoursPerPf === null
               ? undefined
-              : realizedProductivity.hoursPerPfTest > hoursPerPf
+              : realizedProductivity.hoursPerPfTest > realizedProductivity.effectiveHoursPerPf
                 ? 'var(--status-warning)'
                 : 'var(--status-good)'
           }
@@ -443,6 +444,13 @@ function executionAccent(executed: number, planned: number): string | undefined 
 function executionPercentSuffix(executed: number, planned: number): string | undefined {
   if (planned <= 0) return undefined;
   return `${Math.round((executed / planned) * 100)}% do planejado`;
+}
+
+/** "· estimado X.XX" pro texto auxiliar dos cards de Horas/PF — ausente quando não há como calcular
+ * (nenhuma tarefa concluída elegível). Pode ser uma média ponderada quando a seleção combina sprints
+ * com horas/PF diferentes (ver `effectiveHoursPerPf` em computeIndicators). */
+function estimadoSuffix(effectiveHoursPerPf: number | null): string {
+  return effectiveHoursPerPf !== null ? ` · estimado ${effectiveHoursPerPf.toFixed(2)}` : '';
 }
 
 const KPI_GRID_STYLE: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 };

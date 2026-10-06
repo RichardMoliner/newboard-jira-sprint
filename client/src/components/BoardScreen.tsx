@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
-import { getConfig } from '../api/client.js';
+import { useEffect, useMemo, useState } from 'react';
+import { getConfig, getSprintSettings } from '../api/client.js';
 import { useBoardData } from '../api/useBoardData.js';
+import type { SprintSettings } from '../types.js';
 import type { Theme } from '../App.js';
 import TimelineView from './TimelineView.js';
 import IndicatorsView from './IndicatorsView.js';
@@ -27,21 +28,32 @@ export default function BoardScreen({
   const [showSettings, setShowSettings] = useState(false);
   const [sprintFilter, setSprintFilter] = useState<string[]>([]);
   const [dashDelayBar, setDashDelayBar] = useState(false);
-  const [deadlines, setDeadlines] = useState<{ lastPublishDay: string | null; lastTestDay: string | null; publishDay: string | null }>({
-    lastPublishDay: null,
-    lastTestDay: null,
-    publishDay: null,
-  });
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  // Configuração por sprint (horas/PF e prazos) — sem fallback global: uma sprint sem entrada aqui
+  // usa o padrão do sistema pra horas/PF (ver hoursPerPfBySprintId) e não tem régua de prazo.
+  const [sprintSettingsById, setSprintSettingsById] = useState<Record<string, SprintSettings>>({});
   const { data, loading, error, refresh, secondsToNextRefresh, progressMessages } = useBoardData(autoRefreshEnabled);
 
   useEffect(() => {
     getConfig().then((config) => {
       setDashDelayBar(config.dashDelayBar);
-      setDeadlines({ lastPublishDay: config.lastPublishDay, lastTestDay: config.lastTestDay, publishDay: config.publishDay });
       setAutoRefreshEnabled(config.autoRefreshEnabled);
     });
+    getSprintSettings().then(setSprintSettingsById);
   }, []);
+
+  const hoursPerPfBySprintId = useMemo(() => {
+    if (!data) return {};
+    return Object.fromEntries(data.sprints.map((s) => [s.id, sprintSettingsById[s.id]?.hoursPerPf ?? data.defaultHoursPerPf]));
+  }, [data, sprintSettingsById]);
+
+  // Chamado pelo pop-up de configuração da sprint (ícone de engrenagem na pill, Linha do tempo) após
+  // salvar — atualiza a régua de prazo na hora (sem precisar recarregar) e busca os dados de novo
+  // (horas/PF pode ter mudado, o que recalcula as estimativas de toda atividade daquela sprint).
+  function handleSprintSettingsSaved(sprintId: string, settings: SprintSettings) {
+    setSprintSettingsById((prev) => ({ ...prev, [sprintId]: settings }));
+    refresh();
+  }
 
   // Clique normal seleciona só aquela sprint; shift+clique soma/remove da seleção atual,
   // permitindo combinar várias sprints no filtro.
@@ -66,7 +78,6 @@ export default function BoardScreen({
           onSaved={(config) => {
             setShowSettings(false);
             setDashDelayBar(config.dashDelayBar);
-            setDeadlines({ lastPublishDay: config.lastPublishDay, lastTestDay: config.lastTestDay, publishDay: config.publishDay });
             setAutoRefreshEnabled(config.autoRefreshEnabled);
             if (config.vertical && config.vertical !== vertical) onVerticalChange(config.vertical);
             refresh();
@@ -142,7 +153,7 @@ export default function BoardScreen({
             today={data.today}
             sprintFilter={sprintFilter}
             onSprintClick={handleSprintClick}
-            hoursPerPf={data.hoursPerPf}
+            hoursPerPfBySprintId={hoursPerPfBySprintId}
             assumedTestSharePercent={data.assumedTestSharePercent}
             vertical={vertical}
             onClose={() => setShowReport(false)}
@@ -160,7 +171,7 @@ export default function BoardScreen({
 
           {tab === 'history' ? (
             <div style={{ paddingBottom: 60, overflow: 'auto' }}>
-              <HistoryView />
+              <HistoryView sprintSettingsById={sprintSettingsById} />
             </div>
           ) : tab === 'timeline' ? (
             // Só a timeline ganha altura contida com scroll próprio (cabeçalho fixo dentro dela) —
@@ -174,7 +185,8 @@ export default function BoardScreen({
                 sprintFilter={sprintFilter}
                 onSprintClick={handleSprintClick}
                 dashDelayBar={dashDelayBar}
-                deadlines={deadlines}
+                sprintSettingsById={sprintSettingsById}
+                onSprintSettingsSaved={handleSprintSettingsSaved}
               />
             </div>
           ) : (
@@ -183,7 +195,7 @@ export default function BoardScreen({
                 activities={data.activities}
                 sprints={data.sprints}
                 today={data.today}
-                hoursPerPf={data.hoursPerPf}
+                hoursPerPfBySprintId={hoursPerPfBySprintId}
                 assumedTestSharePercent={data.assumedTestSharePercent}
                 sprintFilter={sprintFilter}
                 onSprintClick={handleSprintClick}

@@ -66,6 +66,8 @@ export interface RealizedProductivity {
   accuracyWithBugsPercent: number | null;
   /** % do total Implementação + Teste que foi de fato Teste, nas tarefas concluídas — compara com o assumedTestSharePercent (hoje fixo em 30%) usado para projetar a janela prevista. Bugs ficam de fora dessa conta. */
   testSharePercent: number | null;
+  /** Horas/PF "estimado" exibido como referência — média dos valores configurados por sprint, ponderada pelos PFs de cada tarefa concluída (cada sprint pode ter o seu). Null sem nenhuma tarefa elegível. */
+  effectiveHoursPerPf: number | null;
   sampleSize: number;
 }
 
@@ -76,7 +78,7 @@ export interface RealizedProductivity {
  */
 export function computeRealizedProductivity(
   activities: Activity[],
-  hoursPerPf: number,
+  hoursPerPfBySprintId: Record<string, number>,
   assumedTestSharePercent: number,
 ): RealizedProductivity {
   // Implementação + Teste "Atendida" (testDone) já é trabalho funcionalmente concluído, mesmo que
@@ -91,7 +93,9 @@ export function computeRealizedProductivity(
   const totalTestHours = sum(eligible.map((a) => a.testLoggedHours ?? 0));
   const totalLoggedHours = totalImplHours + totalTestHours;
   const totalLoggedHoursWithBugs = totalLoggedHours + sum(eligible.map((a) => a.bugsLoggedHours ?? 0));
-  const totalEstimatedHours = totalStoryPoints * hoursPerPf;
+  // Cada atividade usa o horas/PF configurado na sua própria sprint — ao combinar sprints com
+  // valores diferentes, o "estimado" vira uma média ponderada pelos PF de cada uma.
+  const totalEstimatedHours = sum(eligible.map((a) => (a.storyPoints ?? 0) * (hoursPerPfBySprintId[a.sprintId] ?? 0)));
   const totalPfImpl = totalStoryPoints * (implSharePercent / 100);
   const totalPfTest = totalStoryPoints * (assumedTestSharePercent / 100);
 
@@ -102,6 +106,7 @@ export function computeRealizedProductivity(
     accuracyPercent: totalEstimatedHours > 0 ? (totalLoggedHours / totalEstimatedHours) * 100 : null,
     accuracyWithBugsPercent: totalEstimatedHours > 0 ? (totalLoggedHoursWithBugs / totalEstimatedHours) * 100 : null,
     testSharePercent: totalLoggedHours > 0 ? (totalTestHours / totalLoggedHours) * 100 : null,
+    effectiveHoursPerPf: totalStoryPoints > 0 ? totalEstimatedHours / totalStoryPoints : null,
     sampleSize: eligible.length,
   };
 }
@@ -338,9 +343,14 @@ export interface HoursSummary {
   bugTestHours: number;
 }
 
-export function computeHoursSummary(activities: Activity[], hoursPerPf: number, assumedTestSharePercent: number): HoursSummary {
-  const totalStoryPoints = sum(activities.map((a) => a.storyPoints ?? 0));
-  const plannedHours = totalStoryPoints * hoursPerPf;
+export function computeHoursSummary(
+  activities: Activity[],
+  hoursPerPfBySprintId: Record<string, number>,
+  assumedTestSharePercent: number,
+): HoursSummary {
+  // Cada atividade usa o horas/PF da sua própria sprint — ao combinar sprints com valores
+  // diferentes, "planejado" soma o previsto de cada uma com o valor certo dela.
+  const plannedHours = sum(activities.map((a) => (a.storyPoints ?? 0) * (hoursPerPfBySprintId[a.sprintId] ?? 0)));
   const executedImplHours = sum(activities.map((a) => a.implLoggedHours ?? 0));
   const executedTestHours = sum(activities.map((a) => a.testLoggedHours ?? 0));
   const bugFixHours = sum(activities.map((a) => a.implBugsLoggedHours ?? 0));

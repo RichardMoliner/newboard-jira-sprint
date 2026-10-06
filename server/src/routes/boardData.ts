@@ -17,12 +17,16 @@ export function boardDataRouter(configPath: string): Router {
       return;
     }
 
+    const hoursPerPfBySprintId = Object.fromEntries(
+      Object.entries(config.sprintSettings).map(([sprintId, settings]) => [sprintId, settings.hoursPerPf]),
+    );
+
     startProgress();
     try {
       const data = await fetchBoardData(
         config.vertical,
         { username: config.jiraUsername, password: config.jiraPassword },
-        config.hoursPerPf ?? undefined,
+        hoursPerPfBySprintId,
         config.hoursPerDay ?? undefined,
       );
       res.json(data);
