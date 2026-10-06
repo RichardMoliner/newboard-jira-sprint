@@ -23,6 +23,14 @@ const DEADLINE_BADGE_ROW_HEIGHT = 13;
 
 const MONTH_ABBREV = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
+// Preferência pessoal de exibição (não é config de equipe) — persiste no navegador, igual ao tema
+// em App.tsx. Vem ligada por padrão; só lê "false" explícito do localStorage pra desligar.
+const SHOW_DEADLINES_STORAGE_KEY = 'showDeadlines';
+
+function getInitialDeadlinesActive(): boolean {
+  return localStorage.getItem(SHOW_DEADLINES_STORAGE_KEY) !== 'false';
+}
+
 export default function TimelineView({
   activities,
   sprints,
@@ -47,7 +55,10 @@ export default function TimelineView({
   const [dayWidth, setDayWidth] = useState(MIN_COLUMN_WIDTH);
   const [searchQuery, setSearchQuery] = useState('');
   const [hideDone, setHideDone] = useState(false);
-  const [deadlinesActive, setDeadlinesActive] = useState(false);
+  const [deadlinesActive, setDeadlinesActive] = useState(getInitialDeadlinesActive);
+  useEffect(() => {
+    localStorage.setItem(SHOW_DEADLINES_STORAGE_KEY, String(deadlinesActive));
+  }, [deadlinesActive]);
   // Filtro por clique na legenda: Implementação/Teste isolam uma fase (mutuamente exclusivas entre
   // si); Bug/Atraso são toggles independentes que se combinam entre si e com a fase (E lógico).
   const [phaseFilter, setPhaseFilter] = useState<'impl' | 'test' | null>(null);
