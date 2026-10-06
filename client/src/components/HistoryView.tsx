@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getHistoricalSprints, getHistoricalBoardData, getBoardDataProgress } from '../api/client.js';
 import type { BoardDataResponse, SprintInfo } from '../types.js';
 import IndicatorsView from './IndicatorsView.js';
@@ -36,6 +36,8 @@ export default function HistoryView() {
   const [historicalData, setHistoricalData] = useState<BoardDataResponse | null>(null);
   const [historicalSprintFilter, setHistoricalSprintFilter] = useState<string[]>([]);
 
+  const selectAllRef = useRef<HTMLInputElement>(null);
+
   const filteredSprints = useMemo(() => {
     const query = sprintSearch.trim().toLowerCase();
     if (!query) return availableSprints;
@@ -68,6 +70,25 @@ export default function HistoryView() {
   function toggleSprint(id: string) {
     setSelectedSprintIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
+
+  // "Marcar/desmarcar todas" age só sobre as sprints visíveis no momento (já filtradas pela data de
+  // abertura buscada e pela busca por nome) — sprints selecionadas antes de filtrar a lista, mas que
+  // ficaram fora do filtro atual, permanecem selecionadas (não some seleção escondida da vista).
+  const allFilteredSelected = filteredSprints.length > 0 && filteredSprints.every((s) => selectedSprintIds.includes(s.id));
+  const someFilteredSelected = filteredSprints.some((s) => selectedSprintIds.includes(s.id));
+
+  function toggleSelectAllFiltered() {
+    const filteredIds = new Set(filteredSprints.map((s) => s.id));
+    setSelectedSprintIds((prev) =>
+      allFilteredSelected ? prev.filter((id) => !filteredIds.has(id)) : [...new Set([...prev, ...filteredIds])],
+    );
+  }
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someFilteredSelected && !allFilteredSelected;
+    }
+  }, [someFilteredSelected, allFilteredSelected]);
 
   async function handleLoadIndicators() {
     if (selectedSprintIds.length === 0) return;
@@ -177,6 +198,30 @@ export default function HistoryView() {
                 placeholder="Buscar sprint pelo nome..."
                 style={{ ...inputStyle, width: '100%', maxWidth: 360, marginBottom: 10, display: 'block' }}
               />
+
+              {filteredSprints.length > 0 && (
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '6px 12px',
+                    fontSize: 12.5,
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    ref={selectAllRef}
+                    checked={allFilteredSelected}
+                    onChange={toggleSelectAllFiltered}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  {allFilteredSelected ? 'Desmarcar todas' : 'Marcar todas'}
+                  {sprintSearch.trim() && ' (filtradas)'}
+                </label>
+              )}
 
               <div
                 style={{
