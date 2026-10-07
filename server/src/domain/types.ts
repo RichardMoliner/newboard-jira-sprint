@@ -80,6 +80,8 @@ export interface Activity {
   sprintEnteredAt: string | null;
   /** True quando a story carrega o rótulo "não-impacta-deploy" — pode ficar de fora de um deploy sem bloquear a publicação. */
   notImpactsDeploy: boolean;
+  /** True quando a story carrega o rótulo "liberacao_antecipada" — foi entregue antes do previsto. */
+  earlyDelivery: boolean;
   /** Nome da exigência legal/regulatória que esta story atende (campo "Exigência" do Jira, ex.: "Lei 14.133/2021"). Null quando não é uma exigência legal. */
   legalRequirement: string | null;
   /** Data-limite (YYYY-MM-DD) de entrega da exigência (campo "Data final" do Jira). Pode ser null mesmo com legalRequirement preenchido — exigência conhecida, mas ainda sem prazo definido. */

@@ -60,11 +60,15 @@ describe('isDeliveredOnTime', () => {
 });
 
 describe('isAddedAfterSprintStart', () => {
-  test('true when the entry timestamp is after the sprint start timestamp', () => {
-    expect(isAddedAfterSprintStart(false, '2026-09-22T10:22:37.819-0300', '2026-09-22T09:15:00.000-0300')).toBe(true);
+  test('true when the entry happened on a calendar day after the sprint start', () => {
+    expect(isAddedAfterSprintStart(false, '2026-09-23T00:00:01.000-0300', '2026-09-22T09:15:00.000-0300')).toBe(true);
   });
 
-  test('false when the entry timestamp is before the sprint start (e.g. sprint started later the same day)', () => {
+  test('false when the entry happened later the same calendar day as the sprint start, no matter the gap in hours (e.g. day-of sprint-planning adjustments)', () => {
+    expect(isAddedAfterSprintStart(false, '2026-09-22T23:59:00.000-0300', '2026-09-22T00:00:16.000-0300')).toBe(false);
+  });
+
+  test('false when the entry timestamp is before the sprint start but on the same calendar day', () => {
     expect(isAddedAfterSprintStart(false, '2026-09-22T08:00:00.000-0300', '2026-09-22T09:15:00.000-0300')).toBe(false);
   });
 
@@ -76,7 +80,7 @@ describe('isAddedAfterSprintStart', () => {
     expect(isAddedAfterSprintStart(false, null, '2026-09-22T09:15:00.000-0300')).toBe(false);
   });
 
-  test('false for a carried-over activity, even if it technically re-entered the sprint after it started', () => {
-    expect(isAddedAfterSprintStart(true, '2026-09-22T10:22:37.819-0300', '2026-09-22T09:15:00.000-0300')).toBe(false);
+  test('false for a carried-over activity, even if it technically re-entered the sprint on a later calendar day', () => {
+    expect(isAddedAfterSprintStart(true, '2026-09-23T10:22:37.819-0300', '2026-09-22T09:15:00.000-0300')).toBe(false);
   });
 });

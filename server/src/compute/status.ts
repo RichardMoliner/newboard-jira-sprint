@@ -17,8 +17,11 @@ export function isDeliveredOnTime(deliveredDateISO: string | null, dueDateISO: s
 
 /**
  * Uma atividade foi "adicionada após o início da sprint" quando entrou na sprint atual (via
- * changelog) depois do timestamp exato de início dela — herdadas nunca contam aqui, rolar de
- * sprint é continuação do mesmo trabalho, não uma adição nova ao escopo.
+ * changelog) num dia calendário posterior ao do início dela — herdadas nunca contam aqui, rolar
+ * de sprint é continuação do mesmo trabalho, não uma adição nova ao escopo. Ajustes feitos ainda
+ * no próprio dia em que a sprint começou (planejamento/grooming de última hora, ou scripts de
+ * setup que populam o backlog inicial horas depois do início técnico) não contam como adição,
+ * independente de quantas horas depois do início exato aconteceram.
  */
 export function isAddedAfterSprintStart(
   isCarriedOver: boolean,
@@ -26,5 +29,5 @@ export function isAddedAfterSprintStart(
   sprintStartISO: string,
 ): boolean {
   if (isCarriedOver || sprintEnteredAtISO === null) return false;
-  return sprintEnteredAtISO > sprintStartISO;
+  return sprintEnteredAtISO.slice(0, 10) > sprintStartISO.slice(0, 10);
 }

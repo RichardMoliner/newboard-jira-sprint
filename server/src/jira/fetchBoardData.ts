@@ -29,8 +29,6 @@ interface StoryDetail {
   status: string;
   statusCategory: string;
   storyPoints: number | null;
-  desenvolvedor: string | null;
-  assignee: string | null;
   testador: string | null;
   created: string;
   updated: string;
@@ -108,6 +106,7 @@ async function fetchActivitiesForSprintScope(
     worklogEntriesByParent,
     bugsByParent,
     testerByParent,
+    developerByParent,
   } = groupSubtasks(subtasksWithFullWorklogs, baseUrl);
   const developerRoles = inferDeveloperRoles(subtasksWithFullWorklogs);
 
@@ -173,8 +172,6 @@ async function fetchActivitiesForSprintScope(
       mapActivity({
         story: {
           ...story,
-          desenvolvedor: story.desenvolvedor ?? null,
-          assignee: story.assignee ?? null,
           // Sem o campo "testador" preenchido na story, usa o responsável pela subtarefa de Teste.
           testador: story.testador ?? testerByParent.get(story.key) ?? null,
           storyPoints: story.storyPoints ?? null,
@@ -189,6 +186,7 @@ async function fetchActivitiesForSprintScope(
         testLoggedHours: testLoggedHoursByParent.get(story.key) ?? null,
         worklogEntries: worklogEntriesByParent.get(story.key) ?? [],
         bugs: bugsByParent.get(story.key) ?? [],
+        implementationAssignee: developerByParent.get(story.key) ?? null,
         developerRoles,
         sprintEnteredAt: historyFactsByStoryKey.get(story.key)?.sprintEnteredAt ?? null,
         doneTransitionDate: historyFactsByStoryKey.get(story.key)?.doneTransitionDate ?? null,

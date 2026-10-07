@@ -20,8 +20,6 @@ function baseStory(overrides: Partial<RawStory> = {}): RawStory {
     status: 'Em andamento',
     statusCategory: 'Em andamento',
     storyPoints: 3,
-    desenvolvedor: 'Guilherme Henrique Gibim de Mello',
-    assignee: 'Guilherme Henrique Gibim de Mello',
     testador: 'Luana de Souza Bez Batti',
     created: '2026-07-08T10:26:04.000-0300',
     updated: '2026-09-08T16:37:55.000-0300',
@@ -527,6 +525,42 @@ describe('mapActivity', () => {
       today: '2026-09-08',
     });
     expect(activity.notImpactsDeploy).toBe(false);
+  });
+
+  test('flags earlyDelivery when the story carries the "liberacao_antecipada" label', () => {
+    const activity = mapActivity({
+      story: baseStory({ labels: ['liberacao_antecipada'] }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.earlyDelivery).toBe(true);
+  });
+
+  test('does not flag earlyDelivery for unrelated labels', () => {
+    const activity = mapActivity({
+      story: baseStory({ labels: ['outra-label'] }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.earlyDelivery).toBe(false);
+  });
+
+  test('defaults earlyDelivery to false when the story has no labels at all', () => {
+    const activity = mapActivity({
+      story: baseStory({ labels: undefined }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.earlyDelivery).toBe(false);
   });
 
   test('carries legalRequirement and legalDeadline through when provided', () => {
@@ -1046,28 +1080,42 @@ describe('mapActivity', () => {
     expect(activity.bugsLoggedHours).toBeCloseTo(2);
   });
 
-  test('falls back to the story assignee when there is no Implementação subtask to fill "desenvolvedor"', () => {
+  test('developer is always the Implementação subtask assignee, regardless of who else is assigned to other subtasks', () => {
     const activity = mapActivity({
-      story: baseStory({ desenvolvedor: null, assignee: 'Gabriela Camilo Serafim' }),
+      story: baseStory(),
       sprint,
-      implStartDate: null,
+      implStartDate: '2026-08-04',
+      implementationAssignee: 'Guilherme Henrique Gibim de Mello',
       bugs: [],
       baseUrl: 'https://desenv.betha.com.br',
       today: '2026-09-08',
     });
-    expect(activity.developer).toBe('Gabriela Camilo Serafim');
+    expect(activity.developer).toBe('Guilherme Henrique Gibim de Mello');
   });
 
-  test('defaults developer to "Não atribuído" when neither desenvolvedor nor assignee is set', () => {
+  test('defaults developer to "-" when there is no Implementação subtask yet (e.g. only a Protótipo subtask exists)', () => {
     const activity = mapActivity({
-      story: baseStory({ desenvolvedor: null, assignee: null }),
+      story: baseStory(),
+      sprint,
+      implStartDate: null,
+      implementationAssignee: null,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.developer).toBe('-');
+  });
+
+  test('defaults developer to "-" when implementationAssignee is not provided at all', () => {
+    const activity = mapActivity({
+      story: baseStory(),
       sprint,
       implStartDate: null,
       bugs: [],
       baseUrl: 'https://desenv.betha.com.br',
       today: '2026-09-08',
     });
-    expect(activity.developer).toBe('Não atribuído');
+    expect(activity.developer).toBe('-');
   });
 
   test('defaults tester to null when the story has no testador', () => {

@@ -281,22 +281,16 @@ export default function TimelineView({
           {sprints.map((s) => {
             const sprintActivities = activitiesBySprintId.get(s.id) ?? [];
             return (
-              <span key={s.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                <FilterPill
-                  label={s.name}
-                  active={sprintFilter.includes(s.id)}
-                  onClick={(e) => onSprintClick(s.id, e.shiftKey)}
-                  completion={computeSprintCompletion(sprintActivities)}
-                  tooltip={formatStatusBreakdownTooltip(sprintActivities)}
-                />
-                <button
-                  onClick={() => setGearSprintId(s.id)}
-                  title={`Configurar horas/PF e prazos de "${s.name}"`}
-                  style={gearButtonStyle}
-                >
-                  ⚙️
-                </button>
-              </span>
+              <FilterPill
+                key={s.id}
+                label={s.name}
+                active={sprintFilter.includes(s.id)}
+                onClick={(e) => onSprintClick(s.id, e.shiftKey)}
+                completion={computeSprintCompletion(sprintActivities)}
+                tooltip={formatStatusBreakdownTooltip(sprintActivities)}
+                onGearClick={() => setGearSprintId(s.id)}
+                gearTooltip={`Configurar horas/PF e prazos de "${s.name}"`}
+              />
             );
           })}
           {selectedSprintsCompletion && (
@@ -849,6 +843,14 @@ function ActivityRow({
                   </Tag>
                 </span>
               )}
+              {activity.earlyDelivery && (
+                <span title={`Rótulo "liberacao_antecipada"${activity.legalDeadline ? ` · Data final: ${formatShort(activity.legalDeadline)}` : ''}`}>
+                  <Tag color="var(--status-good)">
+                    🚀 Entrega antecipada
+                    {activity.legalDeadline ? ` · ${formatShort(activity.legalDeadline)}` : ''}
+                  </Tag>
+                </span>
+              )}
               {(activity.isDone || activity.testDone) && activity.deliveredOnTime !== null && (
                 <Tag color={activity.deliveredOnTime ? 'var(--status-good)' : 'var(--status-critical)'}>
                   {activity.deliveredOnTime ? '✓ No prazo' : '✗ Fora do prazo'}
@@ -1289,6 +1291,8 @@ export function FilterPill({
   onClick,
   completion,
   tooltip,
+  onGearClick,
+  gearTooltip,
 }: {
   label: string;
   active: boolean;
@@ -1296,34 +1300,64 @@ export function FilterPill({
   /** Concluídas/total (%) da sprint — omite a segunda linha quando não informado. */
   completion?: { doneCount: number; totalCount: number; percent: number };
   tooltip?: string;
+  /** Quando informado, mostra uma engrenagem dentro da própria pill (canto superior direito) — usada
+   * pra abrir a configuração daquela sprint sem disparar o clique de filtro da pill. */
+  onGearClick?: (e: React.MouseEvent) => void;
+  gearTooltip?: string;
 }) {
   return (
-    <button
-      onClick={onClick}
-      title={tooltip}
-      style={{
-        padding: '6px 14px',
-        fontSize: 11.5,
-        fontWeight: 700,
-        color: active ? '#fff' : 'var(--text-secondary)',
-        background: active ? 'var(--series-impl)' : 'var(--surface-1)',
-        border: `1px solid ${active ? 'var(--series-impl)' : 'var(--baseline)'}`,
-        borderRadius: 20,
-        cursor: 'pointer',
-        fontFamily: 'inherit',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 2,
-      }}
-    >
-      {label}
-      {completion && (
-        <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>
-          {completion.doneCount}/{completion.totalCount} ({completion.percent}%)
-        </span>
+    // Wrapper relativo em vez de aninhar a engrenagem DENTRO do <button> da pill — um botão dentro
+    // de outro botão é HTML inválido (interactive content não pode aninhar); aqui os dois ficam
+    // como irmãos, com a engrenagem posicionada por cima do canto da pill pra parecer "dentro" dela.
+    <span style={{ position: 'relative', display: 'inline-flex' }}>
+      <button
+        onClick={onClick}
+        title={tooltip}
+        style={{
+          padding: onGearClick ? '6px 24px 6px 14px' : '6px 14px',
+          fontSize: 11.5,
+          fontWeight: 700,
+          color: active ? '#fff' : 'var(--text-secondary)',
+          background: active ? 'var(--series-impl)' : 'var(--surface-1)',
+          border: `1px solid ${active ? 'var(--series-impl)' : 'var(--baseline)'}`,
+          borderRadius: 20,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 2,
+        }}
+      >
+        {label}
+        {completion && (
+          <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>
+            {completion.doneCount}/{completion.totalCount} ({completion.percent}%)
+          </span>
+        )}
+      </button>
+      {onGearClick && (
+        <button
+          onClick={onGearClick}
+          title={gearTooltip}
+          style={{
+            position: 'absolute',
+            top: 4,
+            right: 6,
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            fontSize: 11,
+            lineHeight: 1,
+            opacity: active ? 0.85 : 0.6,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          ⚙️
+        </button>
       )}
-    </button>
+    </span>
   );
 }
 
@@ -1584,16 +1618,6 @@ function SideList({ activity }: { activity: Activity }) {
     </dl>
   );
 }
-
-const gearButtonStyle: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  padding: '2px 4px',
-  fontSize: 12,
-  lineHeight: 1,
-  cursor: 'pointer',
-  opacity: 0.6,
-};
 
 const toggleButtonStyle: React.CSSProperties = {
   background: 'var(--page-plane)',

@@ -11,10 +11,6 @@ export interface RawStory {
   status: string;
   statusCategory: string;
   storyPoints: number | null;
-  /** Campo customizado "Desenvolvedor", normalmente preenchido só quando já existe uma subtarefa de Implementação. */
-  desenvolvedor: string | null;
-  /** Responsável (assignee) padrão da story, usado quando ainda não há subtarefa de Implementação. */
-  assignee: string | null;
   testador: string | null;
   created: string;
   updated: string;
@@ -24,6 +20,9 @@ export interface RawStory {
 
 /** Rótulo usado pra marcar tarefas que podem ficar de fora de um deploy sem bloquear a publicação. */
 const NOT_IMPACTS_DEPLOY_LABEL = 'não-impacta-deploy';
+
+/** Rótulo usado pra marcar tarefas entregues antes do previsto. */
+const EARLY_DELIVERY_LABEL = 'liberacao_antecipada';
 
 function dateOnly(isoDateTime: string): string {
   return isoDateTime.slice(0, 10);
@@ -84,6 +83,10 @@ export function mapActivity(params: {
   testLoggedHours?: number | null;
   worklogEntries?: WorklogEntry[];
   bugs: BugSubtask[];
+  /** Responsável (assignee) da subtarefa "Implementação" — é sempre o Dev exibido, nunca o campo
+   * customizado "Desenvolvedor" da story (que pode ficar preenchido com quem está em outra
+   * subtarefa, ex.: Protótipo). Null enquanto não existe subtarefa de Implementação ainda. */
+  implementationAssignee?: string | null;
   /** Papel (dev/tester) de cada pessoa na sprint, usado para separar as horas de bug entre Impl./Teste. */
   developerRoles?: Map<string, DeveloperRole>;
   /** Timestamp ISO de quando a issue entrou na sprint atual (via changelog do Jira); null sem esse histórico. */
@@ -113,6 +116,7 @@ export function mapActivity(params: {
     testLoggedHours = null,
     worklogEntries = [],
     bugs,
+    implementationAssignee = null,
     developerRoles = new Map(),
     sprintEnteredAt = null,
     doneTransitionDate = null,
@@ -197,7 +201,7 @@ export function mapActivity(params: {
     sprintId: sprint.id,
     sprintName: sprint.name,
     isCarried: carried,
-    developer: story.desenvolvedor ?? story.assignee ?? 'Não atribuído',
+    developer: implementationAssignee ?? '-',
     tester: story.testador,
     storyPoints: story.storyPoints,
     startDate,
@@ -229,6 +233,7 @@ export function mapActivity(params: {
     addedAfterSprintStart: isAddedAfterSprintStart(carried, sprintEnteredAt, sprint.startDateTime),
     sprintEnteredAt,
     notImpactsDeploy: (story.labels ?? []).includes(NOT_IMPACTS_DEPLOY_LABEL),
+    earlyDelivery: (story.labels ?? []).includes(EARLY_DELIVERY_LABEL),
     legalRequirement,
     legalDeadline,
   };
