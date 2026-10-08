@@ -20,6 +20,7 @@ function baseStory(overrides: Partial<RawStory> = {}): RawStory {
     status: 'Em andamento',
     statusCategory: 'Em andamento',
     storyPoints: 3,
+    assignee: null,
     testador: 'Luana de Souza Bez Batti',
     created: '2026-07-08T10:26:04.000-0300',
     updated: '2026-09-08T16:37:55.000-0300',
@@ -1152,6 +1153,48 @@ describe('mapActivity', () => {
       today: '2026-09-08',
     });
     expect(activity.developer).toBe('-');
+  });
+
+  test('falls back to the story assignee as developer when there are no subtasks of any type yet (brand new backlog item)', () => {
+    const activity = mapActivity({
+      story: baseStory({ assignee: 'Moises Delfino Campos' }),
+      sprint,
+      implStartDate: null,
+      implementationAssignee: null,
+      hasNoSubtasksYet: true,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.developer).toBe('Moises Delfino Campos');
+  });
+
+  test('does not fall back to the story assignee when some other subtask already exists (e.g. a Protótipo), even without an Implementação subtask yet', () => {
+    const activity = mapActivity({
+      story: baseStory({ assignee: 'Lucas Fernandes' }),
+      sprint,
+      implStartDate: null,
+      implementationAssignee: null,
+      hasNoSubtasksYet: false,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.developer).toBe('-');
+  });
+
+  test('implementationAssignee takes priority over the story-assignee fallback', () => {
+    const activity = mapActivity({
+      story: baseStory({ assignee: 'Alguem Mais' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implementationAssignee: 'Guilherme Henrique Gibim de Mello',
+      hasNoSubtasksYet: true,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.developer).toBe('Guilherme Henrique Gibim de Mello');
   });
 
   test('defaults tester to null when the story has no testador', () => {

@@ -7,7 +7,7 @@ import { fillTruncatedWorklogs } from './fillTruncatedWorklogs.js';
 import { parseSprintField } from './parseSprintField.js';
 import { getIssueHistoryFacts } from './fetchSprintEntry.js';
 import { report } from './progressLog.js';
-import { mapActivity, type RawStory } from '../domain/mapActivity.js';
+import { mapActivity } from '../domain/mapActivity.js';
 import type { Activity, BoardDataResponse, SprintInfo } from '../domain/types.js';
 import { DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY, IMPL_SHARE } from '../compute/timeline.js';
 
@@ -29,11 +29,29 @@ interface StoryDetail {
   status: string;
   statusCategory: string;
   storyPoints: number | null;
+  /** Responsável (assignee) da story no Jira — só usado como fallback de Dev quando ainda não existe
+   * nenhuma subtarefa (ver `children` abaixo e `hasNoSubtasksYet` em mapActivity). */
+  assignee: string | null;
   testador: string | null;
   created: string;
   updated: string;
   /** Rótulos (labels) da story — já vem no response_format "detailed" do get_issue, sem custo extra. */
   labels?: string[];
+  /** Subtarefas da story, agrupadas pelo get_issue (response_format "detailed" já inclui children por
+   * padrão, sem custo extra) — usado só pra saber se a story já tem alguma subtarefa de qualquer tipo. */
+  children?: {
+    implementacoes: unknown[];
+    testes: unknown[];
+    bugs: unknown[];
+  };
+}
+
+function hasNoSubtasksYet(story: StoryDetail): boolean {
+  const children = story.children;
+  // Sem o campo `children` na resposta (inesperado — "detailed" sempre inclui), não dá pra garantir
+  // que não há subtarefa nenhuma; mais seguro assumir que pode haver e não aplicar o fallback.
+  if (!children) return false;
+  return children.implementacoes.length + children.testes.length + children.bugs.length === 0;
 }
 
 function todayISO(): string {
@@ -162,7 +180,7 @@ async function fetchActivitiesForSprintScope(
 
   const activities: Activity[] = [];
 
-  for (const story of storyDetails as (RawStory & { key: string } | null)[]) {
+  for (const story of storyDetails) {
     if (!story) continue; // busca dessa issue falhou (ver log do servidor); segue sem ela
 
     const sprint = sprintByStoryKey.get(story.key);
@@ -172,6 +190,7 @@ async function fetchActivitiesForSprintScope(
       mapActivity({
         story: {
           ...story,
+          assignee: story.assignee ?? null,
           // Sem o campo "testador" preenchido na story, usa o responsável pela subtarefa de Teste.
           testador: story.testador ?? testerByParent.get(story.key) ?? null,
           storyPoints: story.storyPoints ?? null,
@@ -187,6 +206,7 @@ async function fetchActivitiesForSprintScope(
         worklogEntries: worklogEntriesByParent.get(story.key) ?? [],
         bugs: bugsByParent.get(story.key) ?? [],
         implementationAssignee: developerByParent.get(story.key) ?? null,
+        hasNoSubtasksYet: hasNoSubtasksYet(story),
         developerRoles,
         sprintEnteredAt: historyFactsByStoryKey.get(story.key)?.sprintEnteredAt ?? null,
         doneTransitionDate: historyFactsByStoryKey.get(story.key)?.doneTransitionDate ?? null,
