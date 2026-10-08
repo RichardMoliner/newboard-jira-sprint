@@ -953,9 +953,9 @@ function ActivityRow({
               sem estimativa
             </span>
           )}
-          {activity.legalDeadline && isSameMonth(activity.legalDeadline, today) && (
+          {activity.legalRequirement && activity.legalDeadline && isSameMonth(activity.legalDeadline, today) && (
             <div
-              title={`Data final: ${formatShort(activity.legalDeadline)}${activity.legalRequirement ? ` (${activity.legalRequirement})` : ''}`}
+              title={`Data final: ${formatShort(activity.legalDeadline)} (${activity.legalRequirement})`}
               style={{
                 position: 'absolute',
                 left: x(activity.legalDeadline) - 1,
