@@ -118,10 +118,15 @@ export function groupSubtasks(subtasks: RawSubtask[], baseUrl = ''): GroupedSubt
     if (!parentKey) continue;
 
     if (subtask.type === 'Implementação') {
-      const startDate = dateOnly(subtask.created);
-      const current = implStartByParent.get(parentKey);
-      if (!current || startDate < current) {
-        implStartByParent.set(parentKey, startDate);
+      // Sem responsável ainda, a subtarefa é só um registro criado por automação/planejamento —
+      // não indica que o trabalho de fato vai começar em breve. A data de criação só vira estimativa
+      // provisória de início depois que alguém for designado (ou, abaixo, se já houver apontamento).
+      if (subtask.assignee) {
+        const startDate = dateOnly(subtask.created);
+        const current = implStartByParent.get(parentKey);
+        if (!current || startDate < current) {
+          implStartByParent.set(parentKey, startDate);
+        }
       }
       const statuses = implStatusesByParent.get(parentKey) ?? [];
       statuses.push(subtask.status);

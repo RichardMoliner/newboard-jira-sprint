@@ -76,6 +76,24 @@ describe('groupSubtasks', () => {
     expect(implStartByParent.get('EC-11420')).toBe('2026-08-04');
   });
 
+  test('does not fall back to the subtask creation date when the Implementação subtask has no assignee and no worklog yet (not really started)', () => {
+    const { implStartByParent } = groupSubtasks([
+      subtask({ assignee: null, created: '2026-08-04T00:00:00.000-0300', worklog: { worklogs: [] } }),
+    ]);
+    expect(implStartByParent.has('EC-11420')).toBe(false);
+  });
+
+  test('still uses the worklog date as the start date even if the Implementação subtask has no assignee set', () => {
+    const { implStartByParent } = groupSubtasks([
+      subtask({
+        assignee: null,
+        created: '2026-08-04T00:00:00.000-0300',
+        worklog: { worklogs: [{ author: { displayName: 'Fulano' }, started: '2026-09-11T00:00:00.000-0300', timeSpentSeconds: 3600 }] },
+      }),
+    ]);
+    expect(implStartByParent.get('EC-11420')).toBe('2026-09-11');
+  });
+
   test('ignores Teste/Bug worklogs when picking the Implementação start date', () => {
     const { implStartByParent } = groupSubtasks([
       subtask({ key: 'EC-1', type: 'Implementação', created: '2026-08-04T00:00:00.000-0300' }),
