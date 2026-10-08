@@ -837,9 +837,7 @@ function ActivityRow({
                 <span title={`Exigência: ${activity.legalRequirement}${activity.legalDeadline ? ` · Data final: ${formatShort(activity.legalDeadline)}` : ''}`}>
                   <Tag color="var(--status-serious)">
                     ⚖️ Exigência legal
-                    {/* Data final fora do mês atual não fica marcada na raia (longe demais pra ser
-                        útil sem rolar) — mostra a data direto ao lado do badge em vez disso. */}
-                    {activity.legalDeadline && !isSameMonth(activity.legalDeadline, today) ? ` · ${formatShort(activity.legalDeadline)}` : ''}
+                    {activity.legalDeadline ? ` · ${formatShort(activity.legalDeadline)}` : ''}
                   </Tag>
                 </span>
               )}
