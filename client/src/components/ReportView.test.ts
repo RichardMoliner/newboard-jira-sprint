@@ -41,6 +41,7 @@ function activity(overrides: Partial<Activity> = {}): Activity {
     sprintEnteredAt: null,
     notImpactsDeploy: false,
     earlyDelivery: false,
+    featureFlag: false,
     legalRequirement: null,
     legalDeadline: null,
     ...overrides,

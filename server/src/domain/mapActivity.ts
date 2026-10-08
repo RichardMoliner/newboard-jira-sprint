@@ -24,6 +24,9 @@ const NOT_IMPACTS_DEPLOY_LABEL = 'não-impacta-deploy';
 /** Rótulo usado pra marcar tarefas entregues antes do previsto. */
 const EARLY_DELIVERY_LABEL = 'liberacao_antecipada';
 
+/** Rótulo usado pra marcar tarefas liberadas por trás de uma feature-flag. */
+const FEATURE_FLAG_LABEL = 'feature-flag';
+
 function dateOnly(isoDateTime: string): string {
   return isoDateTime.slice(0, 10);
 }
@@ -234,6 +237,7 @@ export function mapActivity(params: {
     sprintEnteredAt,
     notImpactsDeploy: (story.labels ?? []).includes(NOT_IMPACTS_DEPLOY_LABEL),
     earlyDelivery: (story.labels ?? []).includes(EARLY_DELIVERY_LABEL),
+    featureFlag: (story.labels ?? []).includes(FEATURE_FLAG_LABEL),
     legalRequirement,
     legalDeadline,
   };

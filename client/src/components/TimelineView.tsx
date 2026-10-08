@@ -851,6 +851,11 @@ function ActivityRow({
                   </Tag>
                 </span>
               )}
+              {activity.featureFlag && (
+                <span title='Rótulo "feature-flag"'>
+                  <Tag color="var(--status-warning)">🚩 Liberado via feature-flag</Tag>
+                </span>
+              )}
               {(activity.isDone || activity.testDone) && activity.deliveredOnTime !== null && (
                 <Tag color={activity.deliveredOnTime ? 'var(--status-good)' : 'var(--status-critical)'}>
                   {activity.deliveredOnTime ? '✓ No prazo' : '✗ Fora do prazo'}

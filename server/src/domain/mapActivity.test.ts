@@ -563,6 +563,42 @@ describe('mapActivity', () => {
     expect(activity.earlyDelivery).toBe(false);
   });
 
+  test('flags featureFlag when the story carries the "feature-flag" label', () => {
+    const activity = mapActivity({
+      story: baseStory({ labels: ['feature-flag'] }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.featureFlag).toBe(true);
+  });
+
+  test('does not flag featureFlag for unrelated labels', () => {
+    const activity = mapActivity({
+      story: baseStory({ labels: ['outra-label'] }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.featureFlag).toBe(false);
+  });
+
+  test('defaults featureFlag to false when the story has no labels at all', () => {
+    const activity = mapActivity({
+      story: baseStory({ labels: undefined }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.featureFlag).toBe(false);
+  });
+
   test('carries legalRequirement and legalDeadline through when provided', () => {
     const activity = mapActivity({
       story: baseStory(),

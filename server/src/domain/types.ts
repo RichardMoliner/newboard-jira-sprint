@@ -82,6 +82,8 @@ export interface Activity {
   notImpactsDeploy: boolean;
   /** True quando a story carrega o rótulo "liberacao_antecipada" — foi entregue antes do previsto. */
   earlyDelivery: boolean;
+  /** True quando a story carrega o rótulo "feature-flag" — foi liberada por trás de uma feature-flag. */
+  featureFlag: boolean;
   /** Nome da exigência legal/regulatória que esta story atende (campo "Exigência" do Jira, ex.: "Lei 14.133/2021"). Null quando não é uma exigência legal. */
   legalRequirement: string | null;
   /** Data-limite (YYYY-MM-DD) de entrega da exigência (campo "Data final" do Jira). Pode ser null mesmo com legalRequirement preenchido — exigência conhecida, mas ainda sem prazo definido. */
