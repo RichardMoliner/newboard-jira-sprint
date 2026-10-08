@@ -853,7 +853,7 @@ function ActivityRow({
               )}
               {activity.featureFlag && (
                 <span title='Rótulo "feature-flag"'>
-                  <Tag color="var(--status-warning)">🚩 Liberado via feature-flag</Tag>
+                  <Tag color="var(--status-warning)">🚩 Liberação restrita (feature flag)</Tag>
                 </span>
               )}
               {(activity.isDone || activity.testDone) && activity.deliveredOnTime !== null && (
