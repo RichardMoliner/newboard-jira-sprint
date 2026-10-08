@@ -88,7 +88,11 @@ export default function TimelineView({
     const query = searchQuery.trim().toLowerCase();
     if (!query) return byLegend;
     return byLegend.filter(
-      (a) => a.title.toLowerCase().includes(query) || a.key.toLowerCase().includes(query) || a.developer.toLowerCase().includes(query),
+      (a) =>
+        a.title.toLowerCase().includes(query) ||
+        a.key.toLowerCase().includes(query) ||
+        a.developer.toLowerCase().includes(query) ||
+        (a.tester ?? '').toLowerCase().includes(query),
     );
   }, [activities, sprintFilter, hideDone, bugFilterActive, atrasoFilterActive, addedLateFilterActive, searchQuery]);
 
@@ -320,7 +324,7 @@ export default function TimelineView({
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar por tarefa ou responsável..."
+                placeholder="Buscar por tarefa, dev ou tester..."
                 style={{
                   padding: `6px ${searchQuery ? 28 : 12}px 6px 12px`,
                   fontSize: 11.5,
