@@ -366,6 +366,60 @@ describe('mapActivity', () => {
     expect(activity.status).toBe('Aguardando liberação');
   });
 
+  test('overrides status to "Em code review" when the Implementação subtask is "Aguardando liberação para testes"', () => {
+    const activity = mapActivity({
+      story: baseStory({ status: 'Em andamento', statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implAwaitingCodeReview: true,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.status).toBe('Em code review');
+  });
+
+  test('defaults implAwaitingCodeReview to false when not provided', () => {
+    const activity = mapActivity({
+      story: baseStory({ status: 'Em andamento', statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.status).toBe('Em andamento');
+  });
+
+  test('"Aguardando liberação" takes priority over "Em code review" when testDone is also true', () => {
+    const activity = mapActivity({
+      story: baseStory({ statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implAwaitingCodeReview: true,
+      testDone: true,
+      testDoneDate: '2026-09-08',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.status).toBe('Aguardando liberação');
+  });
+
+  test('"Em testes"/"Ag. início dos testes" take priority over "Em code review" when implDone is also true', () => {
+    const activity = mapActivity({
+      story: baseStory({ statusCategory: 'Em andamento' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      implDone: true,
+      implAwaitingCodeReview: true,
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.status).toBe('Ag. início dos testes');
+  });
+
   test('"Aguardando liberação" takes priority over "Em testes" when both implDone and testDone are true', () => {
     const activity = mapActivity({
       story: baseStory({ statusCategory: 'Em andamento' }),

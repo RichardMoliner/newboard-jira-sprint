@@ -116,6 +116,7 @@ async function fetchActivitiesForSprintScope(
   const {
     implStartByParent,
     implDoneByParent,
+    implAwaitingCodeReviewByParent,
     implDoneDateByParent,
     testDoneByParent,
     testDoneDateByParent,
@@ -199,6 +200,7 @@ async function fetchActivitiesForSprintScope(
         implStartDate: implStartByParent.get(story.key) ?? null,
         implDone: implDoneByParent.get(story.key) ?? false,
         implDoneDate: implDoneDateByParent.get(story.key) ?? null,
+        implAwaitingCodeReview: implAwaitingCodeReviewByParent.get(story.key) ?? false,
         testDone: testDoneByParent.get(story.key) ?? false,
         testDoneDate: testDoneDateByParent.get(story.key) ?? null,
         implLoggedHours: implLoggedHoursByParent.get(story.key) ?? null,

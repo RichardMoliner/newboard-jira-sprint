@@ -37,6 +37,9 @@ export interface GroupedSubtasks {
   implStartByParent: Map<string, string>;
   /** True quando a(s) subtarefa(s) "Implementação" da atividade pai estão todas "Atendida". */
   implDoneByParent: Map<string, boolean>;
+  /** True quando a(s) subtarefa(s) "Implementação" da atividade pai estão todas "Aguardando
+   * liberação para testes" — usado pra exibir o status "Em code review" na listagem. */
+  implAwaitingCodeReviewByParent: Map<string, boolean>;
   /** Data (YYYY-MM-DD) mais recente de atualização das subtarefas "Implementação" — usada como data em
    * que o dev disponibilizou o trabalho para teste, quando `implDoneByParent` é true. */
   implDoneDateByParent: Map<string, string>;
@@ -69,6 +72,10 @@ function normalize(text: string): string {
 
 function isResolvedStatus(status: string): boolean {
   return normalize(status) === 'atendida';
+}
+
+function isAwaitingCodeReviewStatus(status: string): boolean {
+  return normalize(status) === 'aguardando liberacao para testes';
 }
 
 /**
@@ -201,6 +208,11 @@ export function groupSubtasks(subtasks: RawSubtask[], baseUrl = ''): GroupedSubt
     implDoneByParent.set(parentKey, statuses.every(isResolvedStatus));
   }
 
+  const implAwaitingCodeReviewByParent = new Map<string, boolean>();
+  for (const [parentKey, statuses] of implStatusesByParent) {
+    implAwaitingCodeReviewByParent.set(parentKey, statuses.every(isAwaitingCodeReviewStatus));
+  }
+
   const testDoneByParent = new Map<string, boolean>();
   for (const [parentKey, statuses] of testStatusesByParent) {
     testDoneByParent.set(parentKey, statuses.every(isResolvedStatus));
@@ -237,6 +249,7 @@ export function groupSubtasks(subtasks: RawSubtask[], baseUrl = ''): GroupedSubt
   return {
     implStartByParent,
     implDoneByParent,
+    implAwaitingCodeReviewByParent,
     implDoneDateByParent: implUpdatedByParent,
     testDoneByParent,
     testDoneDateByParent: testUpdatedByParent,

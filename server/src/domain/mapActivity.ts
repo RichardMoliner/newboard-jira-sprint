@@ -83,6 +83,9 @@ export function mapActivity(params: {
   implStartDate: string | null;
   implDone?: boolean;
   implDoneDate?: string | null;
+  /** True quando a(s) subtarefa(s) "Implementação" estão todas com status "Aguardando liberação
+   * para testes" no Jira — exibido na listagem como "Em code review". */
+  implAwaitingCodeReview?: boolean;
   testDone?: boolean;
   testDoneDate?: string | null;
   implLoggedHours?: number | null;
@@ -122,6 +125,7 @@ export function mapActivity(params: {
     implStartDate,
     implDone = false,
     implDoneDate = null,
+    implAwaitingCodeReview = false,
     testDone = false,
     testDoneDate = null,
     implLoggedHours = null,
@@ -170,7 +174,9 @@ export function mapActivity(params: {
         ? hasTestWorklog
           ? 'Em testes'
           : 'Ag. início dos testes'
-        : story.status;
+        : implAwaitingCodeReview
+          ? 'Em code review'
+          : story.status;
 
   const timeline =
     !notStarted && story.storyPoints !== null ? computeTimeline(story.storyPoints, startDate, hoursPerPf, hoursPerDay) : null;

@@ -134,6 +134,34 @@ describe('groupSubtasks', () => {
     expect(implDoneByParent.has('EC-11420')).toBe(false);
   });
 
+  test('flags implAwaitingCodeReviewByParent true when the Implementação subtask is "Aguardando liberação para testes"', () => {
+    const { implAwaitingCodeReviewByParent } = groupSubtasks([subtask({ status: 'Aguardando liberação para testes' })]);
+    expect(implAwaitingCodeReviewByParent.get('EC-11420')).toBe(true);
+  });
+
+  test('normalizes accent/case when checking implAwaitingCodeReviewByParent', () => {
+    const { implAwaitingCodeReviewByParent } = groupSubtasks([subtask({ status: 'AGUARDANDO LIBERACAO PARA TESTES' })]);
+    expect(implAwaitingCodeReviewByParent.get('EC-11420')).toBe(true);
+  });
+
+  test('flags implAwaitingCodeReviewByParent false for any other Implementação status', () => {
+    const { implAwaitingCodeReviewByParent } = groupSubtasks([subtask({ status: 'Em andamento' })]);
+    expect(implAwaitingCodeReviewByParent.get('EC-11420')).toBe(false);
+  });
+
+  test('flags implAwaitingCodeReviewByParent false when only some of multiple Implementação subtasks are "Aguardando liberação para testes"', () => {
+    const { implAwaitingCodeReviewByParent } = groupSubtasks([
+      subtask({ key: 'EC-1', status: 'Aguardando liberação para testes' }),
+      subtask({ key: 'EC-2', status: 'Em andamento' }),
+    ]);
+    expect(implAwaitingCodeReviewByParent.get('EC-11420')).toBe(false);
+  });
+
+  test('leaves implAwaitingCodeReviewByParent unset for a parent with no Implementação subtask', () => {
+    const { implAwaitingCodeReviewByParent } = groupSubtasks([subtask({ type: 'Bug' })]);
+    expect(implAwaitingCodeReviewByParent.has('EC-11420')).toBe(false);
+  });
+
   test('records the Teste subtask assignee into testerByParent', () => {
     const { testerByParent } = groupSubtasks([subtask({ type: 'Teste', assignee: 'Renata Serafin Martinello' })]);
     expect(testerByParent.get('EC-11420')).toBe('Renata Serafin Martinello');
