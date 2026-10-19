@@ -309,15 +309,34 @@ export interface BugLabelSummary {
   count: number;
 }
 
+/** Rótulo sintético usado para bugs sem nenhum dos rótulos classificados abaixo. */
+export const SEM_CLASSIFICACAO_LABEL = 'sem_classificacao';
+
+/** Únicos rótulos considerados na pizza de distribuição — qualquer outro vira "Sem classificação". */
+const CLASSIFIED_BUG_LABELS = new Set([
+  'bug_prototipo_nao_atendido',
+  'bug_requisito_nao_implementado',
+  'bug_liberacao_nao_validada',
+  'bug_alteracao_requisito',
+  'bug_impacto_nao_previsto',
+  'bug_devolvido',
+]);
+
 /**
- * Conta ocorrências de cada rótulo (label) de bug em todas as atividades — um bug com mais de um
- * rótulo conta uma vez em cada, então a soma pode passar do total de bugs (não é mutuamente
- * exclusivo, ao contrário de status ou artefato).
+ * Conta ocorrências de cada rótulo (label) classificado de bug em todas as atividades — um bug com
+ * mais de um rótulo classificado conta uma vez em cada, então a soma pode passar do total de bugs
+ * (não é mutuamente exclusivo, ao contrário de status ou artefato). Bugs sem nenhum rótulo
+ * classificado contam uma única vez em "Sem classificação".
  */
 export function computeBugLabelSummaries(activities: Activity[]): BugLabelSummary[] {
   const countByLabel = new Map<string, number>();
   for (const bug of activities.flatMap((a) => a.bugs)) {
-    for (const label of bug.labels) {
+    const classifiedLabels = bug.labels.filter((label) => CLASSIFIED_BUG_LABELS.has(label));
+    if (classifiedLabels.length === 0) {
+      countByLabel.set(SEM_CLASSIFICACAO_LABEL, (countByLabel.get(SEM_CLASSIFICACAO_LABEL) ?? 0) + 1);
+      continue;
+    }
+    for (const label of classifiedLabels) {
       countByLabel.set(label, (countByLabel.get(label) ?? 0) + 1);
     }
   }

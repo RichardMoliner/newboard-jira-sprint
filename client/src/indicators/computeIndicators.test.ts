@@ -673,19 +673,19 @@ describe('computeBugLabelSummaries', () => {
     return { key: 'B', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels, url: '' };
   }
 
-  test('counts one occurrence per label across all bugs', () => {
+  test('counts one occurrence per classified label across all bugs', () => {
     const activities = [
       activity({ key: 'A', bugs: [bug(['bug_devolvido'])] }),
-      activity({ key: 'B', bugs: [bug(['bug_devolvido']), bug(['bug_impeditivo'])] }),
+      activity({ key: 'B', bugs: [bug(['bug_devolvido']), bug(['bug_liberacao_nao_validada'])] }),
     ];
 
     const summaries = computeBugLabelSummaries(activities);
 
     expect(summaries).toContainEqual(expect.objectContaining({ label: 'bug_devolvido', count: 2 }));
-    expect(summaries).toContainEqual(expect.objectContaining({ label: 'bug_impeditivo', count: 1 }));
+    expect(summaries).toContainEqual(expect.objectContaining({ label: 'bug_liberacao_nao_validada', count: 1 }));
   });
 
-  test('counts a bug with multiple labels once per label (not mutually exclusive)', () => {
+  test('counts a bug with multiple classified labels once per label (not mutually exclusive)', () => {
     const activities = [activity({ key: 'A', bugs: [bug(['bug_devolvido', 'bug_prototipo_nao_atendido'])] })];
 
     const summaries = computeBugLabelSummaries(activities);
@@ -694,9 +694,22 @@ describe('computeBugLabelSummaries', () => {
     expect(summaries).toContainEqual(expect.objectContaining({ label: 'bug_prototipo_nao_atendido', count: 1 }));
   });
 
-  test('ignores bugs with no labels', () => {
+  test('counts bugs with no labels as "sem_classificacao"', () => {
     const activities = [activity({ key: 'A', bugs: [bug([])] })];
-    expect(computeBugLabelSummaries(activities)).toEqual([]);
+    expect(computeBugLabelSummaries(activities)).toEqual([{ label: 'sem_classificacao', count: 1 }]);
+  });
+
+  test('counts bugs with only non-classified labels as "sem_classificacao" once, not per label', () => {
+    const activities = [activity({ key: 'A', bugs: [bug(['bug_impeditivo', 'outro_rotulo'])] })];
+    expect(computeBugLabelSummaries(activities)).toEqual([{ label: 'sem_classificacao', count: 1 }]);
+  });
+
+  test('a bug with a classified and a non-classified label only counts the classified one', () => {
+    const activities = [activity({ key: 'A', bugs: [bug(['bug_devolvido', 'bug_impeditivo'])] })];
+
+    const summaries = computeBugLabelSummaries(activities);
+
+    expect(summaries).toEqual([{ label: 'bug_devolvido', count: 1 }]);
   });
 
   test('sorts by count descending', () => {
@@ -708,7 +721,7 @@ describe('computeBugLabelSummaries', () => {
     const summaries = computeBugLabelSummaries(activities);
 
     expect(summaries[0].label).toBe('bug_devolvido');
-    expect(summaries[1].label).toBe('bug_impeditivo');
+    expect(summaries[1].label).toBe('sem_classificacao');
   });
 });
 
