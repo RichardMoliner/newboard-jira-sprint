@@ -3,6 +3,13 @@ import type { Activity, SprintInfo, SprintSettings, TimelineWindow, WorklogEntry
 import { computeStatusSummaries } from '../indicators/computeIndicators.js';
 import { describeBugLabel } from '../bugLabels.js';
 import { addDays, isBusinessDay } from '../businessDays.js';
+import {
+  groupSprintsByType,
+  computeGroupClickFilter,
+  countGroupChecked,
+  SPRINT_GROUP_LABELS,
+  type SprintGroupType,
+} from '../sprintGrouping.js';
 import SprintSettingsPopup from './SprintSettingsPopup.js';
 
 const MIN_COLUMN_WIDTH = 28;
@@ -42,6 +49,8 @@ export default function TimelineView({
   dashDelayBar,
   sprintSettingsById,
   onSprintSettingsSaved,
+  onGroupSelectionChange,
+  onGroupClick,
 }: {
   activities: Activity[];
   sprints: SprintInfo[];
@@ -55,9 +64,15 @@ export default function TimelineView({
    * lado da pill de cada sprint. */
   sprintSettingsById: Record<string, SprintSettings>;
   onSprintSettingsSaved: (sprintId: string, settings: SprintSettings) => void;
+  /** Chamado pelo popover do agrupador (checkbox individual ou "Marcar/Desmarcar todas"). */
+  onGroupSelectionChange: (sprintIds: string[], checked: boolean) => void;
+  /** Chamado ao clicar na pill do agrupador (fora da seta de abrir/fechar) — filtro efêmero, igual ao clique numa pill de sprint individual. */
+  onGroupClick: (sprintIds: string[], shiftKey: boolean) => void;
 }) {
   // Sprint cujo pop-up de configuração (engrenagem) está aberto no momento; null = nenhum.
   const [gearSprintId, setGearSprintId] = useState<string | null>(null);
+  // Tipo de agrupador cujo popover de marcação está aberto no momento; null = nenhum.
+  const [openGroupType, setOpenGroupType] = useState<SprintGroupType | null>(null);
   const [expandedBugs, setExpandedBugs] = useState<Set<string>>(new Set());
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
   const [dayWidth, setDayWidth] = useState(MIN_COLUMN_WIDTH);
@@ -115,6 +130,10 @@ export default function TimelineView({
     const selectedActivities = activities.filter((a) => sprintFilter.includes(a.sprintId));
     return { completion: computeSprintCompletion(selectedActivities), tooltip: formatStatusBreakdownTooltip(selectedActivities) };
   }, [activities, sprintFilter]);
+
+  const sprintGroups = useMemo(() => groupSprintsByType(sprints, sprintSettingsById), [sprints, sprintSettingsById]);
+  const groupedSprintIds = useMemo(() => new Set(sprintGroups.flatMap((g) => g.sprints.map((s) => s.id))), [sprintGroups]);
+  const allSprintIds = useMemo(() => sprints.map((s) => s.id), [sprints]);
 
   const deadlineRulers = useMemo(
     () => resolveDeadlineRulers(deadlinesActive, sprintSettingsById, sprintFilter, sprints),
@@ -254,6 +273,8 @@ export default function TimelineView({
         <SprintSettingsPopup
           sprint={gearSprint}
           settings={sprintSettingsById[gearSprint.id]}
+          allSprints={sprints}
+          sprintSettingsById={sprintSettingsById}
           onClose={() => setGearSprintId(null)}
           onSaved={onSprintSettingsSaved}
         />
@@ -279,10 +300,27 @@ export default function TimelineView({
             label="Todas as sprints"
             active={sprintFilter.length === 0}
             onClick={() => onSprintClick('all', false)}
-            completion={computeSprintCompletion(activities)}
             tooltip={formatStatusBreakdownTooltip(activities)}
           />
+          {sprintGroups.map((group) => (
+            <SprintGroupPill
+              key={group.type}
+              group={group}
+              open={openGroupType === group.type}
+              onToggleOpen={() => setOpenGroupType((prev) => (prev === group.type ? null : group.type))}
+              onClose={() => setOpenGroupType(null)}
+              allSprintIds={allSprintIds}
+              sprintFilter={sprintFilter}
+              onGroupSelectionChange={onGroupSelectionChange}
+              onGroupClick={onGroupClick}
+              onGearClick={(sprintId) => {
+                setOpenGroupType(null);
+                setGearSprintId(sprintId);
+              }}
+            />
+          ))}
           {sprints.map((s) => {
+            if (groupedSprintIds.has(s.id)) return null;
             const sprintActivities = activitiesBySprintId.get(s.id) ?? [];
             return (
               <FilterPill
@@ -508,8 +546,12 @@ export default function TimelineView({
           </div>
 
           {grouped.map(([developer, items]) => {
-            const available = isDeveloperAvailable(byDeveloperAcrossAllSprints.get(developer) ?? []);
+            const developerActivities = byDeveloperAcrossAllSprints.get(developer) ?? [];
+            const available = isDeveloperAvailable(developerActivities);
             const workingOnBugs = available && devsWorkingOnBugs.has(developer);
+            const availabilityDate = shouldShowAvailabilityDate(developer, available)
+              ? projectDeveloperAvailabilityDate(developerActivities, today, hoursPerDay)
+              : null;
             return (
             <div key={developer} style={{ display: 'contents' }}>
               <div
@@ -536,6 +578,11 @@ export default function TimelineView({
                       ? '✓ Atuando em bugs'
                       : '✓ Disponível'}
                   </Tag>
+                )}
+                {availabilityDate && (
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 10 }}>
+                    Disponível a partir de {formatShort(availabilityDate)}
+                  </span>
                 )}
               </div>
               <div style={{ background: 'color-mix(in srgb, var(--series-impl) 12%, var(--surface-1))', borderBottom: '1px solid var(--gridline)' }} />
@@ -1368,6 +1415,151 @@ export function FilterPill({
   );
 }
 
+/**
+ * Pill de agrupador de sprints (tipo "Aplicação"/"Extensões", configurado no popup de cada sprint).
+ * Clicar na pill filtra a timeline por aquele grupo na hora (igual a clicar numa pill de sprint
+ * individual — efêmero, não persiste); a seta abre/fecha o popover de marcação (checkbox por
+ * sprint + "Marcar/Desmarcar todas"), que persiste (ver `onGroupSelectionChange`).
+ */
+function SprintGroupPill({
+  group,
+  open,
+  onToggleOpen,
+  onClose,
+  allSprintIds,
+  sprintFilter,
+  onGroupSelectionChange,
+  onGroupClick,
+  onGearClick,
+}: {
+  group: { type: SprintGroupType; sprints: SprintInfo[] };
+  open: boolean;
+  onToggleOpen: () => void;
+  onClose: () => void;
+  allSprintIds: string[];
+  sprintFilter: string[];
+  onGroupSelectionChange: (sprintIds: string[], checked: boolean) => void;
+  onGroupClick: (sprintIds: string[], shiftKey: boolean) => void;
+  onGearClick: (sprintId: string) => void;
+}) {
+  const groupSprintIds = group.sprints.map((s) => s.id);
+  const checkedCount = countGroupChecked(allSprintIds, sprintFilter, groupSprintIds);
+  const isChecked = (sprintId: string) => sprintFilter.length === 0 || sprintFilter.includes(sprintId);
+  const active = checkedCount > 0 && groupSprintIds.every((id) => isChecked(id));
+
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex' }}>
+      <button
+        onClick={(e) => onGroupClick(groupSprintIds, e.shiftKey)}
+        style={{
+          padding: '6px 30px 6px 14px',
+          fontSize: 11.5,
+          fontWeight: 700,
+          color: active ? '#fff' : 'var(--text-secondary)',
+          background: active ? 'var(--series-impl)' : 'var(--surface-1)',
+          border: `1px solid ${active ? 'var(--series-impl)' : 'var(--baseline)'}`,
+          borderRadius: 20,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        {SPRINT_GROUP_LABELS[group.type]} ({checkedCount}/{groupSprintIds.length})
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleOpen();
+        }}
+        title={open ? 'Fechar seleção de sprints' : 'Selecionar sprints do grupo'}
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: 24,
+          zIndex: 21,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          fontSize: 9,
+          color: active ? '#fff' : 'var(--text-secondary)',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        {open ? '▲' : '▼'}
+      </button>
+      {open && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 20 }} onClick={onClose} />
+          <div
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              marginTop: 6,
+              zIndex: 21,
+              minWidth: 240,
+              background: 'var(--surface-1)',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+              padding: 10,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+            }}
+          >
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button style={groupActionButtonStyle} onClick={() => onGroupSelectionChange(groupSprintIds, true)}>
+                Marcar todas
+              </button>
+              <button style={groupActionButtonStyle} onClick={() => onGroupSelectionChange(groupSprintIds, false)}>
+                Desmarcar todas
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {group.sprints.map((s) => (
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                  <input
+                    type="checkbox"
+                    checked={isChecked(s.id)}
+                    onChange={(e) => onGroupSelectionChange([s.id], e.target.checked)}
+                  />
+                  <span style={{ flex: 1, color: 'var(--text-primary)' }}>{s.name}</span>
+                  <button
+                    onClick={() => onGearClick(s.id)}
+                    title={`Configurar horas/PF e prazos de "${s.name}"`}
+                    style={{ background: 'none', border: 'none', padding: 0, fontSize: 11, cursor: 'pointer', opacity: 0.7 }}
+                  >
+                    ⚙️
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </span>
+  );
+}
+
+const groupActionButtonStyle: React.CSSProperties = {
+  flex: 1,
+  padding: '5px 8px',
+  fontSize: 11,
+  fontWeight: 600,
+  color: 'var(--text-secondary)',
+  background: 'var(--page-plane)',
+  border: '1px solid var(--baseline)',
+  borderRadius: 6,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+};
+
 function SwitchPill({ active, onClick, label, title }: { active: boolean; onClick: () => void; label: string; title?: string }) {
   return (
     <button
@@ -2091,6 +2283,29 @@ function groupByDeveloper(activities: Activity[]): [string, Activity[]][] {
 /** True quando o dev não tem mais nada por implementar entre as atividades listadas — Implementação atendida (ou a story inteira concluída) em todas. Não considera o Teste: esperar o teste não ocupa o dev. */
 export function isDeveloperAvailable(activities: Activity[]): boolean {
   return activities.length > 0 && activities.every((a) => a.implDone || a.isDone);
+}
+
+/**
+ * Data prevista do último dia de Implementação do dev — soma as horas de Implementação restantes
+ * (estimado − apontado, nunca negativo) de todas as atividades com Implementação pendente e
+ * projeta em sequência a partir de hoje, em dias úteis. Dev já disponível (nada pendente) não tem
+ * previsão (null).
+ */
+export function projectDeveloperAvailabilityDate(activities: Activity[], today: string, hoursPerDay: number): string | null {
+  const pending = activities.filter((a) => !(a.implDone || a.isDone));
+  if (pending.length === 0) return null;
+  const remainingHours = pending.reduce(
+    (sum, a) => sum + Math.max(0, (a.implEstimatedHours ?? 0) - (a.implLoggedHours ?? 0)),
+    0,
+  );
+  const daysNeeded = hoursPerDay > 0 ? Math.max(1, Math.ceil(remainingHours / hoursPerDay)) : 1;
+  const earliestStart = ceilToBusinessDay(today);
+  return addBusinessDays(earliestStart, daysNeeded - 1);
+}
+
+/** "-" é o placeholder de nenhum dev vinculado (ver mapActivity no server) — não faz sentido projetar disponibilidade pra "ninguém". */
+export function shouldShowAvailabilityDate(developer: string, available: boolean): boolean {
+  return !available && developer !== '-';
 }
 
 /** True quando há algum bug ainda aberto (não "Atendida") atribuído a esse dev, em qualquer uma das atividades informadas — não só nas que estão "no nome dele". */

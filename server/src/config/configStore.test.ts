@@ -1,5 +1,5 @@
 import { describe, expect, test, afterEach } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readConfig, writeConfig } from './configStore.js';
@@ -30,6 +30,20 @@ describe('configStore', () => {
     });
   });
 
+  test('returns all fields null (and sprintSettings empty) when the config file exists but is empty/corrompido — não deixa a aplicação travada em 500', async () => {
+    const configPath = await tempConfigPath();
+    await writeFile(configPath, '', 'utf-8');
+    expect(await readConfig(configPath)).toEqual({
+      vertical: null,
+      jiraUsername: null,
+      jiraPassword: null,
+      hoursPerDay: null,
+      dashDelayBar: null,
+      autoRefreshEnabled: null,
+      sprintSettings: {},
+    });
+  });
+
   test('round-trips a saved config, including per-sprint settings', async () => {
     const configPath = await tempConfigPath();
     await writeConfig(configPath, {
@@ -40,7 +54,14 @@ describe('configStore', () => {
       dashDelayBar: true,
       autoRefreshEnabled: false,
       sprintSettings: {
-        '7590': { hoursPerPf: 6, lastPublishDay: '2026-10-01', lastTestDay: '2026-10-03', publishDay: '2026-10-05' },
+        '7590': {
+          hoursPerPf: 6,
+          lastPublishDay: '2026-10-01',
+          lastTestDay: '2026-10-03',
+          publishDay: '2026-10-05',
+          group: 'aplicacao',
+          includedInGroupFilter: false,
+        },
       },
     });
     expect(await readConfig(configPath)).toEqual({
@@ -51,7 +72,14 @@ describe('configStore', () => {
       dashDelayBar: true,
       autoRefreshEnabled: false,
       sprintSettings: {
-        '7590': { hoursPerPf: 6, lastPublishDay: '2026-10-01', lastTestDay: '2026-10-03', publishDay: '2026-10-05' },
+        '7590': {
+          hoursPerPf: 6,
+          lastPublishDay: '2026-10-01',
+          lastTestDay: '2026-10-03',
+          publishDay: '2026-10-05',
+          group: 'aplicacao',
+          includedInGroupFilter: false,
+        },
       },
     });
   });
@@ -65,7 +93,9 @@ describe('configStore', () => {
       hoursPerDay: 8,
       dashDelayBar: true,
       autoRefreshEnabled: false,
-      sprintSettings: { '7590': { hoursPerPf: 6, lastPublishDay: null, lastTestDay: null, publishDay: null } },
+      sprintSettings: {
+        '7590': { hoursPerPf: 6, lastPublishDay: null, lastTestDay: null, publishDay: null, group: null, includedInGroupFilter: true },
+      },
     });
     await writeConfig(configPath, {
       vertical: 'FINANCAS',

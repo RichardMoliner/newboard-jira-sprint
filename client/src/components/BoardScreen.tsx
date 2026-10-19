@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { getConfig, getSprintSettings } from '../api/client.js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { getConfig, getSprintSettings, saveSprintSettings } from '../api/client.js';
 import { useBoardData } from '../api/useBoardData.js';
+import { applyGroupSelection, computeGroupClickFilter, computeInitialSprintFilter } from '../sprintGrouping.js';
 import type { SprintSettings } from '../types.js';
 import type { Theme } from '../App.js';
 import TimelineView from './TimelineView.js';
@@ -32,6 +33,8 @@ export default function BoardScreen({
   // Configuração por sprint (horas/PF e prazos) — sem fallback global: uma sprint sem entrada aqui
   // usa o padrão do sistema pra horas/PF (ver hoursPerPfBySprintId) e não tem régua de prazo.
   const [sprintSettingsById, setSprintSettingsById] = useState<Record<string, SprintSettings>>({});
+  const [sprintSettingsLoaded, setSprintSettingsLoaded] = useState(false);
+  const appliedInitialSprintFilter = useRef(false);
   const { data, loading, error, refresh, secondsToNextRefresh, progressMessages } = useBoardData(autoRefreshEnabled);
 
   useEffect(() => {
@@ -39,8 +42,19 @@ export default function BoardScreen({
       setDashDelayBar(config.dashDelayBar);
       setAutoRefreshEnabled(config.autoRefreshEnabled);
     });
-    getSprintSettings().then(setSprintSettingsById);
+    getSprintSettings().then((settings) => {
+      setSprintSettingsById(settings);
+      setSprintSettingsLoaded(true);
+    });
   }, []);
+
+  // Aplica a marcação persistida dos agrupadores como filtro inicial ao carregar o painel — só uma
+  // vez (não deve sobrescrever a navegação do usuário nos refreshes/polling seguintes).
+  useEffect(() => {
+    if (appliedInitialSprintFilter.current || !data || !sprintSettingsLoaded) return;
+    appliedInitialSprintFilter.current = true;
+    setSprintFilter(computeInitialSprintFilter(data.sprints, sprintSettingsById));
+  }, [data, sprintSettingsLoaded, sprintSettingsById]);
 
   const hoursPerPfBySprintId = useMemo(() => {
     if (!data) return {};
@@ -56,7 +70,8 @@ export default function BoardScreen({
   }
 
   // Clique normal seleciona só aquela sprint; shift+clique soma/remove da seleção atual,
-  // permitindo combinar várias sprints no filtro.
+  // permitindo combinar várias sprints no filtro. Efêmero — não persiste, ao contrário do
+  // popover do agrupador (ver handleGroupSelectionChange).
   function handleSprintClick(id: string, shiftKey: boolean) {
     if (id === 'all') {
       setSprintFilter([]);
@@ -66,6 +81,28 @@ export default function BoardScreen({
       setSprintFilter((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
     } else {
       setSprintFilter([id]);
+    }
+  }
+
+  // Clique na pill do agrupador (fora da seta) — filtro efêmero igual ao clique numa pill de sprint
+  // individual, não persiste (ver handleGroupSelectionChange pro popover, que persiste).
+  function handleGroupClick(sprintIds: string[], shiftKey: boolean) {
+    if (!data) return;
+    setSprintFilter((prev) => computeGroupClickFilter(data.sprints.map((s) => s.id), prev, sprintIds, shiftKey));
+  }
+
+  // Chamado pelo popover do agrupador (checkbox individual ou "Marcar/Desmarcar todas") — atualiza
+  // o filtro na hora e persiste a marcação de cada sprint envolvida, pra voltar marcada assim no
+  // próximo carregamento do painel.
+  function handleGroupSelectionChange(sprintIds: string[], checked: boolean) {
+    if (!data) return;
+    setSprintFilter((prev) => applyGroupSelection(data.sprints.map((s) => s.id), prev, sprintIds, checked));
+    for (const sprintId of sprintIds) {
+      const existing = sprintSettingsById[sprintId];
+      if (!existing) continue;
+      const next = { ...existing, includedInGroupFilter: checked };
+      setSprintSettingsById((prev) => ({ ...prev, [sprintId]: next }));
+      saveSprintSettings(sprintId, next);
     }
   }
 
@@ -187,6 +224,8 @@ export default function BoardScreen({
                 dashDelayBar={dashDelayBar}
                 sprintSettingsById={sprintSettingsById}
                 onSprintSettingsSaved={handleSprintSettingsSaved}
+                onGroupSelectionChange={handleGroupSelectionChange}
+                onGroupClick={handleGroupClick}
               />
             </div>
           ) : (

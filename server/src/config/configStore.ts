@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, rename, writeFile } from 'node:fs/promises';
 
 export interface SprintSettings {
   /** Horas de trabalho por Ponto de Função nesta sprint. Nulo usa o padrão do sistema. */
@@ -9,6 +9,10 @@ export interface SprintSettings {
   lastTestDay: string | null;
   /** Data (YYYY-MM-DD) do dia da publicação desta sprint. Nulo = não configurado, régua não aparece. */
   publishDay: string | null;
+  /** Tipo da sprint pro agrupador da Linha do tempo. Nulo = sem grupo, sprint continua como pill individual. */
+  group: 'aplicacao' | 'extensao' | null;
+  /** Se a sprint está marcada no popover do seu grupo — só relevante quando `group` não é nulo. */
+  includedInGroupFilter: boolean;
 }
 
 export interface AppConfig {
@@ -52,13 +56,21 @@ export async function readConfig(configPath: string): Promise<AppConfig> {
       sprintSettings: parsed.sprintSettings ?? {},
     };
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT' || err instanceof SyntaxError) {
       return emptyConfig();
     }
     throw err;
   }
 }
 
+/**
+ * Escreve num arquivo temporário ao lado e troca pelo definitivo com rename (atômico na mesma
+ * pasta) — grava direto no `configPath` deixava uma janela onde um restart do servidor no meio da
+ * escrita (ex.: tsx watch recarregando por uma mudança de código) truncava o arquivo e perdia toda
+ * a configuração salva.
+ */
 export async function writeConfig(configPath: string, config: AppConfig): Promise<void> {
-  await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+  const tmpPath = `${configPath}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(tmpPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+  await rename(tmpPath, configPath);
 }

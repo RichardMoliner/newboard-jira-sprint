@@ -1,25 +1,54 @@
 import { useState, type FormEvent } from 'react';
 import { saveSprintSettings } from '../api/client.js';
+import { SPRINT_GROUP_LABELS, type SprintGroupType } from '../sprintGrouping.js';
 import type { SprintInfo, SprintSettings } from '../types.js';
+
+/** Campos de horas/PF e prazos no formato dos inputs do formulário — usado tanto pro estado inicial quanto pro "Copiar de". */
+function toFormFields(settings: SprintSettings | undefined) {
+  return {
+    hoursPerPf: settings?.hoursPerPf != null ? String(settings.hoursPerPf) : '',
+    lastPublishDay: settings?.lastPublishDay ?? '',
+    lastTestDay: settings?.lastTestDay ?? '',
+    publishDay: settings?.publishDay ?? '',
+  };
+}
 
 export default function SprintSettingsPopup({
   sprint,
   settings,
+  allSprints,
+  sprintSettingsById,
   onClose,
   onSaved,
 }: {
   sprint: SprintInfo;
   /** Configuração já salva pra essa sprint, se houver — undefined/campos null viram inputs vazios. */
   settings: SprintSettings | undefined;
+  /** Todas as sprints do painel — usado pra listar de onde dá pra copiar horas/PF e prazos. */
+  allSprints: SprintInfo[];
+  sprintSettingsById: Record<string, SprintSettings>;
   onClose: () => void;
   onSaved: (sprintId: string, settings: SprintSettings) => void;
 }) {
-  const [hoursPerPf, setHoursPerPf] = useState(settings?.hoursPerPf != null ? String(settings.hoursPerPf) : '');
-  const [lastPublishDay, setLastPublishDay] = useState(settings?.lastPublishDay ?? '');
-  const [lastTestDay, setLastTestDay] = useState(settings?.lastTestDay ?? '');
-  const [publishDay, setPublishDay] = useState(settings?.publishDay ?? '');
+  const initialFields = toFormFields(settings);
+  const [hoursPerPf, setHoursPerPf] = useState(initialFields.hoursPerPf);
+  const [lastPublishDay, setLastPublishDay] = useState(initialFields.lastPublishDay);
+  const [lastTestDay, setLastTestDay] = useState(initialFields.lastTestDay);
+  const [publishDay, setPublishDay] = useState(initialFields.publishDay);
+  const [group, setGroup] = useState<SprintGroupType | ''>(settings?.group ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const copyableSprints = allSprints.filter((s) => s.id !== sprint.id && sprintSettingsById[s.id]);
+
+  function handleCopyFrom(sourceSprintId: string) {
+    if (!sourceSprintId) return;
+    const fields = toFormFields(sprintSettingsById[sourceSprintId]);
+    setHoursPerPf(fields.hoursPerPf);
+    setLastPublishDay(fields.lastPublishDay);
+    setLastTestDay(fields.lastTestDay);
+    setPublishDay(fields.publishDay);
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -38,6 +67,8 @@ export default function SprintSettingsPopup({
         lastPublishDay: lastPublishDay || null,
         lastTestDay: lastTestDay || null,
         publishDay: publishDay || null,
+        group: group || null,
+        includedInGroupFilter: settings?.includedInGroupFilter ?? true,
       });
       onSaved(sprint.id, saved);
       onClose();
@@ -77,6 +108,22 @@ export default function SprintSettingsPopup({
           <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '4px 0 0' }}>{sprint.name}</p>
         </div>
 
+        {copyableSprints.length > 0 && (
+          <Field label="Copiar de outra sprint">
+            <select value="" onChange={(e) => handleCopyFrom(e.target.value)} style={inputStyle}>
+              <option value="">Selecione...</option>
+              {copyableSprints.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              Preenche horas/PF e os prazos abaixo com os valores daquela sprint — revise antes de salvar.
+            </span>
+          </Field>
+        )}
+
         <Field label="Horas por PF">
           <input
             type="number"
@@ -102,6 +149,20 @@ export default function SprintSettingsPopup({
 
         <Field label="Dia da publicação">
           <input type="date" value={publishDay} onChange={(e) => setPublishDay(e.target.value)} style={inputStyle} />
+        </Field>
+
+        <Field label="Tipo de sprint">
+          <select value={group} onChange={(e) => setGroup(e.target.value as SprintGroupType | '')} style={inputStyle}>
+            <option value="">Nenhum</option>
+            {(Object.entries(SPRINT_GROUP_LABELS) as [SprintGroupType, string][]).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            Agrupa esta sprint na barra de filtros da Linha do tempo, junto com as demais do mesmo tipo.
+          </span>
         </Field>
 
         {error && <p style={{ color: 'var(--status-critical)', fontSize: 13, margin: 0 }}>{error}</p>}

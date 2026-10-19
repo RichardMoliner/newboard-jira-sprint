@@ -3,7 +3,24 @@ import { readConfig, writeConfig, type SprintSettings } from '../config/configSt
 import { parseOptionalDateField } from './config.js';
 
 function emptySprintSettings(): SprintSettings {
-  return { hoursPerPf: null, lastPublishDay: null, lastTestDay: null, publishDay: null };
+  return { hoursPerPf: null, lastPublishDay: null, lastTestDay: null, publishDay: null, group: null, includedInGroupFilter: true };
+}
+
+const SPRINT_GROUPS = ['aplicacao', 'extensao'] as const;
+type SprintGroup = (typeof SPRINT_GROUPS)[number];
+
+/** Analisa o tipo de sprint (combobox) opcional do body: string vazia ou null limpa pra "sem
+ * grupo", ausente mantém o atual, valor fora da lista conhecida é erro. */
+export function parseOptionalSprintGroupField(
+  rawValue: unknown,
+  currentValue: SprintGroup | null,
+): { value: SprintGroup | null; error?: string } {
+  if (rawValue === undefined) return { value: currentValue };
+  if (rawValue === '' || rawValue === null) return { value: null };
+  if (typeof rawValue !== 'string' || !SPRINT_GROUPS.includes(rawValue as SprintGroup)) {
+    return { value: currentValue, error: `deve ser um dos valores: ${SPRINT_GROUPS.join(', ')}.` };
+  }
+  return { value: rawValue as SprintGroup };
 }
 
 /** Analisa um campo numérico opcional e anulável do body: string vazia ou null limpa o valor
@@ -60,11 +77,22 @@ export function sprintSettingsRouter(configPath: string): Router {
       return;
     }
 
+    const group = parseOptionalSprintGroupField(req.body?.group, existing.group);
+    if (group.error) {
+      res.status(400).json({ error: `Tipo de sprint ${group.error}` });
+      return;
+    }
+
+    const includedInGroupFilter =
+      req.body?.includedInGroupFilter === undefined ? (existing.includedInGroupFilter ?? true) : Boolean(req.body.includedInGroupFilter);
+
     const next: SprintSettings = {
       hoursPerPf: hoursPerPf.value,
       lastPublishDay: lastPublishDay.value,
       lastTestDay: lastTestDay.value,
       publishDay: publishDay.value,
+      group: group.value,
+      includedInGroupFilter,
     };
     config.sprintSettings[sprintId] = next;
     await writeConfig(configPath, config);

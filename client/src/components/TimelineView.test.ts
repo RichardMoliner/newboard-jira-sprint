@@ -19,7 +19,9 @@ import {
   isWorkingOnBugs,
   lastWorklogDate,
   matchesLegendFilter,
+  projectDeveloperAvailabilityDate,
   projectTestWindow,
+  shouldShowAvailabilityDate,
   resolveDeadlineRulers,
   type DeadlineRuler,
 } from './TimelineView.js';
@@ -525,6 +527,64 @@ describe('isDeveloperAvailable', () => {
   });
 });
 
+describe('projectDeveloperAvailabilityDate', () => {
+  test('null when the dev has nothing pending (already available)', () => {
+    expect(projectDeveloperAvailabilityDate([activity({ implDone: true })], '2026-09-01', 8)).toBeNull();
+  });
+
+  test('null for an empty list', () => {
+    expect(projectDeveloperAvailabilityDate([], '2026-09-01', 8)).toBeNull();
+  });
+
+  test('remaining hours under one day land on today (already a business day)', () => {
+    const pending = activity({ implDone: false, implEstimatedHours: 20, implLoggedHours: 16 });
+    expect(projectDeveloperAvailabilityDate([pending], '2026-09-01', 8)).toBe('2026-09-01');
+  });
+
+  test('sums remaining hours across every pending activity, skipping done ones', () => {
+    const pendingA = activity({ key: 'A', implDone: false, implEstimatedHours: 10, implLoggedHours: 0 });
+    const pendingB = activity({ key: 'B', implDone: false, implEstimatedHours: 10, implLoggedHours: 0 });
+    const done = activity({ key: 'C', implDone: true, implEstimatedHours: 999, implLoggedHours: 0 });
+    // 20h restantes / 8h por dia = 3 dias úteis a partir de hoje (terça 2026-09-01 -> quinta 2026-09-03).
+    expect(projectDeveloperAvailabilityDate([pendingA, pendingB, done], '2026-09-01', 8)).toBe('2026-09-03');
+  });
+
+  test('missing estimate/logged hours count as zero, not NaN', () => {
+    const pending = activity({ implDone: false, implEstimatedHours: null, implLoggedHours: null });
+    expect(projectDeveloperAvailabilityDate([pending], '2026-09-01', 8)).toBe('2026-09-01');
+  });
+
+  test('never counts negative remaining hours when logged exceeds estimated', () => {
+    const pending = activity({ implDone: false, implEstimatedHours: 5, implLoggedHours: 40 });
+    expect(projectDeveloperAvailabilityDate([pending], '2026-09-01', 8)).toBe('2026-09-01');
+  });
+
+  test('skips weekend and holiday when projecting forward', () => {
+    const pending = activity({ implDone: false, implEstimatedHours: 16, implLoggedHours: 0 });
+    // Sexta 2026-09-04 + 2 dias úteis pula sáb/dom e o feriado 2026-09-07, cai em 2026-09-08.
+    expect(projectDeveloperAvailabilityDate([pending], '2026-09-04', 8)).toBe('2026-09-08');
+  });
+
+  test('projects from the next business day when today falls on a weekend', () => {
+    const pending = activity({ implDone: false, implEstimatedHours: 4, implLoggedHours: 0 });
+    expect(projectDeveloperAvailabilityDate([pending], '2026-09-05', 8)).toBe('2026-09-08');
+  });
+});
+
+describe('shouldShowAvailabilityDate', () => {
+  test('false when the dev is already available', () => {
+    expect(shouldShowAvailabilityDate('Fulano', true)).toBe(false);
+  });
+
+  test('false for the "sem dev" placeholder ("-"), even when not available', () => {
+    expect(shouldShowAvailabilityDate('-', false)).toBe(false);
+  });
+
+  test('true for a real dev name that is not available', () => {
+    expect(shouldShowAvailabilityDate('Fulano', false)).toBe(true);
+  });
+});
+
 describe('isWorkingOnBugs', () => {
   test('true when an unresolved bug is assigned to the developer, in any activity', () => {
     const activities = [activity({ bugs: [bug({ developer: 'Fulano', status: 'Em correção' })] })];
@@ -784,7 +844,14 @@ describe('resolveDeadlineRulers', () => {
   const s1 = sprintInfo({ id: 'S1', name: 'Sprint 1', endDate: '2026-09-20' });
   const s2 = sprintInfo({ id: 'S2', name: 'Sprint 2', endDate: '2026-10-05' });
   const settingsS1 = {
-    S1: { hoursPerPf: 5, lastPublishDay: '2026-09-10', lastTestDay: '2026-09-12', publishDay: '2026-09-15' },
+    S1: {
+      hoursPerPf: 5,
+      lastPublishDay: '2026-09-10',
+      lastTestDay: '2026-09-12',
+      publishDay: '2026-09-15',
+      group: null,
+      includedInGroupFilter: true,
+    },
   };
 
   test('returns nothing when the switch is off, regardless of configured dates', () => {
@@ -815,7 +882,7 @@ describe('resolveDeadlineRulers', () => {
   test('includes each sprint name in the label when combining multiple sprints with their own settings', () => {
     const settings = {
       S1: settingsS1.S1,
-      S2: { hoursPerPf: 6, lastPublishDay: '2026-09-28', lastTestDay: null, publishDay: null },
+      S2: { hoursPerPf: 6, lastPublishDay: '2026-09-28', lastTestDay: null, publishDay: null, group: null, includedInGroupFilter: true },
     };
     const rulers = resolveDeadlineRulers(true, settings, [], [s1, s2]);
     expect(rulers.map((r) => r.key)).toEqual(['lastPublishDay-S1', 'lastTestDay-S1', 'publishDay-S1', 'lastPublishDay-S2']);
@@ -824,7 +891,10 @@ describe('resolveDeadlineRulers', () => {
   });
 
   test('only considers sprints inside the current sprintFilter, ignoring other sprints\' settings', () => {
-    const settings = { S1: settingsS1.S1, S2: { hoursPerPf: 6, lastPublishDay: '2026-09-28', lastTestDay: null, publishDay: null } };
+    const settings = {
+      S1: settingsS1.S1,
+      S2: { hoursPerPf: 6, lastPublishDay: '2026-09-28', lastTestDay: null, publishDay: null, group: null, includedInGroupFilter: true },
+    };
     const rulers = resolveDeadlineRulers(true, settings, ['S1'], [s1, s2]);
     expect(rulers.filter((r) => r.key !== 'sprintEnd').every((r) => r.key.endsWith('-S1'))).toBe(true);
   });

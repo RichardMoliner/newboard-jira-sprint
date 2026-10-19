@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { parseOptionalPositiveNumberField } from './sprintSettings.js';
+import { parseOptionalPositiveNumberField, parseOptionalSprintGroupField } from './sprintSettings.js';
 
 describe('parseOptionalPositiveNumberField', () => {
   test('keeps the current value when the field is absent from the body', () => {
@@ -40,6 +40,35 @@ describe('parseOptionalPositiveNumberField', () => {
     expect(parseOptionalPositiveNumberField('abc', 6)).toEqual({
       value: 6,
       error: 'deve ser um número maior que zero.',
+    });
+  });
+});
+
+describe('parseOptionalSprintGroupField', () => {
+  test('keeps the current value when the field is absent from the body', () => {
+    expect(parseOptionalSprintGroupField(undefined, 'aplicacao')).toEqual({ value: 'aplicacao' });
+  });
+
+  test('clears to null (sem grupo) when an empty string is sent', () => {
+    expect(parseOptionalSprintGroupField('', 'aplicacao')).toEqual({ value: null });
+  });
+
+  test('clears to null when null is sent', () => {
+    expect(parseOptionalSprintGroupField(null, 'aplicacao')).toEqual({ value: null });
+  });
+
+  test('accepts "aplicacao"', () => {
+    expect(parseOptionalSprintGroupField('aplicacao', null)).toEqual({ value: 'aplicacao' });
+  });
+
+  test('accepts "extensao"', () => {
+    expect(parseOptionalSprintGroupField('extensao', null)).toEqual({ value: 'extensao' });
+  });
+
+  test('rejects an unknown value, keeping the current value and surfacing an error', () => {
+    expect(parseOptionalSprintGroupField('outro', 'aplicacao')).toEqual({
+      value: 'aplicacao',
+      error: 'deve ser um dos valores: aplicacao, extensao.',
     });
   });
 });

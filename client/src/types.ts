@@ -104,4 +104,8 @@ export interface SprintSettings {
   lastPublishDay: string | null;
   lastTestDay: string | null;
   publishDay: string | null;
+  /** Tipo da sprint pro agrupador da Linha do tempo. Nulo = sem grupo, sprint continua como pill individual. */
+  group: 'aplicacao' | 'extensao' | null;
+  /** Se a sprint está marcada no popover do seu grupo — só relevante quando `group` não é nulo. */
+  includedInGroupFilter: boolean;
 }
