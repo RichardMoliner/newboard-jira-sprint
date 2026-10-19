@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Activity, SprintInfo } from '../types.js';
+import type { Activity, SprintInfo, SprintSettings } from '../types.js';
 import {
   computeBugLabelSummaries,
   computeBurndown,
@@ -12,7 +12,8 @@ import {
   computeRealizedProductivity,
   topActivitiesByBugCount,
 } from '../indicators/computeIndicators.js';
-import { FilterPill } from './TimelineView.js';
+import { groupSprintsByType, type SprintGroupType } from '../sprintGrouping.js';
+import { computeSprintCompletion, formatStatusBreakdownTooltip, FilterPill, SprintGroupPill } from './TimelineView.js';
 import StatusPieChart from './StatusPieChart.js';
 import BugLabelsPieChart from './BugLabelsPieChart.js';
 import BurndownChart from './BurndownChart.js';
@@ -27,6 +28,9 @@ export default function IndicatorsView({
   onSprintClick,
   hoursPerPfBySprintId,
   assumedTestSharePercent,
+  sprintSettingsById,
+  onGroupSelectionChange,
+  onGroupClick,
 }: {
   activities: Activity[];
   sprints: SprintInfo[];
@@ -36,7 +40,28 @@ export default function IndicatorsView({
   /** Horas/PF efetivo de cada sprint (já com o padrão do sistema aplicado pra quem não configurou a própria). */
   hoursPerPfBySprintId: Record<string, number>;
   assumedTestSharePercent: number;
+  /** Configuração (horas/PF, prazos e tipo de grupo) por sprint — usada aqui só pro agrupador. Sem
+   * entrada aqui (ex.: Histórico, Relatório), o agrupador simplesmente não aparece. */
+  sprintSettingsById?: Record<string, SprintSettings>;
+  onGroupSelectionChange?: (sprintIds: string[], checked: boolean) => void;
+  onGroupClick?: (sprintIds: string[], shiftKey: boolean) => void;
 }) {
+  const [openGroupType, setOpenGroupType] = useState<SprintGroupType | null>(null);
+  const sprintGroups = useMemo(
+    () => (sprintSettingsById ? groupSprintsByType(sprints, sprintSettingsById) : []),
+    [sprints, sprintSettingsById],
+  );
+  const groupedSprintIds = useMemo(() => new Set(sprintGroups.flatMap((g) => g.sprints.map((s) => s.id))), [sprintGroups]);
+  const allSprintIds = useMemo(() => sprints.map((s) => s.id), [sprints]);
+  const activitiesBySprintId = useMemo(() => {
+    const map = new Map<string, Activity[]>();
+    for (const a of activities) {
+      const list = map.get(a.sprintId);
+      if (list) list.push(a);
+      else map.set(a.sprintId, [a]);
+    }
+    return map;
+  }, [activities]);
   const filtered = useMemo(
     () => (sprintFilter.length === 0 ? activities : activities.filter((a) => sprintFilter.includes(a.sprintId))),
     [activities, sprintFilter],
@@ -88,14 +113,31 @@ export default function IndicatorsView({
       <div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <FilterPill label="Todas as sprints" active={sprintFilter.length === 0} onClick={() => onSprintClick('all', false)} />
-          {sprints.map((s) => (
-            <FilterPill
-              key={s.id}
-              label={s.name}
-              active={sprintFilter.includes(s.id)}
-              onClick={(e) => onSprintClick(s.id, e.shiftKey)}
+          {sprintGroups.map((group) => (
+            <SprintGroupPill
+              key={group.type}
+              group={group}
+              open={openGroupType === group.type}
+              onToggleOpen={() => setOpenGroupType((prev) => (prev === group.type ? null : group.type))}
+              onClose={() => setOpenGroupType(null)}
+              allSprintIds={allSprintIds}
+              sprintFilter={sprintFilter}
+              // sprintGroups só é não-vazio quando sprintSettingsById (logo onGroupSelectionChange/onGroupClick) foi passado — ver useMemo acima.
+              onGroupSelectionChange={onGroupSelectionChange ?? (() => {})}
+              onGroupClick={onGroupClick ?? (() => {})}
             />
           ))}
+          {sprints.map((s) => {
+            if (groupedSprintIds.has(s.id)) return null;
+            return (
+              <FilterPill
+                key={s.id}
+                label={s.name}
+                active={sprintFilter.includes(s.id)}
+                onClick={(e) => onSprintClick(s.id, e.shiftKey)}
+              />
+            );
+          })}
         </div>
         <p style={{ fontSize: 10.5, color: 'var(--text-muted)', margin: '6px 0 0' }}>
           Segure <strong>Shift</strong> e clique para combinar várias sprints no filtro.

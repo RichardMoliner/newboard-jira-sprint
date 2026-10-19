@@ -238,6 +238,9 @@ export default function BoardScreen({
                 assumedTestSharePercent={data.assumedTestSharePercent}
                 sprintFilter={sprintFilter}
                 onSprintClick={handleSprintClick}
+                sprintSettingsById={sprintSettingsById}
+                onGroupSelectionChange={handleGroupSelectionChange}
+                onGroupClick={handleGroupClick}
               />
             </div>
           )}

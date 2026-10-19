@@ -300,25 +300,31 @@ export default function TimelineView({
             label="Todas as sprints"
             active={sprintFilter.length === 0}
             onClick={() => onSprintClick('all', false)}
+            completion={computeSprintCompletion(activities)}
             tooltip={formatStatusBreakdownTooltip(activities)}
           />
-          {sprintGroups.map((group) => (
-            <SprintGroupPill
-              key={group.type}
-              group={group}
-              open={openGroupType === group.type}
-              onToggleOpen={() => setOpenGroupType((prev) => (prev === group.type ? null : group.type))}
-              onClose={() => setOpenGroupType(null)}
-              allSprintIds={allSprintIds}
-              sprintFilter={sprintFilter}
-              onGroupSelectionChange={onGroupSelectionChange}
-              onGroupClick={onGroupClick}
-              onGearClick={(sprintId) => {
-                setOpenGroupType(null);
-                setGearSprintId(sprintId);
-              }}
-            />
-          ))}
+          {sprintGroups.map((group) => {
+            const groupActivities = group.sprints.flatMap((s) => activitiesBySprintId.get(s.id) ?? []);
+            return (
+              <SprintGroupPill
+                key={group.type}
+                group={group}
+                open={openGroupType === group.type}
+                onToggleOpen={() => setOpenGroupType((prev) => (prev === group.type ? null : group.type))}
+                onClose={() => setOpenGroupType(null)}
+                allSprintIds={allSprintIds}
+                sprintFilter={sprintFilter}
+                onGroupSelectionChange={onGroupSelectionChange}
+                onGroupClick={onGroupClick}
+                completion={computeSprintCompletion(groupActivities)}
+                tooltip={formatStatusBreakdownTooltip(groupActivities)}
+                onGearClick={(sprintId) => {
+                  setOpenGroupType(null);
+                  setGearSprintId(sprintId);
+                }}
+              />
+            );
+          })}
           {sprints.map((s) => {
             if (groupedSprintIds.has(s.id)) return null;
             const sprintActivities = activitiesBySprintId.get(s.id) ?? [];
@@ -1421,7 +1427,7 @@ export function FilterPill({
  * individual — efêmero, não persiste); a seta abre/fecha o popover de marcação (checkbox por
  * sprint + "Marcar/Desmarcar todas"), que persiste (ver `onGroupSelectionChange`).
  */
-function SprintGroupPill({
+export function SprintGroupPill({
   group,
   open,
   onToggleOpen,
@@ -1431,6 +1437,8 @@ function SprintGroupPill({
   onGroupSelectionChange,
   onGroupClick,
   onGearClick,
+  completion,
+  tooltip,
 }: {
   group: { type: SprintGroupType; sprints: SprintInfo[] };
   open: boolean;
@@ -1440,7 +1448,11 @@ function SprintGroupPill({
   sprintFilter: string[];
   onGroupSelectionChange: (sprintIds: string[], checked: boolean) => void;
   onGroupClick: (sprintIds: string[], shiftKey: boolean) => void;
-  onGearClick: (sprintId: string) => void;
+  /** Omitido quando a tela não tem configuração de sprint própria (ex.: Indicadores). */
+  onGearClick?: (sprintId: string) => void;
+  /** Concluídas/total (%) somando as atividades de todas as sprints do grupo — mesma info que a pill de uma sprint individual mostra. */
+  completion?: { doneCount: number; totalCount: number; percent: number };
+  tooltip?: string;
 }) {
   const groupSprintIds = group.sprints.map((s) => s.id);
   const checkedCount = countGroupChecked(allSprintIds, sprintFilter, groupSprintIds);
@@ -1451,6 +1463,7 @@ function SprintGroupPill({
     <span style={{ position: 'relative', display: 'inline-flex' }}>
       <button
         onClick={(e) => onGroupClick(groupSprintIds, e.shiftKey)}
+        title={tooltip}
         style={{
           padding: '6px 30px 6px 14px',
           fontSize: 11.5,
@@ -1461,9 +1474,18 @@ function SprintGroupPill({
           borderRadius: 20,
           cursor: 'pointer',
           fontFamily: 'inherit',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 2,
         }}
       >
         {SPRINT_GROUP_LABELS[group.type]} ({checkedCount}/{groupSprintIds.length})
+        {completion && (
+          <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>
+            {completion.doneCount}/{completion.totalCount} ({completion.percent}%)
+          </span>
+        )}
       </button>
       <button
         onClick={(e) => {
@@ -1530,13 +1552,15 @@ function SprintGroupPill({
                     onChange={(e) => onGroupSelectionChange([s.id], e.target.checked)}
                   />
                   <span style={{ flex: 1, color: 'var(--text-primary)' }}>{s.name}</span>
-                  <button
-                    onClick={() => onGearClick(s.id)}
-                    title={`Configurar horas/PF e prazos de "${s.name}"`}
-                    style={{ background: 'none', border: 'none', padding: 0, fontSize: 11, cursor: 'pointer', opacity: 0.7 }}
-                  >
-                    ⚙️
-                  </button>
+                  {onGearClick && (
+                    <button
+                      onClick={() => onGearClick(s.id)}
+                      title={`Configurar horas/PF e prazos de "${s.name}"`}
+                      style={{ background: 'none', border: 'none', padding: 0, fontSize: 11, cursor: 'pointer', opacity: 0.7 }}
+                    >
+                      ⚙️
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
