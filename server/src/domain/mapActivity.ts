@@ -181,9 +181,8 @@ export function mapActivity(params: {
   const timeline =
     !notStarted && story.storyPoints !== null ? computeTimeline(story.storyPoints, startDate, hoursPerPf, hoursPerDay) : null;
   const dueDate = timeline?.test.end ?? null;
-  // Horas previstas por fase — Implementação é o valor exato de PF × horas/PF e Teste é 30% exato
-  // em cima disso, não derivadas da janela em dias já arredondada (que pode fugir desse valor em
-  // tarefas pequenas).
+  // Horas previstas por fase — a fração exata (70/30) da estimativa (PF × horas/PF), não derivada
+  // da janela em dias já arredondada (que pode fugir bastante do 70/30 em tarefas pequenas).
   const implEstimatedHours = timeline?.implEstimatedHours ?? null;
   const testEstimatedHours = timeline?.testEstimatedHours ?? null;
 

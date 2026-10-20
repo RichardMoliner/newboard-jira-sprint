@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { businessDaysBetween } from './businessDays.js';
-import { computeTimeline, DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY, TEST_SHARE } from './timeline.js';
+import { computeTimeline, DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY, IMPL_SHARE } from './timeline.js';
 
 function expectHourSplit(result: ReturnType<typeof computeTimeline>, storyPoints: number, hoursPerPf: number) {
-  const implHours = storyPoints * hoursPerPf;
-  expect(result.implEstimatedHours).toBeCloseTo(implHours);
-  expect(result.testEstimatedHours).toBeCloseTo(implHours * TEST_SHARE);
+  const totalHours = storyPoints * hoursPerPf;
+  expect(result.implEstimatedHours).toBeCloseTo(totalHours * IMPL_SHARE);
+  expect(result.testEstimatedHours).toBeCloseTo(totalHours * (1 - IMPL_SHARE));
 }
 
 function expectDaySplit(
@@ -21,51 +21,51 @@ function expectDaySplit(
   expect(result.totalBusinessDays).toBe(implDays + testDays);
 }
 
-// O valor em Story Points (SP) representa 100% da Implementação. O Teste não divide esse total —
-// ele é calculado como TEST_SHARE (30%) ADICIONAL em cima da Implementação (ver TEST_SHARE em
-// timeline.ts). Os casos abaixo foram recalculados a partir dos originais (que tratavam SP como
-// 100% do total, dividido 70/30) após essa mudança de regra.
+// Todos os casos abaixo foram conferidos manualmente contra o painel HTML original
+// (painel_sprints_atuais.html), gerado a partir de dados reais do Jira, e recalculados pra bater
+// com o padrão atual de produtividade (DEFAULT_HOURS_PER_PF/DAY) — a janela em dias é verificada
+// pela contagem de dias úteis (não por datas literais), pra não depender de feriados específicos.
 describe('computeTimeline', () => {
-  test('15.5 SP a partir de 03/09 (EC-11739)', () => {
+  test('15.5 SP a partir de 03/09, produtividade padrão', () => {
     const result = computeTimeline(15.5, '2026-09-03');
-    // pfPerDay = 6.5/4 = 1.625 -> implDays = ceil(15.5/1.625) = 10; testDays = ceil(10*0.3) = 3.
-    expectDaySplit(result, '2026-09-03', 10, 3);
+    // pfPerDay = 6.5/4 = 1.625 -> total = ceil(15.5/1.625) = 10 dias úteis; 70/30 -> round(10*0.7)=7 Impl, 3 Teste.
+    expectDaySplit(result, '2026-09-03', 7, 3);
     expectHourSplit(result, 15.5, DEFAULT_HOURS_PER_PF);
   });
 
-  test('6 SP a partir de 04/09 (COM-66032)', () => {
+  test('6 SP a partir de 04/09, produtividade padrão', () => {
     const result = computeTimeline(6, '2026-09-04');
-    // implDays = ceil(6/1.625) = 4; testDays = ceil(4*0.3) = 2.
-    expectDaySplit(result, '2026-09-04', 4, 2);
+    // total = ceil(6/1.625) = 4 dias úteis; 70/30 -> round(4*0.7)=3 Impl, 1 Teste.
+    expectDaySplit(result, '2026-09-04', 3, 1);
     expectHourSplit(result, 6, DEFAULT_HOURS_PER_PF);
   });
 
-  test('2.1 SP a partir de 04/09 (COM-65758)', () => {
+  test('2.1 SP a partir de 04/09, produtividade padrão', () => {
     const result = computeTimeline(2.1, '2026-09-04');
-    // implDays = ceil(2.1/1.625) = 2; testDays = ceil(2*0.3) = 1.
-    expectDaySplit(result, '2026-09-04', 2, 1);
+    // total = ceil(2.1/1.625) = 2 dias úteis; 70/30 -> round(2*0.7)=1 Impl, 1 Teste.
+    expectDaySplit(result, '2026-09-04', 1, 1);
     expectHourSplit(result, 2.1, DEFAULT_HOURS_PER_PF);
   });
 
-  test('18 SP a partir de 04/09 (COM-55616)', () => {
+  test('18 SP a partir de 04/09, produtividade padrão', () => {
     const result = computeTimeline(18, '2026-09-04');
-    // implDays = ceil(18/1.625) = 12; testDays = ceil(12*0.3) = 4.
-    expectDaySplit(result, '2026-09-04', 12, 4);
+    // total = ceil(18/1.625) = 12 dias úteis; 70/30 -> round(12*0.7)=8 Impl, 4 Teste.
+    expectDaySplit(result, '2026-09-04', 8, 4);
     expectHourSplit(result, 18, DEFAULT_HOURS_PER_PF);
   });
 
-  test('10 SP a partir de 04/09 (COM-66352)', () => {
+  test('10 SP a partir de 04/09, produtividade padrão', () => {
     const result = computeTimeline(10, '2026-09-04');
-    // implDays = ceil(10/1.625) = 7; testDays = ceil(7*0.3) = 3.
-    expectDaySplit(result, '2026-09-04', 7, 3);
+    // total = ceil(10/1.625) = 7 dias úteis; 70/30 -> round(7*0.7)=5 Impl, 2 Teste.
+    expectDaySplit(result, '2026-09-04', 5, 2);
     expectHourSplit(result, 10, DEFAULT_HOURS_PER_PF);
   });
 
   test('respects a custom hoursPerPf instead of the default vertical productivity', () => {
     // 16h por PF com 6.5h/dia (padrão) = 0,40625 PF/dia útil para os mesmos 6 SP.
     const result = computeTimeline(6, '2026-09-04', 16);
-    // implDays = ceil(6/0.40625) = 15; testDays = ceil(15*0.3) = 5.
-    expectDaySplit(result, '2026-09-04', 15, 5);
+    // total = ceil(6/0.40625) = 15 dias úteis; 70/30 -> round(15*0.7)=11 Impl, 4 Teste.
+    expectDaySplit(result, '2026-09-04', 11, 4);
     expectHourSplit(result, 6, 16);
   });
 
@@ -91,37 +91,36 @@ describe('computeTimeline', () => {
     );
   });
 
-  // implEstimatedHours é sempre o valor exato do SP (Implementação = 100% do SP) e
-  // testEstimatedHours é sempre TEST_SHARE (30%) exato em cima dele — não derivados da janela em
-  // dias úteis arredondada. As horas exibidas (Impl./Teste (h), Assertividade, % de Teste) precisam
-  // ser exatas mesmo quando a janela em dias não fecha exatamente nessa proporção.
-  test('implEstimatedHours is the exact SP value and testEstimatedHours is the exact 30% on top of it, not derived from the rounded day window', () => {
-    // 10 PF x 4h/PF = 40h de Implementação -> 40h Impl, 12h Teste (40 x 0.3).
+  // A janela em dias inteiros aplica 70/30 sobre o total de dias úteis, não sobre as horas
+  // diretamente — para tarefas grandes isso já se aproxima bem do 70/30, mas as horas exibidas
+  // (Impl./Teste (h), Assertividade, % de Teste) precisam ser exatas mesmo quando a janela em dias
+  // não fecha exatamente nessa proporção.
+  test('implEstimatedHours/testEstimatedHours are the exact 70/30 split of the total estimate, not derived from the rounded day window', () => {
+    // 10 PF x 4h/PF = 40h totais -> split exato: 28h Impl, 12h Teste.
     const result = computeTimeline(10, '2026-09-04', 4, 6.5);
-    expect(result.implEstimatedHours).toBeCloseTo(40);
+    expect(result.implEstimatedHours).toBeCloseTo(28);
     expect(result.testEstimatedHours).toBeCloseTo(12);
   });
 
-  // Com implDays = ceil(storyPoints / pfPerDay), a Implementação já nunca arredonda para 0 dias
-  // (storyPoints > 0 sempre produz pelo menos 1 dia útil); e como o Teste é ceil(implDays * 0.3),
-  // ele também nunca zera para implDays >= 1 (ceil(0.3) = 1). A garantia de mínimo de 1 dia útil por
-  // fase continua valendo, mas agora decorre naturalmente da fórmula em vez de um ajuste manual.
-  test('guarantees at least 1 business day for each phase, even for a task whose implementation rounds to a single day', () => {
-    // 1.25 PF / (6.5h/4h por PF) = 0.77 dias -> implDays = ceil(0.77) = 1; testDays = ceil(1*0.3) = 1.
+  // Tarefas bem pequenas (poucos dias úteis) faziam o arredondamento por dia inteiro zerar
+  // completamente a janela de Teste (ex.: COM-66868, 1.25 PF -> 1 dia útil total, 100% Implementação
+  // e 0 dias de Teste) — a barra de Teste simplesmente não aparecia na timeline.
+  test('guarantees at least 1 business day for each phase, even for a task whose total rounds to a single day', () => {
+    // 1.25 PF / (6.5h/4h por PF) = 0.77 dias -> arredonda pra 1 dia útil total sem a garantia;
+    // com a garantia, cresce para 2 dias úteis (1 Implementação + 1 Teste).
     const result = computeTimeline(1.25, '2026-09-04', 4, 6.5);
     expectDaySplit(result, '2026-09-04', 1, 1);
   });
 
   test('the minimum-1-day guarantee does not affect implEstimatedHours/testEstimatedHours, which stay the exact proportional split', () => {
     const result = computeTimeline(1.25, '2026-09-04', 4, 6.5);
-    // 1.25 PF x 4h/PF = 5h de Implementação -> 5h Impl, 1.5h Teste (5 x 0.3).
-    expect(result.implEstimatedHours).toBeCloseTo(5);
+    // 1.25 PF x 4h/PF = 5h totais -> split exato: 3.5h Impl, 1.5h Teste (não 6h30/6h30).
+    expect(result.implEstimatedHours).toBeCloseTo(3.5);
     expect(result.testEstimatedHours).toBeCloseTo(1.5);
   });
 
-  test('implementation window never needs the minimum-day guarantee once it is 2 business days or more', () => {
+  test('does not need the minimum-day guarantee once the total is 2 business days or more', () => {
     const result = computeTimeline(2.1, '2026-09-04', 4, 6.5);
-    // implDays = ceil(2.1/1.625) = 2 (>= 1 without the guarantee kicking in).
-    expect(businessDaysBetween('2026-09-04', result.impl.end)).toBe(2);
+    expect(result.totalBusinessDays).toBe(2);
   });
 });

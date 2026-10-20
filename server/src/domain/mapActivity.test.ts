@@ -156,7 +156,7 @@ describe('mapActivity', () => {
       baseUrl: 'https://desenv.betha.com.br',
       today: '2026-09-08',
     });
-    expect(activity.dueDate).toBe('2026-09-21');
+    expect(activity.dueDate).toBe('2026-09-16');
   });
 
   test('leaves dueDate null when there is no storyPoints estimate', () => {
@@ -697,7 +697,7 @@ describe('mapActivity', () => {
     expect(activity.legalDeadline).toBeNull();
   });
 
-  test('computes implEstimatedHours as the exact PF-based estimate and testEstimatedHours as the exact 30% on top', () => {
+  test('computes implEstimatedHours/testEstimatedHours as the exact 70/30 split of the PF-based estimate', () => {
     const activity = mapActivity({
       story: baseStory({ storyPoints: 10 }),
       sprint,
@@ -708,9 +708,9 @@ describe('mapActivity', () => {
       hoursPerPf: 5,
       hoursPerDay: 8,
     });
-    // estimativa de Impl: 10 PF x 5h/PF = 50h (não deriva da janela em dias arredondados); Teste =
-    // 30% em cima disso = 15h.
-    expect(activity.implEstimatedHours).toBeCloseTo(50);
+    // estimativa total: 10 PF x 5h/PF = 50h -> split exato: 35h Impl, 15h Teste (não deriva da
+    // janela em dias arredondados).
+    expect(activity.implEstimatedHours).toBeCloseTo(35);
     expect(activity.testEstimatedHours).toBeCloseTo(15);
   });
 

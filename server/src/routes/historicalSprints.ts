@@ -4,7 +4,7 @@ import { discoverClosedSprints } from '../jira/discoverClosedSprints.js';
 import { fetchClosedSprintsData } from '../jira/fetchBoardData.js';
 import { readCachedSprintData, writeCachedSprintData, type CachedSprintData } from '../jira/sprintCache.js';
 import { startProgress } from '../jira/progressLog.js';
-import { DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY, TEST_SHARE } from '../compute/timeline.js';
+import { DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY, IMPL_SHARE } from '../compute/timeline.js';
 
 function emptySprintSettings(): SprintSettings {
   return {
@@ -129,7 +129,7 @@ export function historicalSprintsRouter(configPath: string, cacheDir: string): R
         vertical: config.vertical,
         hoursPerDay: config.hoursPerDay ?? DEFAULT_HOURS_PER_DAY,
         defaultHoursPerPf: DEFAULT_HOURS_PER_PF,
-        assumedTestSharePercent: TEST_SHARE * 100,
+        assumedTestSharePercent: (1 - IMPL_SHARE) * 100,
         sprints,
         activities,
       });
