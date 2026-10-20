@@ -64,6 +64,10 @@ export default function SprintSettingsPopup({
     try {
       const saved = await saveSprintSettings(sprint.id, {
         hoursPerPf: parsedHoursPerPf,
+        // Sem campo próprio no formulário — o servidor congela esse valor sozinho na primeira vez
+        // que a sprint é consultada no Histórico (ver historicalSprints.ts). Só repassa o que já
+        // estava salvo, sem alterar.
+        hoursPerDay: settings?.hoursPerDay ?? null,
         lastPublishDay: lastPublishDay || null,
         lastTestDay: lastTestDay || null,
         publishDay: publishDay || null,

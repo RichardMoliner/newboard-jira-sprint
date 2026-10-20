@@ -21,7 +21,16 @@ function sprint(id: string, overrides: Partial<SprintInfo> = {}): SprintInfo {
 }
 
 function settings(overrides: Partial<SprintSettings> = {}): SprintSettings {
-  return { hoursPerPf: null, lastPublishDay: null, lastTestDay: null, publishDay: null, group: null, includedInGroupFilter: true, ...overrides };
+  return {
+    hoursPerPf: null,
+    hoursPerDay: null,
+    lastPublishDay: null,
+    lastTestDay: null,
+    publishDay: null,
+    group: null,
+    includedInGroupFilter: true,
+    ...overrides,
+  };
 }
 
 describe('groupSprintsByType', () => {

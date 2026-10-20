@@ -846,6 +846,7 @@ describe('resolveDeadlineRulers', () => {
   const settingsS1 = {
     S1: {
       hoursPerPf: 5,
+      hoursPerDay: null,
       lastPublishDay: '2026-09-10',
       lastTestDay: '2026-09-12',
       publishDay: '2026-09-15',
@@ -882,7 +883,7 @@ describe('resolveDeadlineRulers', () => {
   test('includes each sprint name in the label when combining multiple sprints with their own settings', () => {
     const settings = {
       S1: settingsS1.S1,
-      S2: { hoursPerPf: 6, lastPublishDay: '2026-09-28', lastTestDay: null, publishDay: null, group: null, includedInGroupFilter: true },
+      S2: { hoursPerPf: 6, hoursPerDay: null, lastPublishDay: '2026-09-28', lastTestDay: null, publishDay: null, group: null, includedInGroupFilter: true },
     };
     const rulers = resolveDeadlineRulers(true, settings, [], [s1, s2]);
     expect(rulers.map((r) => r.key)).toEqual(['lastPublishDay-S1', 'lastTestDay-S1', 'publishDay-S1', 'lastPublishDay-S2']);
@@ -893,7 +894,7 @@ describe('resolveDeadlineRulers', () => {
   test('only considers sprints inside the current sprintFilter, ignoring other sprints\' settings', () => {
     const settings = {
       S1: settingsS1.S1,
-      S2: { hoursPerPf: 6, lastPublishDay: '2026-09-28', lastTestDay: null, publishDay: null, group: null, includedInGroupFilter: true },
+      S2: { hoursPerPf: 6, hoursPerDay: null, lastPublishDay: '2026-09-28', lastTestDay: null, publishDay: null, group: null, includedInGroupFilter: true },
     };
     const rulers = resolveDeadlineRulers(true, settings, ['S1'], [s1, s2]);
     expect(rulers.filter((r) => r.key !== 'sprintEnd').every((r) => r.key.endsWith('-S1'))).toBe(true);

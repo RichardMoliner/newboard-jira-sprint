@@ -3,7 +3,15 @@ import { readConfig, writeConfig, type SprintSettings } from '../config/configSt
 import { parseOptionalDateField } from './config.js';
 
 function emptySprintSettings(): SprintSettings {
-  return { hoursPerPf: null, lastPublishDay: null, lastTestDay: null, publishDay: null, group: null, includedInGroupFilter: true };
+  return {
+    hoursPerPf: null,
+    hoursPerDay: null,
+    lastPublishDay: null,
+    lastTestDay: null,
+    publishDay: null,
+    group: null,
+    includedInGroupFilter: true,
+  };
 }
 
 const SPRINT_GROUPS = ['aplicacao', 'extensao'] as const;
@@ -59,6 +67,15 @@ export function sprintSettingsRouter(configPath: string): Router {
       return;
     }
 
+    // hoursPerDay não tem campo próprio no formulário — é só congelado automaticamente pelo servidor
+    // (ver historicalSprints.ts) na primeira vez que a sprint é consultada no Histórico. Mantém o que
+    // já estiver salvo (ou nulo, se a sprint ainda não foi fechada/consultada).
+    const hoursPerDay = parseOptionalPositiveNumberField(req.body?.hoursPerDay, existing.hoursPerDay);
+    if (hoursPerDay.error) {
+      res.status(400).json({ error: `Horas produtivas por dia ${hoursPerDay.error}` });
+      return;
+    }
+
     const lastPublishDay = parseOptionalDateField(req.body?.lastPublishDay, existing.lastPublishDay);
     if (lastPublishDay.error) {
       res.status(400).json({ error: `Último dia de publicação ${lastPublishDay.error}` });
@@ -88,6 +105,7 @@ export function sprintSettingsRouter(configPath: string): Router {
 
     const next: SprintSettings = {
       hoursPerPf: hoursPerPf.value,
+      hoursPerDay: hoursPerDay.value,
       lastPublishDay: lastPublishDay.value,
       lastTestDay: lastTestDay.value,
       publishDay: publishDay.value,

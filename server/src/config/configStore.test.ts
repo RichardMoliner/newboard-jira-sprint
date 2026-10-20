@@ -56,6 +56,7 @@ describe('configStore', () => {
       sprintSettings: {
         '7590': {
           hoursPerPf: 6,
+          hoursPerDay: 7,
           lastPublishDay: '2026-10-01',
           lastTestDay: '2026-10-03',
           publishDay: '2026-10-05',
@@ -74,6 +75,7 @@ describe('configStore', () => {
       sprintSettings: {
         '7590': {
           hoursPerPf: 6,
+          hoursPerDay: 7,
           lastPublishDay: '2026-10-01',
           lastTestDay: '2026-10-03',
           publishDay: '2026-10-05',
@@ -94,7 +96,15 @@ describe('configStore', () => {
       dashDelayBar: true,
       autoRefreshEnabled: false,
       sprintSettings: {
-        '7590': { hoursPerPf: 6, lastPublishDay: null, lastTestDay: null, publishDay: null, group: null, includedInGroupFilter: true },
+        '7590': {
+          hoursPerPf: 6,
+          hoursPerDay: null,
+          lastPublishDay: null,
+          lastTestDay: null,
+          publishDay: null,
+          group: null,
+          includedInGroupFilter: true,
+        },
       },
     });
     await writeConfig(configPath, {

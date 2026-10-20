@@ -9,7 +9,7 @@ import { getIssueHistoryFacts } from './fetchSprintEntry.js';
 import { report } from './progressLog.js';
 import { mapActivity } from '../domain/mapActivity.js';
 import type { Activity, BoardDataResponse, SprintInfo } from '../domain/types.js';
-import { DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY, IMPL_SHARE } from '../compute/timeline.js';
+import { DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY, TEST_SHARE } from '../compute/timeline.js';
 
 const GET_ISSUE_CONCURRENCY = 6;
 const CHANGELOG_CONCURRENCY = 6;
@@ -85,7 +85,8 @@ async function fetchActivitiesForSprintScope(
   todayStrategy: 'now' | 'latest-sprint-end',
   credentials: JiraCredentials,
   hoursPerPfBySprintId: Record<string, number | null>,
-  hoursPerDay: number | undefined,
+  hoursPerDayBySprintId: Record<string, number | null>,
+  fallbackHoursPerDay: number | undefined,
 ): Promise<SprintScopeResult> {
   const baseUrl = requireEnv('JIRA_BASE_URL').replace(/\/$/, '');
 
@@ -217,7 +218,7 @@ async function fetchActivitiesForSprintScope(
         baseUrl,
         today,
         hoursPerPf: hoursPerPfBySprintId[sprint.id] ?? undefined,
-        hoursPerDay,
+        hoursPerDay: hoursPerDayBySprintId[sprint.id] ?? fallbackHoursPerDay,
       }),
     );
   }
@@ -233,7 +234,8 @@ export async function fetchBoardData(
   vertical: string,
   credentials: JiraCredentials,
   hoursPerPfBySprintId: Record<string, number | null>,
-  hoursPerDay: number | undefined,
+  hoursPerDayBySprintId: Record<string, number | null>,
+  fallbackHoursPerDay: number | undefined,
 ): Promise<BoardDataResponse> {
   const { sprints, activities, today } = await fetchActivitiesForSprintScope(
     vertical,
@@ -241,16 +243,17 @@ export async function fetchBoardData(
     'now',
     credentials,
     hoursPerPfBySprintId,
-    hoursPerDay,
+    hoursPerDayBySprintId,
+    fallbackHoursPerDay,
   );
 
   return {
     generatedAt: new Date().toISOString(),
     today,
     vertical,
-    hoursPerDay: hoursPerDay ?? DEFAULT_HOURS_PER_DAY,
+    hoursPerDay: fallbackHoursPerDay ?? DEFAULT_HOURS_PER_DAY,
     defaultHoursPerPf: DEFAULT_HOURS_PER_PF,
-    assumedTestSharePercent: (1 - IMPL_SHARE) * 100,
+    assumedTestSharePercent: TEST_SHARE * 100,
     sprints,
     activities,
   };
@@ -258,14 +261,17 @@ export async function fetchBoardData(
 
 /** Mesmo pipeline do board ao vivo, mas para uma ou mais sprints já fechadas (aba Histórico) — veja
  * o comentário de `fetchActivitiesForSprintScope` sobre a âncora de "hoje" usada nesse caso. Usa as
- * mesmas configurações por sprint (horas/PF) salvas pra cada uma — uma sprint fechada continua
- * usando o valor que estava configurado nela, mesmo depois de encerrada. */
+ * mesmas configurações por sprint (horas/PF e horas/dia) salvas pra cada uma — uma sprint fechada
+ * continua usando o valor que estava configurado nela enquanto estava em execução, mesmo que a
+ * configuração global (ou o padrão do sistema) mude depois (ver `historicalSprints.ts`, que congela
+ * esse valor em `sprintSettings` antes de chamar esta função). Por isso não recebe um fallback global
+ * — sprint fechada sem nada salvo cai direto no padrão do sistema (`DEFAULT_HOURS_PER_DAY`). */
 export async function fetchClosedSprintsData(
   vertical: string,
   sprintIds: string[],
   credentials: JiraCredentials,
   hoursPerPfBySprintId: Record<string, number | null>,
-  hoursPerDay: number | undefined,
+  hoursPerDayBySprintId: Record<string, number | null>,
 ): Promise<BoardDataResponse> {
   const sprintScopeJql = `sprint in (${sprintIds.join(',')})`;
   const { sprints, activities, today } = await fetchActivitiesForSprintScope(
@@ -274,16 +280,17 @@ export async function fetchClosedSprintsData(
     'latest-sprint-end',
     credentials,
     hoursPerPfBySprintId,
-    hoursPerDay,
+    hoursPerDayBySprintId,
+    undefined,
   );
 
   return {
     generatedAt: new Date().toISOString(),
     today,
     vertical,
-    hoursPerDay: hoursPerDay ?? DEFAULT_HOURS_PER_DAY,
+    hoursPerDay: DEFAULT_HOURS_PER_DAY,
     defaultHoursPerPf: DEFAULT_HOURS_PER_PF,
-    assumedTestSharePercent: (1 - IMPL_SHARE) * 100,
+    assumedTestSharePercent: TEST_SHARE * 100,
     sprints,
     activities,
   };

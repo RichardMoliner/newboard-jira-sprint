@@ -101,6 +101,10 @@ export interface BoardDataResponse {
  * aqui, a sprint usa o padrão do sistema pra horas/PF e não tem nenhuma régua de prazo. */
 export interface SprintSettings {
   hoursPerPf: number | null;
+  /** Horas produtivas por dia desta sprint — congelado pelo servidor (horas/PF + horas/dia
+   * efetivas) na primeira vez que ela é consultada no Histórico, pra não mudar de cálculo se a
+   * configuração global mudar depois. Nulo enquanto a sprint ainda está em execução. */
+  hoursPerDay: number | null;
   lastPublishDay: string | null;
   lastTestDay: string | null;
   publishDay: string | null;

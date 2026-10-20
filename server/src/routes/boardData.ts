@@ -20,6 +20,11 @@ export function boardDataRouter(configPath: string): Router {
     const hoursPerPfBySprintId = Object.fromEntries(
       Object.entries(config.sprintSettings).map(([sprintId, settings]) => [sprintId, settings.hoursPerPf]),
     );
+    // Sprint ainda sem valor congelado (ver historicalSprints.ts) usa o fallback global — enquanto
+    // está em execução, acompanha a configuração atual, não um valor fixo.
+    const hoursPerDayBySprintId = Object.fromEntries(
+      Object.entries(config.sprintSettings).map(([sprintId, settings]) => [sprintId, settings.hoursPerDay]),
+    );
 
     startProgress();
     try {
@@ -27,6 +32,7 @@ export function boardDataRouter(configPath: string): Router {
         config.vertical,
         { username: config.jiraUsername, password: config.jiraPassword },
         hoursPerPfBySprintId,
+        hoursPerDayBySprintId,
         config.hoursPerDay ?? undefined,
       );
       res.json(data);

@@ -51,22 +51,22 @@ export function computeKpis(activities: Activity[], _today: string): Kpis {
 
 export interface RealizedProductivity {
   hoursPerPf: number | null;
-  /** Mesma média, olhando só as horas de Implementação sobre o PF dedicado à Implementação (fração `100 - assumedTestSharePercent`). */
+  /** Mesma média, olhando só as horas de Implementação sobre o PF de Implementação (o Story Points cheio). */
   hoursPerPfImpl: number | null;
-  /** Mesma média, olhando só as horas de Teste sobre o PF dedicado ao Teste (fração `assumedTestSharePercent`). */
+  /** Mesma média, olhando só as horas de Teste sobre o PF de Teste (Story Points × `assumedTestSharePercent`, um acréscimo sobre o PF de Implementação). */
   hoursPerPfTest: number | null;
   /**
    * % de assertividade agregado: total de horas apontadas (Implementação + Teste) / total de
-   * horas estimadas (PF × horas/PF) nas tarefas concluídas. 100% = bateram exatamente; abaixo de
-   * 100% superestimamos (levou menos tempo que o previsto); acima de 100% subestimamos (levou
-   * mais tempo que o previsto).
+   * horas estimadas (PF × horas/PF, mais `assumedTestSharePercent` de Teste em cima) nas tarefas
+   * concluídas. 100% = bateram exatamente; abaixo de 100% superestimamos (levou menos tempo que o
+   * previsto); acima de 100% subestimamos (levou mais tempo que o previsto).
    */
   accuracyPercent: number | null;
   /** Mesma % de assertividade, somando também as horas apontadas em bugs (esforço real total). */
   accuracyWithBugsPercent: number | null;
   /** % do total Implementação + Teste que foi de fato Teste, nas tarefas concluídas — compara com o assumedTestSharePercent (hoje fixo em 30%) usado para projetar a janela prevista. Bugs ficam de fora dessa conta. */
   testSharePercent: number | null;
-  /** Horas/PF "estimado" exibido como referência — média dos valores configurados por sprint, ponderada pelos PFs de cada tarefa concluída (cada sprint pode ter o seu). Null sem nenhuma tarefa elegível. */
+  /** Horas/PF "estimado" exibido como referência — média dos valores configurados por sprint (Implementação + o acréscimo de Teste), ponderada pelos PFs de cada tarefa concluída (cada sprint pode ter o seu). Null sem nenhuma tarefa elegível. */
   effectiveHoursPerPf: number | null;
   sampleSize: number;
 }
@@ -75,6 +75,9 @@ export interface RealizedProductivity {
  * Horas por PF e % de assertividade a partir das horas realmente apontadas (worklog de
  * Implementação + Teste) nas tarefas concluídas, ponderadas pelos PFs de cada uma. Indicador
  * "vivo" — muda conforme mais tarefas são concluídas e mais apontamentos são lançados.
+ *
+ * O Story Points de uma atividade representa 100% do PF de Implementação — o PF de Teste não é uma
+ * fração desse total, é um acréscimo de `assumedTestSharePercent` (hoje 30%) sobre ele.
  */
 export function computeRealizedProductivity(
   activities: Activity[],
@@ -87,7 +90,6 @@ export function computeRealizedProductivity(
   const eligible = activities.filter(
     (a) => (a.isDone || a.testDone) && a.storyPoints !== null && a.storyPoints > 0 && (a.implLoggedHours !== null || a.testLoggedHours !== null),
   );
-  const implSharePercent = 100 - assumedTestSharePercent;
   const totalStoryPoints = sum(eligible.map((a) => a.storyPoints ?? 0));
   const totalImplHours = sum(eligible.map((a) => a.implLoggedHours ?? 0));
   const totalTestHours = sum(eligible.map((a) => a.testLoggedHours ?? 0));
@@ -95,8 +97,9 @@ export function computeRealizedProductivity(
   const totalLoggedHoursWithBugs = totalLoggedHours + sum(eligible.map((a) => a.bugsLoggedHours ?? 0));
   // Cada atividade usa o horas/PF configurado na sua própria sprint — ao combinar sprints com
   // valores diferentes, o "estimado" vira uma média ponderada pelos PF de cada uma.
-  const totalEstimatedHours = sum(eligible.map((a) => (a.storyPoints ?? 0) * (hoursPerPfBySprintId[a.sprintId] ?? 0)));
-  const totalPfImpl = totalStoryPoints * (implSharePercent / 100);
+  const totalEstimatedImplHours = sum(eligible.map((a) => (a.storyPoints ?? 0) * (hoursPerPfBySprintId[a.sprintId] ?? 0)));
+  const totalEstimatedHours = totalEstimatedImplHours * (1 + assumedTestSharePercent / 100);
+  const totalPfImpl = totalStoryPoints;
   const totalPfTest = totalStoryPoints * (assumedTestSharePercent / 100);
 
   return {
@@ -113,7 +116,7 @@ export function computeRealizedProductivity(
 
 export interface HoursPerPfSummary {
   developer: string;
-  /** PF dedicados à Implementação — Story Points × implSharePercent/100, somados de todas as tarefas do dev. */
+  /** PF de Implementação — o Story Points cheio, somado de todas as tarefas do dev. */
   pfImpl: number;
   /** Horas de Implementação apontadas, somadas de todas as tarefas do dev (concluídas ou não). */
   implHours: number;
@@ -123,15 +126,15 @@ export interface HoursPerPfSummary {
 
 /**
  * Horas de Implementação apontadas por PF de Implementação, por desenvolvedor — considera TODAS as
- * tarefas (não só as concluídas), usando a fração de PF atribuída à Implementação (`implSharePercent`,
- * hoje 70% — vem de `assumedTestSharePercent` do board-data, para não fixar o percentual no client).
+ * tarefas (não só as concluídas). O Story Points de cada atividade já é 100% PF de Implementação,
+ * sem fração a aplicar.
  */
-export function computeHoursPerPfByDeveloper(activities: Activity[], implSharePercent: number): HoursPerPfSummary[] {
+export function computeHoursPerPfByDeveloper(activities: Activity[]): HoursPerPfSummary[] {
   const byDeveloper = new Map<string, { pfImpl: number; implHours: number }>();
 
   for (const activity of activities) {
     const current = byDeveloper.get(activity.developer) ?? { pfImpl: 0, implHours: 0 };
-    current.pfImpl += (activity.storyPoints ?? 0) * (implSharePercent / 100);
+    current.pfImpl += activity.storyPoints ?? 0;
     current.implHours += activity.implLoggedHours ?? 0;
     byDeveloper.set(activity.developer, current);
   }
@@ -344,11 +347,11 @@ export function computeBugLabelSummaries(activities: Activity[]): BugLabelSummar
 }
 
 export interface HoursSummary {
-  /** Story points totais × horas/PF configurado — quanto se previu de esforço para o escopo atual. */
+  /** Story points totais × horas/PF configurado — quanto se previu de esforço de Implementação para o escopo atual (o Story Points já é 100% Implementação). */
   plannedHours: number;
-  /** Fatia de `plannedHours` prevista para Implementação (100% − assumedTestSharePercent). */
+  /** Previsto para Implementação — igual a `plannedHours` (100% do Story Points, sem fração a aplicar). */
   plannedImplHours: number;
-  /** Fatia de `plannedHours` prevista para Teste (assumedTestSharePercent). */
+  /** Acréscimo de `assumedTestSharePercent` (hoje 30%) sobre `plannedHours`, não uma fatia dele. */
   plannedTestHours: number;
   /** Soma das horas apontadas em Implementação + Teste (subtarefas, sem bugs). */
   executedHours: number;
@@ -377,7 +380,7 @@ export function computeHoursSummary(
 
   return {
     plannedHours,
-    plannedImplHours: plannedHours * ((100 - assumedTestSharePercent) / 100),
+    plannedImplHours: plannedHours,
     plannedTestHours: plannedHours * (assumedTestSharePercent / 100),
     executedHours: executedImplHours + executedTestHours,
     executedImplHours,

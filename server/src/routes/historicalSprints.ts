@@ -1,10 +1,22 @@
 import { Router } from 'express';
-import { readConfig } from '../config/configStore.js';
+import { readConfig, writeConfig, type SprintSettings } from '../config/configStore.js';
 import { discoverClosedSprints } from '../jira/discoverClosedSprints.js';
 import { fetchClosedSprintsData } from '../jira/fetchBoardData.js';
 import { readCachedSprintData, writeCachedSprintData, type CachedSprintData } from '../jira/sprintCache.js';
 import { startProgress } from '../jira/progressLog.js';
-import { DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY, IMPL_SHARE } from '../compute/timeline.js';
+import { DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY, TEST_SHARE } from '../compute/timeline.js';
+
+function emptySprintSettings(): SprintSettings {
+  return {
+    hoursPerPf: null,
+    hoursPerDay: null,
+    lastPublishDay: null,
+    lastTestDay: null,
+    publishDay: null,
+    group: null,
+    includedInGroupFilter: true,
+  };
+}
 
 export function historicalSprintsRouter(configPath: string, cacheDir: string): Router {
   const router = Router();
@@ -55,8 +67,31 @@ export function historicalSprintsRouter(configPath: string, cacheDir: string): R
       const cached = await Promise.all(sprintIds.map((id) => readCachedSprintData(cacheDir, id)));
       const missingIds = sprintIds.filter((_, i) => cached[i] === null);
 
+      // Primeira vez que uma sprint fechada é consultada no Histórico: congela horas/PF e horas/dia
+      // com o valor efetivo de agora (override próprio da sprint, senão a configuração global, senão
+      // o padrão do sistema) direto em `sprintSettings`. Sem isso, cada sprint fechada reconsultada
+      // usaria a configuração global ATUAL em vez da que estava valendo enquanto ela ainda rodava —
+      // uma mudança na configuração global depois não deve alterar o cálculo de sprints já fechadas.
+      if (missingIds.length > 0) {
+        let configChanged = false;
+        for (const sprintId of missingIds) {
+          const existing = config.sprintSettings[sprintId];
+          if (existing && existing.hoursPerPf !== null && existing.hoursPerDay !== null) continue;
+          config.sprintSettings[sprintId] = {
+            ...(existing ?? emptySprintSettings()),
+            hoursPerPf: existing?.hoursPerPf ?? DEFAULT_HOURS_PER_PF,
+            hoursPerDay: existing?.hoursPerDay ?? config.hoursPerDay ?? DEFAULT_HOURS_PER_DAY,
+          };
+          configChanged = true;
+        }
+        if (configChanged) await writeConfig(configPath, config);
+      }
+
       const hoursPerPfBySprintId = Object.fromEntries(
         Object.entries(config.sprintSettings).map(([sprintId, settings]) => [sprintId, settings.hoursPerPf]),
+      );
+      const hoursPerDayBySprintId = Object.fromEntries(
+        Object.entries(config.sprintSettings).map(([sprintId, settings]) => [sprintId, settings.hoursPerDay]),
       );
 
       const freshBySprintId = new Map<string, CachedSprintData>();
@@ -67,7 +102,7 @@ export function historicalSprintsRouter(configPath: string, cacheDir: string): R
           missingIds,
           { username: config.jiraUsername, password: config.jiraPassword },
           hoursPerPfBySprintId,
-          config.hoursPerDay ?? undefined,
+          hoursPerDayBySprintId,
         );
         for (const sprint of data.sprints) {
           const entry: CachedSprintData = { sprint, activities: data.activities.filter((a) => a.sprintId === sprint.id) };
@@ -94,7 +129,7 @@ export function historicalSprintsRouter(configPath: string, cacheDir: string): R
         vertical: config.vertical,
         hoursPerDay: config.hoursPerDay ?? DEFAULT_HOURS_PER_DAY,
         defaultHoursPerPf: DEFAULT_HOURS_PER_PF,
-        assumedTestSharePercent: (1 - IMPL_SHARE) * 100,
+        assumedTestSharePercent: TEST_SHARE * 100,
         sprints,
         activities,
       });

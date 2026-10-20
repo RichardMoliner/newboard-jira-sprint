@@ -87,8 +87,8 @@ export default function IndicatorsView({
   );
   const people = useMemo(() => computePersonSummaries(indicatorActivities), [indicatorActivities]);
   const hoursPerPfByDeveloper = useMemo(
-    () => computeHoursPerPfByDeveloper(indicatorActivities, 100 - assumedTestSharePercent),
-    [indicatorActivities, assumedTestSharePercent],
+    () => computeHoursPerPfByDeveloper(indicatorActivities),
+    [indicatorActivities],
   );
   const sprintSummaries = useMemo(() => computeSprintSummaries(indicatorActivities), [indicatorActivities]);
   const statusSummaries = useMemo(() => computeStatusSummaries(indicatorActivities), [indicatorActivities]);
@@ -188,7 +188,7 @@ export default function IndicatorsView({
         <Kpi
           label="Planejado implementação"
           value={hoursSummary.plannedImplHours.toFixed(1)}
-          title={`Fatia de "Horas planejadas" prevista para Implementação (${(100 - assumedTestSharePercent).toFixed(0)}% do total).`}
+          title='Igual a "Horas planejadas" — Story points totais × horas/PF já é 100% Implementação.'
         />
         <Kpi
           label="Executado implementação"
@@ -200,7 +200,7 @@ export default function IndicatorsView({
         <Kpi
           label="Planejado teste"
           value={hoursSummary.plannedTestHours.toFixed(1)}
-          title={`Fatia de "Horas planejadas" prevista para Teste (${assumedTestSharePercent.toFixed(0)}% do total).`}
+          title={`Acréscimo de ${assumedTestSharePercent.toFixed(0)}% sobre "Horas planejadas" (Implementação) — não uma fatia dela.`}
         />
         <Kpi
           label="Executado teste"
@@ -262,7 +262,7 @@ export default function IndicatorsView({
           title="Média de horas por Ponto de Função realmente apontadas (worklog de Implementação + Teste) nas tarefas concluídas, ponderada pelos PFs de cada tarefa e comparada com a estimativa configurada (de cada sprint). Atualiza sozinho conforme mais tarefas são concluídas e mais apontamentos são lançados."
         />
         <Kpi
-          label={`Horas / PF (Impl., ${(100 - assumedTestSharePercent).toFixed(0)}%)`}
+          label="Horas / PF (Impl., 100%)"
           value={realizedProductivity.hoursPerPfImpl !== null ? realizedProductivity.hoursPerPfImpl.toFixed(2) : '—'}
           suffix={
             realizedProductivity.sampleSize > 0
@@ -276,7 +276,7 @@ export default function IndicatorsView({
                 ? 'var(--status-warning)'
                 : 'var(--status-good)'
           }
-          title={`Mesma média de Horas/PF, olhando só as horas de Implementação apontadas sobre o PF dedicado à Implementação (${(100 - assumedTestSharePercent).toFixed(0)}% do PF de cada tarefa concluída).`}
+          title="Mesma média de Horas/PF, olhando só as horas de Implementação apontadas sobre o PF de Implementação (100% do Story Points de cada tarefa concluída)."
         />
         <Kpi
           label={`Horas / PF (Teste, ${assumedTestSharePercent.toFixed(0)}%)`}
@@ -293,7 +293,7 @@ export default function IndicatorsView({
                 ? 'var(--status-warning)'
                 : 'var(--status-good)'
           }
-          title={`Mesma média de Horas/PF, olhando só as horas de Teste apontadas sobre o PF dedicado ao Teste (${assumedTestSharePercent.toFixed(0)}% do PF de cada tarefa concluída).`}
+          title={`Mesma média de Horas/PF, olhando só as horas de Teste apontadas sobre o PF de Teste (Story Points × ${assumedTestSharePercent.toFixed(0)}%, um acréscimo sobre o PF de Implementação de cada tarefa concluída).`}
         />
         <Kpi
           label="% de Assertividade"
@@ -357,13 +357,13 @@ export default function IndicatorsView({
         </Section>
       </div>
 
-      <div title={`Horas de Implementação apontadas dividido pelo PF de Implementação (Story Points × fração de Implementação, hoje ${(100 - assumedTestSharePercent).toFixed(0)}%) — considera TODAS as tarefas do dev, concluídas ou não. Ordenado do mais eficiente (menos horas por PF) para o menos.`}>
+      <div title="Horas de Implementação apontadas dividido pelo PF de Implementação (o Story Points cheio de cada tarefa) — considera TODAS as tarefas do dev, concluídas ou não. Ordenado do mais eficiente (menos horas por PF) para o menos.">
         <Section title="Horas / PF por dev">
           {hoursPerPfByDeveloper.length === 0 ? (
             <Empty text="Sem dados." />
           ) : (
             <Table
-              columns={['Desenvolvedor', `PF Impl. (${(100 - assumedTestSharePercent).toFixed(0)}%)`, 'Horas Impl.', 'Horas/PF']}
+              columns={['Desenvolvedor', 'PF Impl.', 'Horas Impl.', 'Horas/PF']}
               rows={hoursPerPfByDeveloper.map((p) => [
                 p.developer,
                 p.pfImpl.toFixed(2),

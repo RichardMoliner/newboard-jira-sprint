@@ -3,6 +3,11 @@ import { readFile, rename, writeFile } from 'node:fs/promises';
 export interface SprintSettings {
   /** Horas de trabalho por Ponto de Função nesta sprint. Nulo usa o padrão do sistema. */
   hoursPerPf: number | null;
+  /** Horas produtivas por dia desta sprint — congelado com o valor efetivo (configuração global ou
+   * padrão do sistema) na primeira vez que a sprint é consultada no Histórico, pra sprint fechada não
+   * mudar de cálculo se a configuração global mudar depois. Nulo = sprint ainda em execução, nunca
+   * congelada (usa a configuração atual nesse caso). */
+  hoursPerDay: number | null;
   /** Data (YYYY-MM-DD) do último dia de publicação desta sprint. Nulo = não configurado, régua não aparece. */
   lastPublishDay: string | null;
   /** Data (YYYY-MM-DD) do último dia de testes desta sprint. Nulo = não configurado, régua não aparece. */
