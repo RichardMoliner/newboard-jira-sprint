@@ -9,6 +9,7 @@ import {
   computePersonSummaries,
   computeSprintSummaries,
   computeStatusSummaries,
+  computeStatusCycleTime,
   computeRealizedProductivity,
   topActivitiesByBugCount,
 } from '../indicators/computeIndicators.js';
@@ -17,6 +18,7 @@ import { computeSprintCompletion, formatStatusBreakdownTooltip, FilterPill, Spri
 import StatusPieChart from './StatusPieChart.js';
 import BugLabelsPieChart from './BugLabelsPieChart.js';
 import BurndownChart from './BurndownChart.js';
+import StatusBottleneckChart from './StatusBottleneckChart.js';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -92,6 +94,7 @@ export default function IndicatorsView({
   );
   const sprintSummaries = useMemo(() => computeSprintSummaries(indicatorActivities), [indicatorActivities]);
   const statusSummaries = useMemo(() => computeStatusSummaries(indicatorActivities), [indicatorActivities]);
+  const statusCycleTime = useMemo(() => computeStatusCycleTime(indicatorActivities), [indicatorActivities]);
   const topBuggy = useMemo(() => topActivitiesByBugCount(indicatorActivities, 10), [indicatorActivities]);
   const bugLabelSummaries = useMemo(() => computeBugLabelSummaries(indicatorActivities), [indicatorActivities]);
   const hoursSummary = useMemo(
@@ -349,6 +352,9 @@ export default function IndicatorsView({
             subtitle="Um bug pode ter mais de um rótulo — a proporção é entre ocorrências de rótulo, não entre bugs."
           >
             <BugLabelsPieChart summaries={bugLabelSummaries} />
+          </Section>
+          <Section title="Gargalo do fluxo (% médio de tempo por status, tarefas concluídas)">
+            <StatusBottleneckChart summaries={statusCycleTime} />
           </Section>
         </div>
 
