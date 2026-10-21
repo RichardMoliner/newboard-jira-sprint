@@ -62,7 +62,7 @@ function requireEnv(name: string): string {
   return value;
 }
 
-async function fetchIssueChangelog(issueKey: string, credentials: JiraCredentials): Promise<ChangelogHistory[]> {
+export async function fetchIssueChangelog(issueKey: string, credentials: JiraCredentials): Promise<ChangelogHistory[]> {
   const baseUrl = requireEnv('JIRA_BASE_URL').replace(/\/$/, '');
   const auth = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
   const res = await fetch(`${baseUrl}/rest/api/2/issue/${issueKey}?fields=*none&expand=changelog`, {
