@@ -6,6 +6,7 @@ import { inferDeveloperRoles } from './inferRoles.js';
 import { fillTruncatedWorklogs } from './fillTruncatedWorklogs.js';
 import { parseSprintField } from './parseSprintField.js';
 import { getIssueHistoryFacts } from './fetchSprintEntry.js';
+import { getImplCodeReviewEnteredAt, latestOrNull } from './fetchImplCodeReviewDate.js';
 import { report } from './progressLog.js';
 import { mapActivity } from '../domain/mapActivity.js';
 import type { Activity, BoardDataResponse, SprintInfo } from '../domain/types.js';
@@ -127,6 +128,7 @@ async function fetchActivitiesForSprintScope(
     bugsByParent,
     testerByParent,
     developerByParent,
+    implSubtaskKeysByParent,
   } = groupSubtasks(subtasksWithFullWorklogs, baseUrl);
   const developerRoles = inferDeveloperRoles(subtasksWithFullWorklogs);
 
@@ -180,6 +182,26 @@ async function fetchActivitiesForSprintScope(
   });
   const historyFactsByStoryKey = new Map(historyFactPairs);
 
+  const implSubtaskUpdatedByKey = new Map(
+    subtasksWithFullWorklogs.filter((s) => s.type === 'Implementação').map((s) => [s.key, s.updated] as const),
+  );
+  const allImplSubtaskKeys = [...implSubtaskKeysByParent.values()].flat();
+  report('Buscando histórico de code review...');
+  const codeReviewPairs = await mapWithConcurrency(allImplSubtaskKeys, CHANGELOG_CONCURRENCY, async (subtaskKey) => {
+    const updated = implSubtaskUpdatedByKey.get(subtaskKey)!;
+    const enteredAt = await getImplCodeReviewEnteredAt(subtaskKey, updated, credentials);
+    return [subtaskKey, enteredAt] as const;
+  });
+  const codeReviewEnteredAtBySubtaskKey = new Map(codeReviewPairs);
+
+  const implCodeReviewEnteredAtByParent = new Map<string, string | null>();
+  for (const [parentKey, subtaskKeys] of implSubtaskKeysByParent) {
+    implCodeReviewEnteredAtByParent.set(
+      parentKey,
+      latestOrNull(subtaskKeys.map((k) => codeReviewEnteredAtBySubtaskKey.get(k) ?? null)),
+    );
+  }
+
   const activities: Activity[] = [];
 
   for (const story of storyDetails) {
@@ -213,6 +235,7 @@ async function fetchActivitiesForSprintScope(
         developerRoles,
         sprintEnteredAt: historyFactsByStoryKey.get(story.key)?.sprintEnteredAt ?? null,
         doneTransitionDate: historyFactsByStoryKey.get(story.key)?.doneTransitionDate ?? null,
+        implCodeReviewEnteredAt: implCodeReviewEnteredAtByParent.get(story.key) ?? null,
         legalRequirement: legalInfoByStoryKey.get(story.key)?.legalRequirement ?? null,
         legalDeadline: legalInfoByStoryKey.get(story.key)?.legalDeadline ?? null,
         baseUrl,
