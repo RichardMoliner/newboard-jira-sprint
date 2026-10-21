@@ -57,6 +57,8 @@ export interface GroupedSubtasks {
   testerByParent: Map<string, string>;
   /** Responsável (assignee) da subtarefa "Implementação" — é sempre o Dev exibido da atividade; sem essa subtarefa ainda, não há entrada aqui. */
   developerByParent: Map<string, string>;
+  /** Chaves de todas as subtarefas "Implementação" de cada atividade pai, na ordem em que aparecem na busca. */
+  implSubtaskKeysByParent: Map<string, string[]>;
 }
 
 function dateOnly(isoDateTime: string): string {
@@ -101,6 +103,7 @@ export function groupSubtasks(subtasks: RawSubtask[], baseUrl = ''): GroupedSubt
   const bugsByParent = new Map<string, BugSubtask[]>();
   const testerByParent = new Map<string, string>();
   const developerByParent = new Map<string, string>();
+  const implSubtaskKeysByParent = new Map<string, string[]>();
 
   function addWorklogs(subtask: RawSubtask, parentKey: string, subtaskType: 'Implementação' | 'Teste', secondsByParent: Map<string, number>) {
     const entries = (subtask.worklog?.worklogs ?? []).filter((worklog) => !isNegligibleWorklog(worklog));
@@ -147,6 +150,9 @@ export function groupSubtasks(subtasks: RawSubtask[], baseUrl = ''): GroupedSubt
       if (subtask.assignee) {
         developerByParent.set(parentKey, subtask.assignee);
       }
+      const keys = implSubtaskKeysByParent.get(parentKey) ?? [];
+      keys.push(subtask.key);
+      implSubtaskKeysByParent.set(parentKey, keys);
     }
 
     if (subtask.type === 'Teste') {
@@ -259,5 +265,6 @@ export function groupSubtasks(subtasks: RawSubtask[], baseUrl = ''): GroupedSubt
     bugsByParent,
     testerByParent,
     developerByParent,
+    implSubtaskKeysByParent,
   };
 }

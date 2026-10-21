@@ -498,4 +498,30 @@ describe('groupSubtasks', () => {
     const { bugsByParent } = groupSubtasks([subtask({ key: 'EC-11983', type: 'Bug' })]);
     expect(bugsByParent.get('EC-11420')?.[0].worklogEntries).toEqual([]);
   });
+
+  describe('implSubtaskKeysByParent', () => {
+    test('collects every Implementação subtask key per parent story', () => {
+      const subtasks = [
+        subtask({ key: 'EC-10', type: 'Implementação', parent: { key: 'EC-1' } }),
+        subtask({ key: 'EC-11', type: 'Teste', parent: { key: 'EC-1' } }),
+      ];
+      const { implSubtaskKeysByParent } = groupSubtasks(subtasks);
+      expect(implSubtaskKeysByParent.get('EC-1')).toEqual(['EC-10']);
+    });
+
+    test('supports more than one Implementação subtask for the same story', () => {
+      const subtasks = [
+        subtask({ key: 'EC-10', type: 'Implementação', parent: { key: 'EC-1' } }),
+        subtask({ key: 'EC-12', type: 'Implementação', parent: { key: 'EC-1' } }),
+      ];
+      const { implSubtaskKeysByParent } = groupSubtasks(subtasks);
+      expect(implSubtaskKeysByParent.get('EC-1')).toEqual(['EC-10', 'EC-12']);
+    });
+
+    test('has no entry for a story with no Implementação subtask', () => {
+      const subtasks = [subtask({ key: 'EC-11', type: 'Teste', parent: { key: 'EC-1' } })];
+      const { implSubtaskKeysByParent } = groupSubtasks(subtasks);
+      expect(implSubtaskKeysByParent.has('EC-1')).toBe(false);
+    });
+  });
 });
