@@ -7,6 +7,7 @@ import {
   computeKpis,
   computePersonSummaries,
   computeSprintSummaries,
+  computeStatusCycleTime,
   computeStatusSummaries,
   foldStatusSummariesForChart,
   computeRealizedProductivity,
@@ -862,5 +863,61 @@ describe('computeBurndown', () => {
     const activities = [activity({ storyPoints: 7, isCarried: true })];
     const result = computeBurndown(activities, sprints, ['7590'], '2026-09-01');
     expect(result?.totalStoryPoints).toBe(7);
+  });
+});
+
+describe('computeStatusCycleTime', () => {
+  function segment(status: string, start: string, end: string) { return { status, start, end }; }
+
+  test('returns all 6 cycle statuses with 0% when there are no completed activities', () => {
+    const result = computeStatusCycleTime([activity({ isDone: false })]);
+    expect(result).toEqual([
+      { status: 'Ainda não iniciada', averagePercent: 0 },
+      { status: 'Em andamento', averagePercent: 0 },
+      { status: 'Em code review', averagePercent: 0 },
+      { status: 'Ag. início dos testes', averagePercent: 0 },
+      { status: 'Em testes', averagePercent: 0 },
+      { status: 'Aguardando liberação', averagePercent: 0 },
+    ]);
+  });
+
+  test('computes the % breakdown of a single completed story\'s own cycle', () => {
+    const activities = [activity({
+      isDone: true,
+      statusHistory: [
+        segment('Ainda não iniciada', '2026-09-01', '2026-09-02'), // 1 dia
+        segment('Em andamento', '2026-09-02', '2026-09-06'),       // 4 dias
+        segment('Aguardando liberação', '2026-09-06', '2026-09-07'), // 1 dia
+        segment('Concluída', '2026-09-07', '2026-09-07'),          // ignorado
+      ],
+    })];
+    // total não-terminal = 6 dias
+    const result = computeStatusCycleTime(activities);
+    expect(result.find((r) => r.status === 'Ainda não iniciada')?.averagePercent).toBeCloseTo((1 / 6) * 100);
+    expect(result.find((r) => r.status === 'Em andamento')?.averagePercent).toBeCloseTo((4 / 6) * 100);
+    expect(result.find((r) => r.status === 'Em code review')?.averagePercent).toBe(0);
+  });
+
+  test('averages equally across stories, not weighted by story points or cycle length', () => {
+    // story A: ciclo de 2 dias, 50%/50%; story B: ciclo de 20 dias, 90%/10% — média simples das %, não dos dias.
+    const activities = [
+      activity({ key: 'A', isDone: true, storyPoints: 1, statusHistory: [segment('Em andamento', '2026-09-01', '2026-09-02'), segment('Em testes', '2026-09-02', '2026-09-03')] }),
+      activity({ key: 'B', isDone: true, storyPoints: 100, statusHistory: [segment('Em andamento', '2026-09-01', '2026-09-19'), segment('Em testes', '2026-09-19', '2026-09-21')] }),
+    ];
+    const result = computeStatusCycleTime(activities);
+    // A: Em andamento 50%, Em testes 50%. B: Em andamento 90%, Em testes 10%. Média: 70% / 30%.
+    expect(result.find((r) => r.status === 'Em andamento')?.averagePercent).toBeCloseTo(70);
+    expect(result.find((r) => r.status === 'Em testes')?.averagePercent).toBeCloseTo(30);
+  });
+
+  test('excludes activities that are not isDone, even if testDone (functionally complete)', () => {
+    const activities = [activity({ isDone: false, testDone: true, statusHistory: [segment('Aguardando liberação', '2026-09-01', '2026-09-10')] })];
+    const result = computeStatusCycleTime(activities);
+    expect(result.every((r) => r.averagePercent === 0)).toBe(true);
+  });
+
+  test('skips a story whose total non-terminal duration is 0 (avoids divide-by-zero)', () => {
+    const activities = [activity({ isDone: true, statusHistory: [segment('Concluída', '2026-09-01', '2026-09-01')] })];
+    expect(() => computeStatusCycleTime(activities)).not.toThrow();
   });
 });

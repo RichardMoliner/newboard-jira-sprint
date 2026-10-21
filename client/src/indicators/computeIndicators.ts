@@ -438,6 +438,53 @@ export function computeBurndown(activities: Activity[], sprints: SprintInfo[], s
   return { totalStoryPoints, points };
 }
 
+const CYCLE_STATUS_ORDER = [
+  'Ainda não iniciada',
+  'Em andamento',
+  'Em code review',
+  'Ag. início dos testes',
+  'Em testes',
+  'Aguardando liberação',
+];
+
+/** Dias corridos entre duas datas `YYYY-MM-DD` (os dados já vêm truncados assim do servidor). */
+function daysBetween(startISO: string, endISO: string): number {
+  return Math.round((Date.parse(endISO) - Date.parse(startISO)) / (24 * 60 * 60 * 1000));
+}
+
+export interface StatusCycleTimeSummary {
+  status: string;
+  averagePercent: number;
+}
+
+/**
+ * Pra cada story concluída (isDone), calcula o % do seu próprio ciclo (excluindo "Concluída") gasto
+ * em cada status não-terminal, e depois tira a média simples dessas % entre as stories — cada story
+ * concluída conta igualmente, sem peso por Story Points nem por duração do ciclo (decisão de design,
+ * não um bug). Sempre devolve uma entrada pra cada status da ordem fixa do ciclo, mesmo com 0%.
+ */
+export function computeStatusCycleTime(activities: Activity[]): StatusCycleTimeSummary[] {
+  const percentsByStatus = new Map<string, number[]>();
+
+  for (const activity of activities) {
+    if (!activity.isDone) continue;
+    const nonTerminal = activity.statusHistory.filter((s) => s.status !== 'Concluída');
+    const totalDays = sum(nonTerminal.map((s) => daysBetween(s.start, s.end)));
+    if (totalDays <= 0) continue;
+    for (const segment of nonTerminal) {
+      const percent = (daysBetween(segment.start, segment.end) / totalDays) * 100;
+      const list = percentsByStatus.get(segment.status) ?? [];
+      list.push(percent);
+      percentsByStatus.set(segment.status, list);
+    }
+  }
+
+  return CYCLE_STATUS_ORDER.map((status) => {
+    const list = percentsByStatus.get(status) ?? [];
+    return { status, averagePercent: list.length > 0 ? sum(list) / list.length : 0 };
+  });
+}
+
 function sum(values: number[]): number {
   return values.reduce((acc, v) => acc + v, 0);
 }
