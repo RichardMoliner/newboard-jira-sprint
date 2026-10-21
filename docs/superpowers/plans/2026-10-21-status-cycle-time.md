@@ -335,8 +335,8 @@ git commit -m "feat: fetch when an Implementação subtask first entered code re
 ```ts
 test('collects every Implementação subtask key per parent story', () => {
   const subtasks = [
-    rawSubtask({ key: 'EC-10', type: 'Implementação', parent: { key: 'EC-1' } }),
-    rawSubtask({ key: 'EC-11', type: 'Teste', parent: { key: 'EC-1' } }),
+    subtask({ key: 'EC-10', type: 'Implementação', parent: { key: 'EC-1' } }),
+    subtask({ key: 'EC-11', type: 'Teste', parent: { key: 'EC-1' } }),
   ];
   const { implSubtaskKeysByParent } = groupSubtasks(subtasks);
   expect(implSubtaskKeysByParent.get('EC-1')).toEqual(['EC-10']);
@@ -344,21 +344,21 @@ test('collects every Implementação subtask key per parent story', () => {
 
 test('supports more than one Implementação subtask for the same story', () => {
   const subtasks = [
-    rawSubtask({ key: 'EC-10', type: 'Implementação', parent: { key: 'EC-1' } }),
-    rawSubtask({ key: 'EC-12', type: 'Implementação', parent: { key: 'EC-1' } }),
+    subtask({ key: 'EC-10', type: 'Implementação', parent: { key: 'EC-1' } }),
+    subtask({ key: 'EC-12', type: 'Implementação', parent: { key: 'EC-1' } }),
   ];
   const { implSubtaskKeysByParent } = groupSubtasks(subtasks);
   expect(implSubtaskKeysByParent.get('EC-1')).toEqual(['EC-10', 'EC-12']);
 });
 
 test('has no entry for a story with no Implementação subtask', () => {
-  const subtasks = [rawSubtask({ key: 'EC-11', type: 'Teste', parent: { key: 'EC-1' } })];
+  const subtasks = [subtask({ key: 'EC-11', type: 'Teste', parent: { key: 'EC-1' } })];
   const { implSubtaskKeysByParent } = groupSubtasks(subtasks);
   expect(implSubtaskKeysByParent.has('EC-1')).toBe(false);
 });
 ```
 
-(usar o `rawSubtask(...)` builder/helper já existente no topo de `groupSubtasks.test.ts` — seguir o
+(usar o `subtask(...)` builder/helper já existente no topo de `groupSubtasks.test.ts` — seguir o
 nome exato que já estiver lá.)
 
 - [ ] **Step 2: Run tests to verify they fail**
