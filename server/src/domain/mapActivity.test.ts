@@ -1373,4 +1373,58 @@ describe('mapActivity', () => {
     expect(activity.implBugsLoggedHours).toBeNull();
     expect(activity.testBugsLoggedHours).toBeNull();
   });
+
+  describe('statusHistory', () => {
+    test('includes the full status history, ending the current phase at `today` for a story still in progress', () => {
+      const activity = mapActivity({
+        story: baseStory({ storyPoints: 10 }),
+        sprint,
+        implStartDate: '2026-09-04',
+        implAwaitingCodeReview: false,
+        bugs: [],
+        baseUrl: 'https://desenv.betha.com.br',
+        today: '2026-09-08',
+      });
+      expect(activity.statusHistory).toEqual([
+        { status: 'Ainda não iniciada', start: expect.any(String), end: '2026-09-04' },
+        { status: 'Em andamento', start: '2026-09-04', end: '2026-09-08' },
+      ]);
+    });
+
+    test('passes implCodeReviewEnteredAt through to computeStatusHistory', () => {
+      const activity = mapActivity({
+        story: baseStory({ storyPoints: 10 }),
+        sprint,
+        implStartDate: '2026-09-04',
+        implCodeReviewEnteredAt: '2026-09-06',
+        implDone: true,
+        implDoneDate: '2026-09-07',
+        bugs: [],
+        baseUrl: 'https://desenv.betha.com.br',
+        today: '2026-09-08',
+      });
+      expect(activity.statusHistory.map((s) => s.status)).toEqual([
+        'Ainda não iniciada',
+        'Em andamento',
+        'Em code review',
+        'Ag. início dos testes',
+      ]);
+    });
+
+    test('derives firstTestWorklogDate from worklogEntries for the status history boundary', () => {
+      const activity = mapActivity({
+        story: baseStory({ storyPoints: 10 }),
+        sprint,
+        implStartDate: '2026-09-01',
+        implDone: true,
+        implDoneDate: '2026-09-03',
+        worklogEntries: [{ subtaskType: 'Teste', author: 'Fulano', date: '2026-09-05', hours: 2, comment: null }],
+        bugs: [],
+        baseUrl: 'https://desenv.betha.com.br',
+        today: '2026-09-08',
+      });
+      const emTestes = activity.statusHistory.find((s) => s.status === 'Em testes');
+      expect(emTestes?.start).toBe('2026-09-05');
+    });
+  });
 });

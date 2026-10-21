@@ -28,6 +28,12 @@ export interface TimelineWindow {
   end: string;
 }
 
+export interface StatusHistorySegment {
+  status: string;
+  start: string;
+  end: string;
+}
+
 export interface Activity {
   key: string;
   url: string;
@@ -60,6 +66,8 @@ export interface Activity {
   testDone: boolean;
   implWindow: TimelineWindow | null;
   testWindow: TimelineWindow | null;
+  /** Histórico de quanto tempo a story passou em cada status do fluxo, calculado por `computeStatusHistory`. Sempre presente, no mínimo um segmento "Ainda não iniciada". */
+  statusHistory: StatusHistorySegment[];
   /** Horas úteis previstas para implementação/teste (dias úteis da janela × horas/dia); null sem estimativa. */
   implEstimatedHours: number | null;
   testEstimatedHours: number | null;

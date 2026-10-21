@@ -1,4 +1,5 @@
 import { computeTimeline, DEFAULT_HOURS_PER_PF, DEFAULT_HOURS_PER_DAY } from '../compute/timeline.js';
+import { computeStatusHistory } from '../compute/statusHistory.js';
 import { isCarried, isOverdue, isDeliveredOnTime, isAddedAfterSprintStart } from '../compute/status.js';
 import { computeAccuracyPercent } from '../compute/accuracy.js';
 import type { ParsedSprint } from '../jira/parseSprintField.js';
@@ -86,6 +87,8 @@ export function mapActivity(params: {
   /** True quando a(s) subtarefa(s) "Implementação" estão todas com status "Aguardando liberação
    * para testes" no Jira — exibido na listagem como "Em code review". */
   implAwaitingCodeReview?: boolean;
+  /** Timestamp/data em que a subtarefa "Implementação" entrou em code review; null enquanto não entrou (ou sem esse histórico). */
+  implCodeReviewEnteredAt?: string | null;
   testDone?: boolean;
   testDoneDate?: string | null;
   implLoggedHours?: number | null;
@@ -126,6 +129,7 @@ export function mapActivity(params: {
     implDone = false,
     implDoneDate = null,
     implAwaitingCodeReview = false,
+    implCodeReviewEnteredAt = null,
     testDone = false,
     testDoneDate = null,
     implLoggedHours = null,
@@ -163,6 +167,9 @@ export function mapActivity(params: {
   // Implementação atendida mas o teste ainda não tem nenhum apontamento: o teste ainda não começou
   // de fato, então fica "aguardando início" em vez de "em testes".
   const hasTestWorklog = worklogEntries.some((entry) => entry.subtaskType === 'Teste');
+  // Primeira data de apontamento em "Teste" — usada como marco de entrada em "Em testes" no
+  // histórico de status.
+  const firstTestWorklogDate = worklogEntries.find((entry) => entry.subtaskType === 'Teste')?.date ?? null;
   // Progressão do status conforme as subtarefas avançam, quando o status do Jira ainda não reflete isso:
   // Teste atendida -> aguardando liberação; Implementação atendida com apontamento de teste -> em
   // testes; Implementação atendida sem apontamento de teste ainda -> aguardando início dos testes.
@@ -213,6 +220,21 @@ export function mapActivity(params: {
 
   const carried = notStarted ? false : isCarried(startDate, sprint.startDate);
 
+  const statusHistory = computeStatusHistory({
+    storyCreated: story.created,
+    implStartDate,
+    implCodeReviewEnteredAt,
+    implDone,
+    implDoneDate,
+    firstTestWorklogDate,
+    testDone,
+    testDoneDate,
+    isDone,
+    doneTransitionDate,
+    storyUpdated: story.updated,
+    today,
+  });
+
   return {
     key: story.key,
     url: `${baseUrl}/browse/${story.key}`,
@@ -240,6 +262,7 @@ export function mapActivity(params: {
     testDone,
     implWindow: timeline?.impl ?? null,
     testWindow: timeline?.test ?? null,
+    statusHistory,
     implEstimatedHours,
     testEstimatedHours,
     implLoggedHours,
