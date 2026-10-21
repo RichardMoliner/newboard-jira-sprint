@@ -11,6 +11,7 @@ import {
   type SprintGroupType,
 } from '../sprintGrouping.js';
 import SprintSettingsPopup from './SprintSettingsPopup.js';
+import StatusHistoryModal from './StatusHistoryModal.js';
 
 const MIN_COLUMN_WIDTH = 28;
 const MAX_COLUMN_WIDTH = 96;
@@ -727,6 +728,7 @@ function ActivityRow({
   hidePhaseBars: boolean;
   dashDelayBar: boolean;
 }) {
+  const [showStatusHistory, setShowStatusHistory] = useState(false);
   const showImplBar = !hidePhaseBars && phaseFilter !== 'test';
   const showTestBar = !hidePhaseBars && phaseFilter !== 'impl';
   const bugCount = activity.bugs.length;
@@ -882,6 +884,14 @@ function ActivityRow({
             >
               {activity.key} - {activity.title}
             </a>
+            <button
+              onClick={() => setShowStatusHistory(true)}
+              title="Ver tempo em cada status"
+              style={{ background: 'none', border: 'none', padding: 0, marginLeft: 6, fontSize: 11, cursor: 'pointer', opacity: 0.7 }}
+            >
+              ℹ️
+            </button>
+            {showStatusHistory && <StatusHistoryModal activity={activity} onClose={() => setShowStatusHistory(false)} />}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 3, fontSize: 10.5, color: 'var(--text-secondary)' }}>
               <StatusBadge activity={activity} />
               {activity.isCarried && <Tag color="var(--status-warning)">🕓 Herdada</Tag>}
