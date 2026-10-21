@@ -27,6 +27,12 @@ export interface TimelineWindow {
   end: string;
 }
 
+export interface StatusHistorySegment {
+  status: string;
+  start: string;
+  end: string;
+}
+
 export interface Activity {
   key: string;
   url: string;
@@ -52,6 +58,7 @@ export interface Activity {
   testDone: boolean;
   implWindow: TimelineWindow | null;
   testWindow: TimelineWindow | null;
+  statusHistory: StatusHistorySegment[];
   implEstimatedHours: number | null;
   testEstimatedHours: number | null;
   implLoggedHours: number | null;

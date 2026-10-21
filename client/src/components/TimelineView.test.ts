@@ -76,6 +76,7 @@ function activity(overrides: Partial<Activity> = {}): Activity {
     testDone: false,
     implWindow: null,
     testWindow: null,
+    statusHistory: [],
     implEstimatedHours: null,
     testEstimatedHours: null,
     implLoggedHours: null,
