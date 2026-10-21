@@ -190,6 +190,29 @@ describe('computeStatusHistory', () => {
     expect(result[result.length - 1]).toEqual({ status: 'Concluída', start: '2026-09-08', end: '2026-09-10' });
   });
 
+  test('data anomaly: implCodeReviewEnteredAt later than implDoneDate (different upstream sources disagree) clamps "Em code review" to zero duration instead of going negative', () => {
+    const result = computeStatusHistory({
+      storyCreated: '2026-09-01',
+      implStartDate: '2026-09-02',
+      implCodeReviewEnteredAt: '2026-09-06',
+      implDone: true,
+      implDoneDate: '2026-09-05',
+      firstTestWorklogDate: null,
+      testDone: false,
+      testDoneDate: null,
+      isDone: false,
+      doneTransitionDate: null,
+      storyUpdated: '2026-09-06',
+      today: '2026-09-09',
+    });
+
+    const codeReview = result.find((segment) => segment.status === 'Em code review');
+    expect(codeReview).toBeDefined();
+    expect(codeReview!.start).toBe('2026-09-06');
+    expect(codeReview!.end).toBe('2026-09-06');
+    expect(codeReview!.start).toBe(codeReview!.end);
+  });
+
   test('isDone true but implStartDate is null (data anomaly): does not throw, returns a sane single segment instead of crashing the whole fetch', () => {
     const result = computeStatusHistory({
       storyCreated: '2026-09-01', implStartDate: null, implCodeReviewEnteredAt: null,

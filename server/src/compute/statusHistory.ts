@@ -52,49 +52,58 @@ export function computeStatusHistory(params: {
 
   const segments: StatusHistorySegment[] = [];
 
+  // Os sinais de início/fim de cada fase vêm de fontes de dados diferentes (changelog de
+  // subtarefa, worklog, `updated` da story, etc.), então nada garante que cheguem em ordem
+  // cronológica — ex.: um worklog de teste lançado com data retroativa. Centralizar o push aqui
+  // garante que todo segmento devolvido respeite end >= start; quando os dados já são
+  // consistentes isso é um no-op.
+  function pushSegment(status: string, start: string, end: string): void {
+    segments.push({ status, start, end: end < start ? start : end });
+  }
+
   // 1) Ainda não iniciada
   const notStartedStart = dateOnly(storyCreated);
   if (implStartDate === null) {
     // Cobre tanto a story que nunca começou quanto a anomalia de dado "isDone mas sem
     // implStartDate" — nesse caso não há como saber quando as fases seguintes aconteceram, então
     // devolve só esse segmento em vez de inventar datas.
-    segments.push({ status: 'Ainda não iniciada', start: notStartedStart, end: currentEnd });
+    pushSegment('Ainda não iniciada', notStartedStart, currentEnd);
     return segments;
   }
-  segments.push({ status: 'Ainda não iniciada', start: notStartedStart, end: implStartDate });
+  pushSegment('Ainda não iniciada', notStartedStart, implStartDate);
 
   // 2) Em andamento
   const implEnd = implCodeReviewEnteredAt ?? implDoneDate ?? currentEnd;
-  segments.push({ status: 'Em andamento', start: implStartDate, end: implEnd });
+  pushSegment('Em andamento', implStartDate, implEnd);
 
   // 3) Em code review (só existe se a story de fato passou por ali)
   if (implCodeReviewEnteredAt !== null) {
     const codeReviewEnd = implDoneDate ?? currentEnd;
-    segments.push({ status: 'Em code review', start: implCodeReviewEnteredAt, end: codeReviewEnd });
+    pushSegment('Em code review', implCodeReviewEnteredAt, codeReviewEnd);
   }
   if (!implDone) return segments;
 
   // 4) Ag. início dos testes
   const implDoneStart = implDoneDate ?? currentEnd;
   const awaitingTestEnd = firstTestWorklogDate ?? testDoneDate ?? currentEnd;
-  segments.push({ status: 'Ag. início dos testes', start: implDoneStart, end: awaitingTestEnd });
+  pushSegment('Ag. início dos testes', implDoneStart, awaitingTestEnd);
   if (firstTestWorklogDate === null && !testDone) return segments;
 
   // 5) Em testes (só existe se algum worklog de teste já foi lançado, ou o teste já terminou)
   if (firstTestWorklogDate !== null || testDone) {
     const testStart = firstTestWorklogDate ?? testDoneDate ?? currentEnd;
     const testEnd = testDoneDate ?? currentEnd;
-    segments.push({ status: 'Em testes', start: testStart, end: testEnd });
+    pushSegment('Em testes', testStart, testEnd);
   }
   if (!testDone) return segments;
 
   // 6) Aguardando liberação
   const awaitingReleaseStart = testDoneDate ?? currentEnd;
-  segments.push({ status: 'Aguardando liberação', start: awaitingReleaseStart, end: currentEnd });
+  pushSegment('Aguardando liberação', awaitingReleaseStart, currentEnd);
   if (!isDone) return segments;
 
   // 7) Concluída
-  segments.push({ status: 'Concluída', start: currentEnd, end: today });
+  pushSegment('Concluída', currentEnd, today);
 
   return segments;
 }
