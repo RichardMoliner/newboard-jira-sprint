@@ -25,7 +25,7 @@ describe('findStatusEnteredDate', () => {
     const histories: ChangelogHistory[] = [
       { created: '2026-09-10T09:00:00.000-0300', items: [{ field: 'status', toString: 'AGUARDANDO LIBERACAO PARA TESTES' }] },
     ];
-    expect(findStatusEnteredDate(histories, 'Aguardando liberação para testes')).toBe('2026-09-10T09:00:00.000-0300');
+    expect(findStatusEnteredDate(histories, 'Aguardando liberação para testes')).toBe('2026-09-10');
   });
 
   test('picks the FIRST occurrence by `created`, not the most recent (reopened review)', () => {
@@ -33,7 +33,14 @@ describe('findStatusEnteredDate', () => {
       { created: '2026-09-12T09:00:00.000-0300', items: [{ field: 'status', toString: 'Aguardando liberação para testes' }] },
       { created: '2026-09-10T09:00:00.000-0300', items: [{ field: 'status', toString: 'Aguardando liberação para testes' }] },
     ];
-    expect(findStatusEnteredDate(histories, 'Aguardando liberação para testes')).toBe('2026-09-10T09:00:00.000-0300');
+    expect(findStatusEnteredDate(histories, 'Aguardando liberação para testes')).toBe('2026-09-10');
+  });
+
+  test('truncates the matched timestamp to YYYY-MM-DD', () => {
+    const histories: ChangelogHistory[] = [
+      { created: '2026-09-05T09:00:00.000-0300', items: [{ field: 'status', toString: 'Aguardando liberação para testes' }] },
+    ];
+    expect(findStatusEnteredDate(histories, 'Aguardando liberação para testes')).toBe('2026-09-05');
   });
 });
 

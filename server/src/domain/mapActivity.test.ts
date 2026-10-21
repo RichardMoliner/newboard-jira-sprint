@@ -1411,6 +1411,37 @@ describe('mapActivity', () => {
       ]);
     });
 
+    // Reproduz, na pior hipótese, o cenário real que motivou o bug: `implCodeReviewEnteredAt` com
+    // timestamp bruto do changelog (como o Jira de fato devolve) no MESMO dia em que `implDoneDate`
+    // foi registrada. Em produção, após a correção em `fetchImplCodeReviewDate.ts`, esse valor bruto
+    // nunca chega até aqui — `getImplCodeReviewEnteredAt` já devolve data truncada. Este teste
+    // simula o pior caso mesmo assim para garantir que, se um timestamp bruto escapar, o segmento
+    // "Em code review" não fica corrompido com a string de timestamp (comparação lexicográfica
+    // '2026-09-05' < '2026-09-05T09:00:00.000-0300' é true, e o clamp de `computeStatusHistory`
+    // "resolve" isso copiando o timestamp bruto pro fim do segmento). Não dá pra exigir duração >
+    // 0 aqui: no mesmo dia, duas datas truncadas são necessariamente iguais (sem granularidade de
+    // hora) — isso é esperado e correto, igual a todo outro sinal de data do pipeline. O que de
+    // fato importa — e o que esse teste prova — é que o segmento não fica com uma string de
+    // timestamp bruta no lugar de uma data `YYYY-MM-DD`.
+    test('never leaks a raw timestamp into the "Em code review" segment, even in the same-day collision scenario', () => {
+      const activity = mapActivity({
+        story: baseStory({ storyPoints: 10 }),
+        sprint,
+        implStartDate: '2026-09-01',
+        implCodeReviewEnteredAt: '2026-09-05',
+        implDone: true,
+        implDoneDate: '2026-09-05',
+        bugs: [],
+        baseUrl: 'https://desenv.betha.com.br',
+        today: '2026-09-08',
+      });
+      const emCodeReview = activity.statusHistory.find((s) => s.status === 'Em code review');
+      expect(emCodeReview).toBeDefined();
+      expect(emCodeReview?.start).toBe('2026-09-05');
+      expect(emCodeReview?.end).toBe('2026-09-05');
+      expect(activity.statusHistory.every((s) => !s.start.includes('T') && !s.end.includes('T'))).toBe(true);
+    });
+
     test('derives firstTestWorklogDate from worklogEntries for the status history boundary', () => {
       const activity = mapActivity({
         story: baseStory({ storyPoints: 10 }),
