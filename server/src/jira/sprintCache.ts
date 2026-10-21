@@ -7,8 +7,10 @@ export interface CachedSprintData {
   activities: Activity[];
 }
 
+const CACHE_VERSION = 2;
+
 function cachePath(cacheDir: string, sprintId: string): string {
-  return join(cacheDir, `${sprintId}.json`);
+  return join(cacheDir, `${sprintId}.v${CACHE_VERSION}.json`);
 }
 
 /** Sprints fechadas não mudam mais — uma vez em cache, fica pra sempre (sem TTL/invalidação). */

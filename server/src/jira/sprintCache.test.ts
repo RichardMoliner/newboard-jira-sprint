@@ -1,5 +1,5 @@
 import { describe, expect, test, afterEach } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readCachedSprintData, writeCachedSprintData } from './sprintCache.js';
@@ -54,5 +54,14 @@ describe('sprintCache', () => {
     const updated = { sprint, activities: [{ key: 'EC-1' } as unknown as import('../domain/types.js').Activity] };
     await writeCachedSprintData(cacheDir, '7400', updated);
     expect(await readCachedSprintData(cacheDir, '7400')).toEqual(updated);
+  });
+
+  test('treats a cache file written before the version bump as a cache miss', async () => {
+    const cacheDir = await tempCacheDir();
+    await mkdir(cacheDir, { recursive: true });
+    // Simula um arquivo de cache "antigo" (esquema pré-bump), escrito direto no disco sem passar por
+    // writeCachedSprintData — deve ser ignorado, não lido.
+    await writeFile(join(cacheDir, '7400.json'), JSON.stringify({ sprint, activities: [] }), 'utf-8');
+    expect(await readCachedSprintData(cacheDir, '7400')).toBeNull();
   });
 });
