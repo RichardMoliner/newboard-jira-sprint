@@ -8,11 +8,13 @@ import { boardDataRouter } from './routes/boardData.js';
 import { historicalSprintsRouter } from './routes/historicalSprints.js';
 import { sprintSettingsRouter } from './routes/sprintSettings.js';
 import { adminRouter } from './routes/admin.js';
+import { startDailyEarlyDeliveryCheck } from './notifications/scheduler.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '../..');
 const CONFIG_PATH = resolve(REPO_ROOT, 'config.json');
 const SPRINT_CACHE_DIR = resolve(REPO_ROOT, '.sprint-cache');
+const NOTIFIED_STATE_PATH = resolve(REPO_ROOT, 'notified.json');
 
 dotenv.config({ path: resolve(REPO_ROOT, '.env') });
 
@@ -24,6 +26,8 @@ app.use('/api', boardDataRouter(CONFIG_PATH));
 app.use('/api', historicalSprintsRouter(CONFIG_PATH, SPRINT_CACHE_DIR));
 app.use('/api', sprintSettingsRouter(CONFIG_PATH));
 app.use('/api', adminRouter(CONFIG_PATH));
+
+startDailyEarlyDeliveryCheck(CONFIG_PATH, NOTIFIED_STATE_PATH);
 
 const port = Number(process.env.PORT ?? 3001);
 const server = app.listen(port, () => {
