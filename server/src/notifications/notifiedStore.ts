@@ -1,5 +1,5 @@
 import { readFile, rename, writeFile } from 'node:fs/promises';
-import { NotifiedState, NotifiedEntry } from './eligibility';
+import { NotifiedState, NotifiedEntry } from './eligibility.js';
 
 /**
  * Reads the notified state from a JSON file.

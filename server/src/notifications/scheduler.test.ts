@@ -2,7 +2,7 @@ import { describe, test, expect, vi, beforeEach, afterEach, type Mock } from 'vi
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Activity } from '../domain/types';
+import { Activity } from '../domain/types.js';
 import { AppConfig, SprintSettings, writeConfig } from '../config/configStore.js';
 import { readNotifiedState } from './notifiedStore.js';
 import { fetchBoardData } from '../jira/fetchBoardData.js';

@@ -144,6 +144,7 @@ describe('configStore', () => {
       dashDelayBar: true,
       autoRefreshEnabled: false,
       sprintSettings: undefined as unknown as Record<string, never>,
+      webhooks: { aplicacao: null, extensao: null },
     });
     expect((await readConfig(configPath)).sprintSettings).toEqual({});
   });

@@ -1,4 +1,4 @@
-import { Activity } from '../domain/types';
+import { Activity } from '../domain/types.js';
 
 export interface NotifiedEntry {
   legalDeadline: string;

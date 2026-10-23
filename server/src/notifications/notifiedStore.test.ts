@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { readNotifiedState, writeNotifiedState, recordNotified } from './notifiedStore';
-import { NotifiedState } from './eligibility';
+import { readNotifiedState, writeNotifiedState, recordNotified } from './notifiedStore.js';
+import { NotifiedState } from './eligibility.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import { rm } from 'node:fs/promises';
 import * as os from 'node:os';

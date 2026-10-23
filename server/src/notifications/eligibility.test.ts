@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { Activity } from '../domain/types';
+import { Activity } from '../domain/types.js';
 import {
   isEligibleForEarlyDeliveryNotification,
   daysBetween,
@@ -7,7 +7,7 @@ import {
   getNotifiedMilestones,
   DueNotification,
   NotifiedState,
-} from './eligibility';
+} from './eligibility.js';
 
 function activity(overrides: Partial<Activity> = {}): Activity {
   return {
