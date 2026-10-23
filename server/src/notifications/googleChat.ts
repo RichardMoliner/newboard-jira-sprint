@@ -1,4 +1,4 @@
-import { DueNotification } from './eligibility';
+import { DueNotification } from './eligibility.js';
 
 /**
  * Formats an early delivery notification into a message string for Google Chat.
@@ -7,17 +7,21 @@ import { DueNotification } from './eligibility';
  * @returns Formatted message string with 4 lines: header, title, url, dev name
  */
 export function formatEarlyDeliveryMessage(notification: DueNotification): string {
-  const { activity, daysRemaining } = notification;
+  const { activity, daysRemaining, milestone } = notification;
 
   let header: string;
 
   if (daysRemaining > 0) {
-    header = `Liberação antecipada — faltam ${daysRemaining} dias`;
+    header = daysRemaining === 1 ? 'Liberação antecipada — falta 1 dia' : `Liberação antecipada — faltam ${daysRemaining} dias`;
   } else if (daysRemaining === 0) {
     header = 'Liberação antecipada — é hoje';
   } else {
     header = 'Liberação antecipada — prazo já passou';
   }
+
+  // Dois marcos podem disparar na mesma checagem (ex.: checagem pulada e marcos 5 e 3 ficam pendentes
+  // juntos) — anexa o marco pra que as mensagens não fiquem idênticas no Google Chat.
+  header += ` (aviso de ${milestone} dias)`;
 
   return `${header}\n${activity.title}\n${activity.url}\nDev: ${activity.developer}`;
 }

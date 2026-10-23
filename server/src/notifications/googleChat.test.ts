@@ -1,7 +1,7 @@
 import { describe, test, expect, vi } from 'vitest';
-import { Activity } from '../domain/types';
-import { formatEarlyDeliveryMessage, sendGoogleChatMessage } from './googleChat';
-import { DueNotification } from './eligibility';
+import { Activity } from '../domain/types.js';
+import { formatEarlyDeliveryMessage, sendGoogleChatMessage } from './googleChat.js';
+import { DueNotification } from './eligibility.js';
 
 function activity(overrides: Partial<Activity> = {}): Activity {
   return {
@@ -58,7 +58,18 @@ describe('formatEarlyDeliveryMessage', () => {
       daysRemaining: 5,
     };
     expect(formatEarlyDeliveryMessage(notification)).toBe(
-      'Liberação antecipada — faltam 5 dias\nCorrigir X\nhttps://jira/PROJ-1\nDev: Fulano',
+      'Liberação antecipada — faltam 5 dias (aviso de 5 dias)\nCorrigir X\nhttps://jira/PROJ-1\nDev: Fulano',
+    );
+  });
+
+  test('singular correto quando falta exatamente 1 dia', () => {
+    const notification: DueNotification = {
+      activity: activity({ key: 'PROJ-9', title: 'W', url: 'https://jira/PROJ-9', developer: 'Sicrano' }),
+      milestone: 1,
+      daysRemaining: 1,
+    };
+    expect(formatEarlyDeliveryMessage(notification)).toBe(
+      'Liberação antecipada — falta 1 dia (aviso de 1 dias)\nW\nhttps://jira/PROJ-9\nDev: Sicrano',
     );
   });
 
@@ -69,7 +80,7 @@ describe('formatEarlyDeliveryMessage', () => {
       daysRemaining: 0,
     };
     expect(formatEarlyDeliveryMessage(notification)).toBe(
-      'Liberação antecipada — é hoje\nY\nhttps://jira/PROJ-2\nDev: Ciclana',
+      'Liberação antecipada — é hoje (aviso de 0 dias)\nY\nhttps://jira/PROJ-2\nDev: Ciclana',
     );
   });
 
@@ -80,8 +91,21 @@ describe('formatEarlyDeliveryMessage', () => {
       daysRemaining: -2,
     };
     expect(formatEarlyDeliveryMessage(notification)).toBe(
-      'Liberação antecipada — prazo já passou\nZ\nhttps://jira/PROJ-3\nDev: Beltrano',
+      'Liberação antecipada — prazo já passou (aviso de 0 dias)\nZ\nhttps://jira/PROJ-3\nDev: Beltrano',
     );
+  });
+
+  test('checagem com catch-up: marcos 5 e 3 pendentes juntos (mesmo daysRemaining) geram mensagens diferentes', () => {
+    const act = activity({ key: 'PROJ-7', title: 'Catch-up', url: 'https://jira/PROJ-7', developer: 'Fulano' });
+    const notificationFive: DueNotification = { activity: act, milestone: 5, daysRemaining: 2 };
+    const notificationThree: DueNotification = { activity: act, milestone: 3, daysRemaining: 2 };
+
+    const messageFive = formatEarlyDeliveryMessage(notificationFive);
+    const messageThree = formatEarlyDeliveryMessage(notificationThree);
+
+    expect(messageFive).not.toBe(messageThree);
+    expect(messageFive).toContain('(aviso de 5 dias)');
+    expect(messageThree).toContain('(aviso de 3 dias)');
   });
 });
 
