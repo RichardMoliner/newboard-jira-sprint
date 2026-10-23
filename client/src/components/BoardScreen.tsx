@@ -10,6 +10,7 @@ import HistoryView from './HistoryView.js';
 import ReportView from './ReportView.js';
 import ProgressModal from './ProgressModal.js';
 import SettingsScreen from './SettingsScreen.js';
+import AdminScreen from './AdminScreen.js';
 
 type Tab = 'timeline' | 'indicators' | 'history';
 
@@ -27,6 +28,7 @@ export default function BoardScreen({
   const [tab, setTab] = useState<Tab>('timeline');
   const [showReport, setShowReport] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
   const [sprintFilter, setSprintFilter] = useState<string[]>([]);
   const [dashDelayBar, setDashDelayBar] = useState(false);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
@@ -121,6 +123,7 @@ export default function BoardScreen({
           }}
         />
       )}
+      {showAdmin && <AdminScreen onCancel={() => setShowAdmin(false)} />}
       <header
         className="no-print"
         style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20, flexShrink: 0 }}
@@ -138,6 +141,9 @@ export default function BoardScreen({
             </button>
             <button onClick={() => setShowSettings(true)} style={secondaryButtonStyle}>
               Configurações
+            </button>
+            <button onClick={() => setShowAdmin(true)} style={secondaryButtonStyle}>
+              Admin
             </button>
             {data && (
               <button onClick={() => setShowReport(true)} style={secondaryButtonStyle}>

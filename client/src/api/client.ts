@@ -68,3 +68,29 @@ export function saveSprintSettings(sprintId: string, input: SprintSettings): Pro
     body: JSON.stringify(input),
   });
 }
+
+export interface AdminWebhooksStatus {
+  aplicacaoSet: boolean;
+  extensaoSet: boolean;
+}
+
+export function verifyAdminPassword(password: string): Promise<{ ok: true }> {
+  return request<{ ok: true }>('/admin/verify', { method: 'POST', body: JSON.stringify({ password }) });
+}
+
+export function getAdminWebhooks(password: string): Promise<AdminWebhooksStatus> {
+  return request<AdminWebhooksStatus>('/admin/webhooks', {
+    headers: { 'Content-Type': 'application/json', 'x-admin-password': password },
+  });
+}
+
+export function saveAdminWebhooks(
+  password: string,
+  input: { aplicacao?: string; extensao?: string },
+): Promise<AdminWebhooksStatus> {
+  return request<AdminWebhooksStatus>('/admin/webhooks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-admin-password': password },
+    body: JSON.stringify(input),
+  });
+}
