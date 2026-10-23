@@ -220,4 +220,44 @@ describe('runEarlyDeliveryCheck', () => {
       8,
     );
   });
+
+  test('lote com 3 notificações: uma pulada (sem grupo), uma com falha de envio e uma com sucesso — a falha/pulo de uma não bloqueia nem desfaz a persistência da outra', async () => {
+    await writeConfig(tmpConfigPath, {
+      ...fullConfig(),
+      webhooks: { aplicacao: 'https://hook-a', extensao: null },
+      sprintSettings: {
+        'sem-grupo': sprintSettings({ group: null }),
+        'falha-envio': sprintSettings({ group: 'aplicacao' }),
+        sucesso: sprintSettings({ group: 'aplicacao' }),
+      },
+    });
+
+    const skippedActivity = activity({ key: 'PROJ-SKIP', url: 'https://jira/PROJ-SKIP', sprintId: 'sem-grupo' });
+    const failedActivity = activity({ key: 'PROJ-FAIL', url: 'https://jira/PROJ-FAIL', sprintId: 'falha-envio' });
+    const succeededActivity = activity({ key: 'PROJ-OK', url: 'https://jira/PROJ-OK', sprintId: 'sucesso' });
+
+    (fetchBoardData as Mock).mockResolvedValue({
+      today: '2026-10-22',
+      sprints: [],
+      activities: [skippedActivity, failedActivity, succeededActivity],
+    });
+
+    (sendGoogleChatMessage as Mock).mockImplementation(async (_webhookUrl: string, text: string) => {
+      if (text.includes(failedActivity.url)) {
+        return { ok: false, error: 'timeout' };
+      }
+      return { ok: true };
+    });
+
+    await runEarlyDeliveryCheck(tmpConfigPath, tmpNotifiedPath);
+
+    expect(sendGoogleChatMessage).not.toHaveBeenCalledWith(expect.anything(), expect.stringContaining(skippedActivity.url));
+    expect(sendGoogleChatMessage).toHaveBeenCalledWith('https://hook-a', expect.stringContaining(failedActivity.url));
+    expect(sendGoogleChatMessage).toHaveBeenCalledWith('https://hook-a', expect.stringContaining(succeededActivity.url));
+
+    const state = await readNotifiedState(tmpNotifiedPath);
+    expect(state[skippedActivity.key]).toBeUndefined();
+    expect(state[failedActivity.key]).toBeUndefined();
+    expect(state[succeededActivity.key].milestones).toContain(5);
+  });
 });
