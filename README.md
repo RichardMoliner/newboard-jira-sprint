@@ -40,6 +40,12 @@ encerrar o painel, feche a janela preta que abrir.
    depois pelo botão **Configurações**. Ao editar depois, deixar o campo de
    senha em branco mantém a senha já salva.
 
+Para usar a tela de **Admin** (cadastro dos webhooks de liberação antecipada no
+Google Chat), defina `ADMIN_PASSWORD` no arquivo `.env` **da raiz do projeto**
+(o mesmo `.env` do passo 2 acima — não em `server/.env`). Sem essa variável, a
+tela de Admin fica inacessível e mostra "Senha incorreta." mesmo com a senha
+certa.
+
 O painel busca automaticamente todas as sprints ativas (`sprint in
 openSprints()`) dos projetos da vertical informada — não é preciso saber IDs
 de board ou sprint.

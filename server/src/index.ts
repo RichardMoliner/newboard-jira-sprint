@@ -18,6 +18,12 @@ const NOTIFIED_STATE_PATH = resolve(REPO_ROOT, 'notified.json');
 
 dotenv.config({ path: resolve(REPO_ROOT, '.env') });
 
+if (!process.env.ADMIN_PASSWORD) {
+  console.warn(
+    'ADMIN_PASSWORD não configurado — a tela de Admin ficará inacessível até definir essa variável no .env.',
+  );
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json());
