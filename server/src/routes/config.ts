@@ -93,6 +93,7 @@ export function configRouter(configPath: string): Router {
       dashDelayBar,
       autoRefreshEnabled,
       sprintSettings: existing.sprintSettings,
+      webhooks: existing.webhooks,
     };
     await writeConfig(configPath, next);
     res.json(toPublicConfig(next));

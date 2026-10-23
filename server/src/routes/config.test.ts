@@ -1,5 +1,63 @@
-import { describe, expect, test } from 'vitest';
-import { parseOptionalDateField } from './config.js';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { rm } from 'node:fs/promises';
+import express from 'express';
+import request from 'supertest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { parseOptionalDateField, configRouter } from './config.js';
+
+function buildApp(configPath: string) {
+  const app = express();
+  app.use(express.json());
+  app.use('/api', configRouter(configPath));
+  return app;
+}
+
+describe('configRouter POST /config', () => {
+  let tmpConfigPath: string;
+
+  beforeEach(() => {
+    tmpConfigPath = join(tmpdir(), `config-route-test-${Date.now()}-${Math.random()}.json`);
+  });
+
+  afterEach(async () => {
+    await rm(tmpConfigPath, { force: true });
+  });
+
+  test('preserva os webhooks já salvos ao salvar a tela de Configurações', async () => {
+    const app = buildApp(tmpConfigPath);
+
+    // Simula webhooks já configurados via tela de Admin, escrevendo direto no arquivo de config.
+    const { writeConfig, readConfig } = await import('../config/configStore.js');
+    const existing = await readConfig(tmpConfigPath);
+    await writeConfig(tmpConfigPath, {
+      ...existing,
+      webhooks: { aplicacao: 'https://chat.googleapis.com/a', extensao: 'https://chat.googleapis.com/b' },
+    });
+
+    const post = await request(app).post('/api/config').send({
+      vertical: 'Contratos',
+      jiraUsername: 'usuario',
+      jiraPassword: 'senha',
+    });
+    expect(post.status).toBe(200);
+
+    const afterSave = await readConfig(tmpConfigPath);
+    expect(afterSave.webhooks).toEqual({
+      aplicacao: 'https://chat.googleapis.com/a',
+      extensao: 'https://chat.googleapis.com/b',
+    });
+
+    const get = await request(app).get('/api/config');
+    expect(get.status).toBe(200);
+
+    const afterGet = await readConfig(tmpConfigPath);
+    expect(afterGet.webhooks).toEqual({
+      aplicacao: 'https://chat.googleapis.com/a',
+      extensao: 'https://chat.googleapis.com/b',
+    });
+  });
+});
 
 describe('parseOptionalDateField', () => {
   test('keeps the current value when the field is absent from the body', () => {
