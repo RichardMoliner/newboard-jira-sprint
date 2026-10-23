@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { findSprintEntryDate, findDoneTransitionDate, type ChangelogHistory } from './fetchSprintEntry.js';
+import { findSprintEntryDate, findDoneTransitionDate, findStatusEnteredDate, type ChangelogHistory } from './fetchSprintEntry.js';
 
 function history(overrides: Partial<ChangelogHistory> = {}): ChangelogHistory {
   return {
@@ -92,5 +92,54 @@ describe('findDoneTransitionDate', () => {
   test('does not crash when toString is null and ignores that item', () => {
     const histories = [history({ items: [{ field: 'status', toString: null }] })];
     expect(findDoneTransitionDate(histories, 'Atendida')).toBeNull();
+  });
+});
+
+describe('findStatusEnteredDate', () => {
+  test('returns null when there is no changelog history at all', () => {
+    expect(findStatusEnteredDate([], 'Aguardando liberação para testes')).toBeNull();
+  });
+
+  test('returns null when no history item touches the status field', () => {
+    const histories: ChangelogHistory[] = [
+      { created: '2026-09-10T09:00:00.000-0300', items: [{ field: 'Sprint', toString: 'Alguma Sprint' }] },
+    ];
+    expect(findStatusEnteredDate(histories, 'Aguardando liberação para testes')).toBeNull();
+  });
+
+  test('ignores status changes to a different status', () => {
+    const histories: ChangelogHistory[] = [
+      { created: '2026-09-10T09:00:00.000-0300', items: [{ field: 'status', toString: 'Em andamento' }] },
+    ];
+    expect(findStatusEnteredDate(histories, 'Aguardando liberação para testes')).toBeNull();
+  });
+
+  test('matches case/accent-insensitively, same as groupSubtasks.isAwaitingCodeReviewStatus', () => {
+    const histories: ChangelogHistory[] = [
+      { created: '2026-09-10T09:00:00.000-0300', items: [{ field: 'status', toString: 'AGUARDANDO LIBERACAO PARA TESTES' }] },
+    ];
+    expect(findStatusEnteredDate(histories, 'Aguardando liberação para testes')).toBe('2026-09-10');
+  });
+
+  test('picks the FIRST occurrence by `created`, not the most recent (reopened review)', () => {
+    const histories: ChangelogHistory[] = [
+      { created: '2026-09-12T09:00:00.000-0300', items: [{ field: 'status', toString: 'Aguardando liberação para testes' }] },
+      { created: '2026-09-10T09:00:00.000-0300', items: [{ field: 'status', toString: 'Aguardando liberação para testes' }] },
+    ];
+    expect(findStatusEnteredDate(histories, 'Aguardando liberação para testes')).toBe('2026-09-10');
+  });
+
+  test('truncates the matched timestamp to YYYY-MM-DD', () => {
+    const histories: ChangelogHistory[] = [
+      { created: '2026-09-05T09:00:00.000-0300', items: [{ field: 'status', toString: 'Aguardando liberação para testes' }] },
+    ];
+    expect(findStatusEnteredDate(histories, 'Aguardando liberação para testes')).toBe('2026-09-05');
+  });
+
+  test('also works for a status other than code review (e.g. "Em andamento", used for status-history\'s first phase boundary)', () => {
+    const histories: ChangelogHistory[] = [
+      { created: '2026-09-03T08:00:00.000-0300', items: [{ field: 'status', toString: 'Em andamento' }] },
+    ];
+    expect(findStatusEnteredDate(histories, 'Em andamento')).toBe('2026-09-03');
   });
 });

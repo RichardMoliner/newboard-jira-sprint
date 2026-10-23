@@ -1457,5 +1457,156 @@ describe('mapActivity', () => {
       const emTestes = activity.statusHistory.find((s) => s.status === 'Em testes');
       expect(emTestes?.start).toBe('2026-09-05');
     });
+
+    test('"Ainda não iniciada" starts at sprintEnteredAt (not storyCreated) for a story that is not carried over', () => {
+      const activity = mapActivity({
+        story: baseStory({ storyPoints: 10, created: '2026-07-01T10:00:00.000-0300' }),
+        sprint, // sprint.startDate é 2026-09-03
+        implStartDate: '2026-09-04', // depois de sprint.startDate -> não é herdada
+        sprintEnteredAt: '2026-09-03T09:00:00.000-0300',
+        bugs: [],
+        baseUrl: 'https://desenv.betha.com.br',
+        today: '2026-09-08',
+      });
+      expect(activity.isCarried).toBe(false);
+      expect(activity.statusHistory[0]).toEqual({ status: 'Ainda não iniciada', start: '2026-09-03', end: '2026-09-04' });
+    });
+
+    test('"Ainda não iniciada" starts at storyCreated (not sprintEnteredAt) for a carried-over story', () => {
+      const activity = mapActivity({
+        story: baseStory({ storyPoints: 10, created: '2026-07-01T10:00:00.000-0300' }),
+        sprint, // sprint.startDate é 2026-09-03
+        implStartDate: '2026-08-20', // antes de sprint.startDate -> herdada
+        sprintEnteredAt: '2026-09-03T09:00:00.000-0300', // entrou na sprint ATUAL, mas é herdada
+        bugs: [],
+        baseUrl: 'https://desenv.betha.com.br',
+        today: '2026-09-08',
+      });
+      expect(activity.isCarried).toBe(true);
+      expect(activity.statusHistory[0]).toEqual({ status: 'Ainda não iniciada', start: '2026-07-01', end: '2026-08-20' });
+    });
+
+    test('passes emAndamentoEnteredAt through as the end of "Ainda não iniciada" / start of "Em andamento", instead of implStartDate', () => {
+      const activity = mapActivity({
+        story: baseStory({ storyPoints: 10 }),
+        sprint,
+        implStartDate: '2026-09-06', // só criou a subtarefa de Implementação bem depois
+        emAndamentoEnteredAt: '2026-09-04', // mas o status da story já tinha mudado antes
+        bugs: [],
+        baseUrl: 'https://desenv.betha.com.br',
+        today: '2026-09-08',
+      });
+      expect(activity.statusHistory).toEqual([
+        { status: 'Ainda não iniciada', start: expect.any(String), end: '2026-09-04' },
+        { status: 'Em andamento', start: '2026-09-04', end: '2026-09-08' },
+      ]);
+    });
+
+    test('includes "Correção de bugs" using the dev\'s first/last bug worklog dates, excluding worklogs from non-dev roles', () => {
+      const activity = mapActivity({
+        story: baseStory({ storyPoints: 10 }),
+        sprint,
+        implStartDate: '2026-09-01',
+        implDone: true,
+        implDoneDate: '2026-09-03',
+        testDone: true,
+        testDoneDate: '2026-09-05',
+        bugs: [
+          bug({
+            worklogEntries: [
+              { subtaskType: 'Bug', author: 'Fulano (dev)', date: '2026-09-06', hours: 2, comment: null },
+              { subtaskType: 'Bug', author: 'Ciclana (tester)', date: '2026-09-07', hours: 1, comment: null },
+              { subtaskType: 'Bug', author: 'Fulano (dev)', date: '2026-09-08', hours: 1, comment: null },
+            ],
+          }),
+        ],
+        developerRoles: new Map([
+          ['Fulano (dev)', 'dev'],
+          ['Ciclana (tester)', 'tester'],
+        ]),
+        baseUrl: 'https://desenv.betha.com.br',
+        today: '2026-09-10',
+      });
+
+      const bugFix = activity.statusHistory.find((s) => s.status === 'Correção de bugs');
+      // Usa só as datas do dev (06 e 08), ignora o apontamento da tester (07).
+      expect(bugFix).toEqual({ status: 'Correção de bugs', start: '2026-09-06', end: '2026-09-08' });
+    });
+
+    test('omits "Correção de bugs" when no bug worklog was logged by a dev', () => {
+      const activity = mapActivity({
+        story: baseStory({ storyPoints: 10 }),
+        sprint,
+        implStartDate: '2026-09-01',
+        implDone: true,
+        implDoneDate: '2026-09-03',
+        testDone: true,
+        testDoneDate: '2026-09-05',
+        bugs: [
+          bug({
+            worklogEntries: [{ subtaskType: 'Bug', author: 'Ciclana (tester)', date: '2026-09-06', hours: 1, comment: null }],
+          }),
+        ],
+        developerRoles: new Map([['Ciclana (tester)', 'tester']]),
+        baseUrl: 'https://desenv.betha.com.br',
+        today: '2026-09-10',
+      });
+
+      expect(activity.statusHistory.some((s) => s.status === 'Correção de bugs')).toBe(false);
+    });
+
+    test('includes "Teste de bugs" using the tester\'s first/last bug worklog dates, independent of the dev\'s', () => {
+      const activity = mapActivity({
+        story: baseStory({ storyPoints: 10 }),
+        sprint,
+        implStartDate: '2026-09-01',
+        implDone: true,
+        implDoneDate: '2026-09-03',
+        testDone: true,
+        testDoneDate: '2026-09-05',
+        bugs: [
+          bug({
+            worklogEntries: [
+              { subtaskType: 'Bug', author: 'Fulano (dev)', date: '2026-09-06', hours: 2, comment: null },
+              { subtaskType: 'Bug', author: 'Ciclana (tester)', date: '2026-09-07', hours: 1, comment: null },
+              { subtaskType: 'Bug', author: 'Ciclana (tester)', date: '2026-09-09', hours: 1, comment: null },
+            ],
+          }),
+        ],
+        developerRoles: new Map([
+          ['Fulano (dev)', 'dev'],
+          ['Ciclana (tester)', 'tester'],
+        ]),
+        baseUrl: 'https://desenv.betha.com.br',
+        today: '2026-09-10',
+      });
+
+      const bugFix = activity.statusHistory.find((s) => s.status === 'Correção de bugs');
+      const bugTest = activity.statusHistory.find((s) => s.status === 'Teste de bugs');
+      expect(bugFix).toEqual({ status: 'Correção de bugs', start: '2026-09-06', end: '2026-09-06' });
+      expect(bugTest).toEqual({ status: 'Teste de bugs', start: '2026-09-07', end: '2026-09-09' });
+    });
+
+    test('omits "Teste de bugs" when no bug worklog was logged by a tester', () => {
+      const activity = mapActivity({
+        story: baseStory({ storyPoints: 10 }),
+        sprint,
+        implStartDate: '2026-09-01',
+        implDone: true,
+        implDoneDate: '2026-09-03',
+        testDone: true,
+        testDoneDate: '2026-09-05',
+        bugs: [
+          bug({
+            worklogEntries: [{ subtaskType: 'Bug', author: 'Fulano (dev)', date: '2026-09-06', hours: 2, comment: null }],
+          }),
+        ],
+        developerRoles: new Map([['Fulano (dev)', 'dev']]),
+        baseUrl: 'https://desenv.betha.com.br',
+        today: '2026-09-10',
+      });
+
+      expect(activity.statusHistory.some((s) => s.status === 'Teste de bugs')).toBe(false);
+    });
   });
 });

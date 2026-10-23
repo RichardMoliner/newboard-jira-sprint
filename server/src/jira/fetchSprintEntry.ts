@@ -1,5 +1,16 @@
 import type { JiraCredentials } from '../mcp/client.js';
 
+function dateOnly(isoDateTime: string): string {
+  return isoDateTime.slice(0, 10);
+}
+
+function normalize(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
+}
+
 export interface ChangelogHistoryItem {
   field?: string;
   toString?: string | null;
@@ -44,10 +55,32 @@ export function findDoneTransitionDate(histories: ChangelogHistory[], currentSta
   return matches[matches.length - 1].created;
 }
 
+/**
+ * Acha a data (YYYY-MM-DD) em que a issue entrou pela PRIMEIRA vez no status informado, a partir
+ * do changelog do Jira. Diferente de `findDoneTransitionDate` (que pega a transição mais recente),
+ * aqui usamos a primeira ocorrência de propósito: se o status foi reaberto e a issue voltou pra lá
+ * depois, o que importa pro ciclo é quando ela entrou ali pela primeira vez. O timestamp bruto do
+ * changelog é truncado para data-only, igual todo outro sinal de data do pipeline de histórico de
+ * status (comparações usam string compare de datas ISO, que quebra se misturar timestamp com
+ * data-only).
+ */
+export function findStatusEnteredDate(histories: ChangelogHistory[], targetStatus: string): string | null {
+  const normalizedTarget = normalize(targetStatus);
+  const matches = histories
+    .flatMap((h) => h.items.map((item) => ({ created: h.created, item })))
+    .filter(({ item }) => item.field === 'status' && normalize(item.toString ?? '') === normalizedTarget);
+
+  if (matches.length === 0) return null;
+
+  matches.sort((a, b) => a.created.localeCompare(b.created));
+  return dateOnly(matches[0].created);
+}
+
 interface CacheEntry {
   updated: string;
   sprintEnteredAt: string | null;
   doneTransitionDate: string | null;
+  emAndamentoEnteredAt: string | null;
 }
 
 // Cache em memória (nível de módulo, sobrevive entre requisições mas não a restarts) — evita
@@ -78,14 +111,21 @@ export async function fetchIssueChangelog(issueKey: string, credentials: JiraCre
 export interface IssueHistoryFacts {
   sprintEnteredAt: string | null;
   doneTransitionDate: string | null;
+  /** Data (YYYY-MM-DD) em que o status da story mudou literalmente pra "Em andamento" no Jira;
+   * null se isso nunca aconteceu (comum quando o progresso é só acompanhado pelas subtarefas). */
+  emAndamentoEnteredAt: string | null;
 }
 
+const EM_ANDAMENTO_STATUS = 'Em andamento';
+
 /**
- * Busca o changelog da issue uma única vez e extrai dele os dois fatos que o board precisa:
- * quando ela entrou na sprint atual e quando transicionou pro status atual (usado como data real
- * de entrega quando a story está concluída). Busca só quando necessário: se o `updated` da issue
- * não mudou desde a última chamada, reaproveita o cache (nenhuma chamada extra ao Jira). Falha ao
- * buscar o changelog não derruba o board inteiro — cai pra `null` nos dois fatos e loga o erro.
+ * Busca o changelog da issue uma única vez e extrai dele os três fatos que o board precisa: quando
+ * ela entrou na sprint atual, quando transicionou pro status atual (usado como data real de entrega
+ * quando a story está concluída) e quando entrou pela primeira vez em "Em andamento" (usado como
+ * início da fase "Em andamento" no histórico de status). Busca só quando necessário: se o `updated`
+ * da issue não mudou desde a última chamada, reaproveita o cache (nenhuma chamada extra ao Jira).
+ * Falha ao buscar o changelog não derruba o board inteiro — cai pra `null` nos três fatos e loga o
+ * erro.
  */
 export async function getIssueHistoryFacts(
   issueKey: string,
@@ -96,21 +136,28 @@ export async function getIssueHistoryFacts(
 ): Promise<IssueHistoryFacts> {
   const cached = cache.get(issueKey);
   if (cached && cached.updated === updated) {
-    return { sprintEnteredAt: cached.sprintEnteredAt, doneTransitionDate: cached.doneTransitionDate };
+    return {
+      sprintEnteredAt: cached.sprintEnteredAt,
+      doneTransitionDate: cached.doneTransitionDate,
+      emAndamentoEnteredAt: cached.emAndamentoEnteredAt,
+    };
   }
 
   let sprintEnteredAt: string | null;
   let doneTransitionDate: string | null;
+  let emAndamentoEnteredAt: string | null;
   try {
     const histories = await fetchIssueChangelog(issueKey, credentials);
     sprintEnteredAt = findSprintEntryDate(histories, sprintName);
     doneTransitionDate = findDoneTransitionDate(histories, currentStatus);
+    emAndamentoEnteredAt = findStatusEnteredDate(histories, EM_ANDAMENTO_STATUS);
   } catch (err) {
     console.error(`[fetchSprintEntry] Falha ao buscar changelog de ${issueKey}, ignorando:`, err instanceof Error ? err.message : err);
     sprintEnteredAt = null;
     doneTransitionDate = null;
+    emAndamentoEnteredAt = null;
   }
 
-  cache.set(issueKey, { updated, sprintEnteredAt, doneTransitionDate });
-  return { sprintEnteredAt, doneTransitionDate };
+  cache.set(issueKey, { updated, sprintEnteredAt, doneTransitionDate, emAndamentoEnteredAt });
+  return { sprintEnteredAt, doneTransitionDate, emAndamentoEnteredAt };
 }

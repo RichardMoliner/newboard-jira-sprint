@@ -869,19 +869,21 @@ describe('computeBurndown', () => {
 describe('computeStatusCycleTime', () => {
   function segment(status: string, start: string, end: string) { return { status, start, end }; }
 
-  test('returns all 6 cycle statuses with 0% when there are no completed activities', () => {
+  test('returns all 8 cycle statuses with 0 days when there is no usable status history yet', () => {
     const result = computeStatusCycleTime([activity({ isDone: false })]);
     expect(result).toEqual([
-      { status: 'Ainda não iniciada', averagePercent: 0 },
-      { status: 'Em andamento', averagePercent: 0 },
-      { status: 'Em code review', averagePercent: 0 },
-      { status: 'Ag. início dos testes', averagePercent: 0 },
-      { status: 'Em testes', averagePercent: 0 },
-      { status: 'Aguardando liberação', averagePercent: 0 },
+      { status: 'Ainda não iniciada', averageDays: 0 },
+      { status: 'Em andamento', averageDays: 0 },
+      { status: 'Em code review', averageDays: 0 },
+      { status: 'Ag. início dos testes', averageDays: 0 },
+      { status: 'Em testes', averageDays: 0 },
+      { status: 'Correção de bugs', averageDays: 0 },
+      { status: 'Teste de bugs', averageDays: 0 },
+      { status: 'Aguardando liberação', averageDays: 0 },
     ]);
   });
 
-  test('computes the % breakdown of a single completed story\'s own cycle', () => {
+  test('computes the days spent in each status of a single completed story', () => {
     const activities = [activity({
       isDone: true,
       statusHistory: [
@@ -891,33 +893,88 @@ describe('computeStatusCycleTime', () => {
         segment('Concluída', '2026-09-07', '2026-09-07'),          // ignorado
       ],
     })];
-    // total não-terminal = 6 dias
     const result = computeStatusCycleTime(activities);
-    expect(result.find((r) => r.status === 'Ainda não iniciada')?.averagePercent).toBeCloseTo((1 / 6) * 100);
-    expect(result.find((r) => r.status === 'Em andamento')?.averagePercent).toBeCloseTo((4 / 6) * 100);
-    expect(result.find((r) => r.status === 'Em code review')?.averagePercent).toBe(0);
+    expect(result.find((r) => r.status === 'Ainda não iniciada')?.averageDays).toBe(1);
+    expect(result.find((r) => r.status === 'Em andamento')?.averageDays).toBe(4);
+    expect(result.find((r) => r.status === 'Em code review')?.averageDays).toBe(0);
   });
 
-  test('averages equally across stories, not weighted by story points or cycle length', () => {
-    // story A: ciclo de 2 dias, 50%/50%; story B: ciclo de 20 dias, 90%/10% — média simples das %, não dos dias.
+  test('averages equally across stories (not weighted by story points), and only over stories that passed through each status', () => {
     const activities = [
-      activity({ key: 'A', isDone: true, storyPoints: 1, statusHistory: [segment('Em andamento', '2026-09-01', '2026-09-02'), segment('Em testes', '2026-09-02', '2026-09-03')] }),
-      activity({ key: 'B', isDone: true, storyPoints: 100, statusHistory: [segment('Em andamento', '2026-09-01', '2026-09-19'), segment('Em testes', '2026-09-19', '2026-09-21')] }),
+      activity({ key: 'A', isDone: true, storyPoints: 1, statusHistory: [segment('Em andamento', '2026-09-01', '2026-09-03'), segment('Em testes', '2026-09-03', '2026-09-04')] }), // Em andamento: 2 dias
+      activity({ key: 'B', isDone: true, storyPoints: 100, statusHistory: [segment('Em andamento', '2026-09-01', '2026-09-07'), segment('Em testes', '2026-09-07', '2026-09-08')] }), // Em andamento: 6 dias
     ];
     const result = computeStatusCycleTime(activities);
-    // A: Em andamento 50%, Em testes 50%. B: Em andamento 90%, Em testes 10%. Média: 70% / 30%.
-    expect(result.find((r) => r.status === 'Em andamento')?.averagePercent).toBeCloseTo(70);
-    expect(result.find((r) => r.status === 'Em testes')?.averagePercent).toBeCloseTo(30);
+    // média simples dos dias (2+6)/2 = 4, não ponderada por Story Points.
+    expect(result.find((r) => r.status === 'Em andamento')?.averageDays).toBeCloseTo(4);
+    expect(result.find((r) => r.status === 'Em testes')?.averageDays).toBeCloseTo(1);
   });
 
-  test('excludes activities that are not isDone, even if testDone (functionally complete)', () => {
+  test('a story that skipped a status (e.g. never entered code review) does not drag down that status\'s average', () => {
+    const activities = [
+      activity({ key: 'A', isDone: true, statusHistory: [segment('Em code review', '2026-09-01', '2026-09-05')] }), // 4 dias
+      activity({ key: 'B', isDone: true, statusHistory: [segment('Em andamento', '2026-09-01', '2026-09-02')] }), // nunca passou por code review
+    ];
+    const result = computeStatusCycleTime(activities);
+    // média só entre quem passou por "Em code review" (só A) -> 4, não (4+0)/2=2.
+    expect(result.find((r) => r.status === 'Em code review')?.averageDays).toBe(4);
+  });
+
+  test('a story still in progress contributes the statuses it already closed, but not the current (still open) one', () => {
+    // Em "Em code review" agora — esse segmento ainda está em aberto (é o último da lista), não
+    // conta ainda. "Ainda não iniciada" e "Em andamento" já fecharam de verdade, contam.
+    const activities = [activity({
+      isDone: false,
+      statusHistory: [
+        segment('Ainda não iniciada', '2026-09-01', '2026-09-02'), // 1 dia, fechado
+        segment('Em andamento', '2026-09-02', '2026-09-05'),       // 3 dias, fechado
+        segment('Em code review', '2026-09-05', '2026-09-08'),     // ainda em aberto (último segmento)
+      ],
+    })];
+    const result = computeStatusCycleTime(activities);
+    expect(result.find((r) => r.status === 'Ainda não iniciada')?.averageDays).toBe(1);
+    expect(result.find((r) => r.status === 'Em andamento')?.averageDays).toBe(3);
+    expect(result.find((r) => r.status === 'Em code review')?.averageDays).toBe(0);
+  });
+
+  test('testDone (Aguardando liberação) but not isDone: that current status is still open, so it does not count yet', () => {
     const activities = [activity({ isDone: false, testDone: true, statusHistory: [segment('Aguardando liberação', '2026-09-01', '2026-09-10')] })];
     const result = computeStatusCycleTime(activities);
-    expect(result.every((r) => r.averagePercent === 0)).toBe(true);
+    expect(result.every((r) => r.averageDays === 0)).toBe(true);
   });
 
-  test('skips a story whose total non-terminal duration is 0 (avoids divide-by-zero)', () => {
+  test('combines an in-progress story\'s closed segments with a fully completed story\'s segments in the same average', () => {
+    const activities = [
+      activity({ key: 'A', isDone: false, statusHistory: [segment('Em andamento', '2026-09-01', '2026-09-03'), segment('Em testes', '2026-09-03', '2026-09-05')] }), // "Em testes" ainda aberto
+      activity({ key: 'B', isDone: true, statusHistory: [segment('Em andamento', '2026-09-01', '2026-09-05')] }),
+    ];
+    const result = computeStatusCycleTime(activities);
+    // "Em andamento" fechado nas duas -> média (2+4)/2 = 3. "Em testes" só a A, e está em aberto -> 0.
+    expect(result.find((r) => r.status === 'Em andamento')?.averageDays).toBe(3);
+    expect(result.find((r) => r.status === 'Em testes')?.averageDays).toBe(0);
+  });
+
+  test('does not throw for a story with only a "Concluída" segment (no non-terminal history)', () => {
     const activities = [activity({ isDone: true, statusHistory: [segment('Concluída', '2026-09-01', '2026-09-01')] })];
     expect(() => computeStatusCycleTime(activities)).not.toThrow();
+  });
+
+  test('includes "Correção de bugs" and "Teste de bugs" days, in order between "Em testes" and "Aguardando liberação"', () => {
+    const activities = [activity({
+      isDone: true,
+      statusHistory: [
+        segment('Em testes', '2026-09-01', '2026-09-03'),
+        segment('Correção de bugs', '2026-09-03', '2026-09-05'), // 2 dias
+        segment('Teste de bugs', '2026-09-05', '2026-09-06'),    // 1 dia
+        segment('Aguardando liberação', '2026-09-03', '2026-09-07'),
+        segment('Concluída', '2026-09-07', '2026-09-07'),
+      ],
+    })];
+    const result = computeStatusCycleTime(activities);
+    expect(result.map((r) => r.status)).toEqual([
+      'Ainda não iniciada', 'Em andamento', 'Em code review', 'Ag. início dos testes', 'Em testes', 'Correção de bugs', 'Teste de bugs', 'Aguardando liberação',
+    ]);
+    expect(result.find((r) => r.status === 'Correção de bugs')?.averageDays).toBe(2);
+    expect(result.find((r) => r.status === 'Teste de bugs')?.averageDays).toBe(1);
   });
 });

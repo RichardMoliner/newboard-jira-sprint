@@ -444,6 +444,8 @@ const CYCLE_STATUS_ORDER = [
   'Em code review',
   'Ag. início dos testes',
   'Em testes',
+  'Correção de bugs',
+  'Teste de bugs',
   'Aguardando liberação',
 ];
 
@@ -454,34 +456,46 @@ function daysBetween(startISO: string, endISO: string): number {
 
 export interface StatusCycleTimeSummary {
   status: string;
-  averagePercent: number;
+  averageDays: number;
 }
 
 /**
- * Pra cada story concluída (isDone), calcula o % do seu próprio ciclo (excluindo "Concluída") gasto
- * em cada status não-terminal, e depois tira a média simples dessas % entre as stories — cada story
- * concluída conta igualmente, sem peso por Story Points nem por duração do ciclo (decisão de design,
- * não um bug). Sempre devolve uma entrada pra cada status da ordem fixa do ciclo, mesmo com 0%.
+ * Pra cada story (concluída ou não), pega quantos dias corridos ela passou em cada status
+ * não-terminal (excluindo "Concluída") que ela já FECHOU de verdade, e tira a média simples desses
+ * dias entre as stories que de fato passaram por aquele status — cada story conta igualmente, sem
+ * peso por Story Points (decisão de design, não um bug); uma story que pulou um status (ex.: nunca
+ * entrou em code review) não entra na média dele.
+ *
+ * Mostra o gráfico incompleto, com os status que já temos, em vez de esperar a story terminar: uma
+ * story ainda em andamento entra com os status que ela já fechou (ex.: "Ainda não iniciada" e "Em
+ * andamento", se ela está em code review agora), mas o status ATUAL (o último segmento, que
+ * `computeStatusHistory` ainda mantém em aberto até hoje) fica de fora — ele ainda está em
+ * andamento, contá-lo agora inflaria a média com uma duração que ainda não terminou. Assim que a
+ * story avançar de fase (e, no fim, chegar em "Atendida"), aquele status fecha de vez e passa a
+ * contar — a informação vai sendo acrescentada aos poucos, não tudo de uma vez só no final.
+ *
+ * Sempre devolve uma entrada pra cada status da ordem fixa do ciclo, mesmo com 0 dias (nenhuma
+ * story fechou aquele status ainda).
  */
 export function computeStatusCycleTime(activities: Activity[]): StatusCycleTimeSummary[] {
-  const percentsByStatus = new Map<string, number[]>();
+  const daysByStatus = new Map<string, number[]>();
 
   for (const activity of activities) {
-    if (!activity.isDone) continue;
     const nonTerminal = activity.statusHistory.filter((s) => s.status !== 'Concluída');
-    const totalDays = sum(nonTerminal.map((s) => daysBetween(s.start, s.end)));
-    if (totalDays <= 0) continue;
-    for (const segment of nonTerminal) {
-      const percent = (daysBetween(segment.start, segment.end) / totalDays) * 100;
-      const list = percentsByStatus.get(segment.status) ?? [];
-      list.push(percent);
-      percentsByStatus.set(segment.status, list);
+    // Pra uma story ainda não concluída, o último segmento é o status ATUAL — ainda em aberto, não
+    // conta. Uma story já concluída não tem segmento em aberto (todos os não-terminais já fecharam
+    // de verdade), então nada é descartado.
+    const closedSegments = activity.isDone ? nonTerminal : nonTerminal.slice(0, -1);
+    for (const segment of closedSegments) {
+      const list = daysByStatus.get(segment.status) ?? [];
+      list.push(daysBetween(segment.start, segment.end));
+      daysByStatus.set(segment.status, list);
     }
   }
 
   return CYCLE_STATUS_ORDER.map((status) => {
-    const list = percentsByStatus.get(status) ?? [];
-    return { status, averagePercent: list.length > 0 ? sum(list) / list.length : 0 };
+    const list = daysByStatus.get(status) ?? [];
+    return { status, averageDays: list.length > 0 ? sum(list) / list.length : 0 };
   });
 }
 

@@ -353,7 +353,10 @@ export default function IndicatorsView({
           >
             <BugLabelsPieChart summaries={bugLabelSummaries} />
           </Section>
-          <Section title="Gargalo do fluxo (% médio de tempo por status, tarefas concluídas)">
+          <Section
+            title="Gargalo do fluxo (média de dias por status)"
+            subtitle="Inclui tarefas em andamento, com os status que elas já fecharam — o status atual delas ainda não entra, só quando fechar."
+          >
             <StatusBottleneckChart summaries={statusCycleTime} />
           </Section>
         </div>

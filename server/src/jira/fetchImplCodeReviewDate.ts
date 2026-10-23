@@ -1,39 +1,7 @@
 import type { JiraCredentials } from '../mcp/client.js';
-import { fetchIssueChangelog, type ChangelogHistory } from './fetchSprintEntry.js';
+import { fetchIssueChangelog, findStatusEnteredDate } from './fetchSprintEntry.js';
 
 const AWAITING_CODE_REVIEW_STATUS = 'Aguardando liberação para testes';
-
-function dateOnly(isoDateTime: string): string {
-  return isoDateTime.slice(0, 10);
-}
-
-function normalize(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase();
-}
-
-/**
- * Acha a data (YYYY-MM-DD) em que a subtarefa entrou pela PRIMEIRA vez no status informado, a
- * partir do changelog do Jira. Diferente de `findDoneTransitionDate` (que pega a transição mais
- * recente), aqui usamos a primeira ocorrência de propósito: se a review foi reaberta e a subtarefa
- * voltou pro status depois, o que importa pro ciclo é quando ela entrou em code review pela
- * primeira vez. O timestamp bruto do changelog é truncado para data-only, igual todo outro sinal
- * de data do pipeline (comparações usam string compare de datas ISO, que quebra se misturar
- * timestamp com data-only).
- */
-export function findStatusEnteredDate(histories: ChangelogHistory[], targetStatus: string): string | null {
-  const normalizedTarget = normalize(targetStatus);
-  const matches = histories
-    .flatMap((h) => h.items.map((item) => ({ created: h.created, item })))
-    .filter(({ item }) => item.field === 'status' && normalize(item.toString ?? '') === normalizedTarget);
-
-  if (matches.length === 0) return null;
-
-  matches.sort((a, b) => a.created.localeCompare(b.created));
-  return dateOnly(matches[0].created);
-}
 
 interface CacheEntry {
   updated: string;

@@ -235,6 +235,7 @@ async function fetchActivitiesForSprintScope(
         developerRoles,
         sprintEnteredAt: historyFactsByStoryKey.get(story.key)?.sprintEnteredAt ?? null,
         doneTransitionDate: historyFactsByStoryKey.get(story.key)?.doneTransitionDate ?? null,
+        emAndamentoEnteredAt: historyFactsByStoryKey.get(story.key)?.emAndamentoEnteredAt ?? null,
         implCodeReviewEnteredAt: implCodeReviewEnteredAtByParent.get(story.key) ?? null,
         legalRequirement: legalInfoByStoryKey.get(story.key)?.legalRequirement ?? null,
         legalDeadline: legalInfoByStoryKey.get(story.key)?.legalDeadline ?? null,

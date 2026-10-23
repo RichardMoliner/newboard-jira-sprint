@@ -78,6 +78,24 @@ function splitBugWorklogHoursByRole(
   return { implBugsLoggedHours: implHours, testBugsLoggedHours: testHours };
 }
 
+/**
+ * Data do primeiro e do último apontamento de um papel (dev ou tester) em qualquer bug da story —
+ * usado como o período das fases "Correção de bugs" (dev) e "Teste de bugs" (tester) no histórico
+ * de status. `null` nos dois quando ninguém com esse papel apontou em nenhum bug dela.
+ */
+function bugWorklogDateRangeByRole(
+  bugs: BugSubtask[],
+  developerRoles: Map<string, DeveloperRole>,
+  role: DeveloperRole,
+): { first: string | null; last: string | null } {
+  const dates = bugs
+    .flatMap((bug) => bug.worklogEntries)
+    .filter((entry) => developerRoles.get(entry.author) === role)
+    .map((entry) => entry.date)
+    .sort();
+  return { first: dates[0] ?? null, last: dates[dates.length - 1] ?? null };
+}
+
 export function mapActivity(params: {
   story: RawStory;
   sprint: ParsedSprint;
@@ -113,6 +131,11 @@ export function mapActivity(params: {
    * como deliveredDate quando a story está concluída, em vez de `story.updated` (que pode ter sido
    * tocado bem depois da entrega real, por algo sem relação). Null sem esse histórico. */
   doneTransitionDate?: string | null;
+  /** Data (YYYY-MM-DD) em que o status da PRÓPRIA story mudou pra "Em andamento" no Jira (via
+   * changelog); usada como início da fase "Em andamento" no histórico de status. Null se isso nunca
+   * aconteceu literalmente (progresso só acompanhado pelas subtarefas) — nesse caso cai pro
+   * `implStartDate`. */
+  emAndamentoEnteredAt?: string | null;
   /** Nome da exigência legal/regulatória (campo "Exigência" do Jira); null quando a story não é uma exigência legal. */
   legalRequirement?: string | null;
   /** Data-limite de entrega da exigência (campo "Data final" do Jira); null sem prazo definido. */
@@ -141,6 +164,7 @@ export function mapActivity(params: {
     developerRoles = new Map(),
     sprintEnteredAt = null,
     doneTransitionDate = null,
+    emAndamentoEnteredAt = null,
     legalRequirement = null,
     legalDeadline = null,
     baseUrl,
@@ -170,6 +194,10 @@ export function mapActivity(params: {
   // Primeira data de apontamento em "Teste" — usada como marco de entrada em "Em testes" no
   // histórico de status.
   const firstTestWorklogDate = worklogEntries.find((entry) => entry.subtaskType === 'Teste')?.date ?? null;
+  // Período das fases "Correção de bugs" (dev) e "Teste de bugs" (tester) no histórico de status —
+  // do primeiro ao último apontamento de cada papel em qualquer bug da story.
+  const { first: firstDevBugWorklogDate, last: lastDevBugWorklogDate } = bugWorklogDateRangeByRole(bugs, developerRoles, 'dev');
+  const { first: firstTesterBugWorklogDate, last: lastTesterBugWorklogDate } = bugWorklogDateRangeByRole(bugs, developerRoles, 'tester');
   // Progressão do status conforme as subtarefas avançam, quando o status do Jira ainda não reflete isso:
   // Teste atendida -> aguardando liberação; Implementação atendida com apontamento de teste -> em
   // testes; Implementação atendida sem apontamento de teste ainda -> aguardando início dos testes.
@@ -222,6 +250,9 @@ export function mapActivity(params: {
 
   const statusHistory = computeStatusHistory({
     storyCreated: story.created,
+    sprintEnteredAt,
+    isCarried: carried,
+    emAndamentoEnteredAt,
     implStartDate,
     implCodeReviewEnteredAt,
     implDone,
@@ -229,6 +260,10 @@ export function mapActivity(params: {
     firstTestWorklogDate,
     testDone,
     testDoneDate,
+    firstDevBugWorklogDate,
+    lastDevBugWorklogDate,
+    firstTesterBugWorklogDate,
+    lastTesterBugWorklogDate,
     isDone,
     doneTransitionDate,
     storyUpdated: story.updated,

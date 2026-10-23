@@ -1,48 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { findStatusEnteredDate, latestOrNull } from './fetchImplCodeReviewDate.js';
-import type { ChangelogHistory } from './fetchSprintEntry.js';
+import { latestOrNull } from './fetchImplCodeReviewDate.js';
 
-describe('findStatusEnteredDate', () => {
-  test('returns null when there is no changelog history at all', () => {
-    expect(findStatusEnteredDate([], 'Aguardando liberação para testes')).toBeNull();
-  });
-
-  test('returns null when no history item touches the status field', () => {
-    const histories: ChangelogHistory[] = [
-      { created: '2026-09-10T09:00:00.000-0300', items: [{ field: 'Sprint', toString: 'Alguma Sprint' }] },
-    ];
-    expect(findStatusEnteredDate(histories, 'Aguardando liberação para testes')).toBeNull();
-  });
-
-  test('ignores status changes to a different status', () => {
-    const histories: ChangelogHistory[] = [
-      { created: '2026-09-10T09:00:00.000-0300', items: [{ field: 'status', toString: 'Em andamento' }] },
-    ];
-    expect(findStatusEnteredDate(histories, 'Aguardando liberação para testes')).toBeNull();
-  });
-
-  test('matches case/accent-insensitively, same as groupSubtasks.isAwaitingCodeReviewStatus', () => {
-    const histories: ChangelogHistory[] = [
-      { created: '2026-09-10T09:00:00.000-0300', items: [{ field: 'status', toString: 'AGUARDANDO LIBERACAO PARA TESTES' }] },
-    ];
-    expect(findStatusEnteredDate(histories, 'Aguardando liberação para testes')).toBe('2026-09-10');
-  });
-
-  test('picks the FIRST occurrence by `created`, not the most recent (reopened review)', () => {
-    const histories: ChangelogHistory[] = [
-      { created: '2026-09-12T09:00:00.000-0300', items: [{ field: 'status', toString: 'Aguardando liberação para testes' }] },
-      { created: '2026-09-10T09:00:00.000-0300', items: [{ field: 'status', toString: 'Aguardando liberação para testes' }] },
-    ];
-    expect(findStatusEnteredDate(histories, 'Aguardando liberação para testes')).toBe('2026-09-10');
-  });
-
-  test('truncates the matched timestamp to YYYY-MM-DD', () => {
-    const histories: ChangelogHistory[] = [
-      { created: '2026-09-05T09:00:00.000-0300', items: [{ field: 'status', toString: 'Aguardando liberação para testes' }] },
-    ];
-    expect(findStatusEnteredDate(histories, 'Aguardando liberação para testes')).toBe('2026-09-05');
-  });
-});
+// `findStatusEnteredDate` mudou de dono — é uma função genérica (não específica de code review),
+// agora mora em `fetchSprintEntry.ts` junto das outras funções que extraem fatos do changelog;
+// seus testes foram pra `fetchSprintEntry.test.ts`.
 
 describe('latestOrNull', () => {
   test('returns null when every date is null (no subtask ever reached the status)', () => {
