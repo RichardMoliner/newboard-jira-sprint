@@ -27,6 +27,7 @@ describe('configStore', () => {
       dashDelayBar: null,
       autoRefreshEnabled: null,
       sprintSettings: {},
+      webhooks: { aplicacao: null, extensao: null },
     });
   });
 
@@ -41,6 +42,7 @@ describe('configStore', () => {
       dashDelayBar: null,
       autoRefreshEnabled: null,
       sprintSettings: {},
+      webhooks: { aplicacao: null, extensao: null },
     });
   });
 
@@ -64,6 +66,7 @@ describe('configStore', () => {
           includedInGroupFilter: false,
         },
       },
+      webhooks: { aplicacao: null, extensao: null },
     });
     expect(await readConfig(configPath)).toEqual({
       vertical: 'CONTRATOS',
@@ -83,6 +86,7 @@ describe('configStore', () => {
           includedInGroupFilter: false,
         },
       },
+      webhooks: { aplicacao: null, extensao: null },
     });
   });
 
@@ -106,6 +110,7 @@ describe('configStore', () => {
           includedInGroupFilter: true,
         },
       },
+      webhooks: { aplicacao: null, extensao: null },
     });
     await writeConfig(configPath, {
       vertical: 'FINANCAS',
@@ -115,6 +120,7 @@ describe('configStore', () => {
       dashDelayBar: false,
       autoRefreshEnabled: true,
       sprintSettings: {},
+      webhooks: { aplicacao: null, extensao: null },
     });
     expect(await readConfig(configPath)).toEqual({
       vertical: 'FINANCAS',
@@ -124,6 +130,7 @@ describe('configStore', () => {
       dashDelayBar: false,
       autoRefreshEnabled: true,
       sprintSettings: {},
+      webhooks: { aplicacao: null, extensao: null },
     });
   });
 
@@ -139,5 +146,27 @@ describe('configStore', () => {
       sprintSettings: undefined as unknown as Record<string, never>,
     });
     expect((await readConfig(configPath)).sprintSettings).toEqual({});
+  });
+
+  test('readConfig traz webhooks nulos quando ausentes no arquivo', async () => {
+    const configPath = await tempConfigPath();
+    const config = await readConfig(configPath);
+    expect(config.webhooks).toEqual({ aplicacao: null, extensao: null });
+  });
+
+  test('writeConfig e readConfig fazem round-trip dos webhooks', async () => {
+    const configPath = await tempConfigPath();
+    await writeConfig(configPath, {
+      vertical: null,
+      jiraUsername: null,
+      jiraPassword: null,
+      hoursPerDay: null,
+      dashDelayBar: null,
+      autoRefreshEnabled: null,
+      sprintSettings: {},
+      webhooks: { aplicacao: 'https://a', extensao: null },
+    });
+    const read = await readConfig(configPath);
+    expect(read.webhooks).toEqual({ aplicacao: 'https://a', extensao: null });
   });
 });

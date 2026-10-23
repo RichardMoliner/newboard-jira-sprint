@@ -33,6 +33,8 @@ export interface AppConfig {
   /** Horas/PF e prazos por sprint, chaveados pelo id da sprint no Jira — sem entrada aqui, a sprint
    * usa o padrão do sistema pra horas/PF e não tem nenhuma régua de prazo (sem fallback global). */
   sprintSettings: Record<string, SprintSettings>;
+  /** URLs de webhook para notificações de liberação antecipada no Google Chat. */
+  webhooks: { aplicacao: string | null; extensao: string | null };
 }
 
 function emptyConfig(): AppConfig {
@@ -44,6 +46,7 @@ function emptyConfig(): AppConfig {
     dashDelayBar: null,
     autoRefreshEnabled: null,
     sprintSettings: {},
+    webhooks: { aplicacao: null, extensao: null },
   };
 }
 
@@ -59,6 +62,10 @@ export async function readConfig(configPath: string): Promise<AppConfig> {
       dashDelayBar: parsed.dashDelayBar ?? null,
       autoRefreshEnabled: parsed.autoRefreshEnabled ?? null,
       sprintSettings: parsed.sprintSettings ?? {},
+      webhooks: {
+        aplicacao: parsed.webhooks?.aplicacao ?? null,
+        extensao: parsed.webhooks?.extensao ?? null,
+      },
     };
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT' || err instanceof SyntaxError) {
