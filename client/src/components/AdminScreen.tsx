@@ -17,7 +17,6 @@ export default function AdminScreen({ onCancel }: { onCancel: () => void }) {
   const [extensao, setExtensao] = useState('');
   const [aplicacaoSet, setAplicacaoSet] = useState(false);
   const [extensaoSet, setExtensaoSet] = useState(false);
-  const [loadingWebhooks, setLoadingWebhooks] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -27,15 +26,13 @@ export default function AdminScreen({ onCancel }: { onCancel: () => void }) {
     setVerifyError(null);
     try {
       await verifyAdminPassword(password);
+      // Só muda para o estágio 2 depois que o status dos webhooks também carregar — senão, se essa
+      // segunda chamada falhar (rede etc), o componente já teria trocado pra tela do formulário, que
+      // não exibe `verifyError`, deixando o usuário com um formulário "quebrado" sem nenhum erro visível.
+      const status = await getAdminWebhooks(password);
+      setAplicacaoSet(status.aplicacaoSet);
+      setExtensaoSet(status.extensaoSet);
       setAuthorized(true);
-      setLoadingWebhooks(true);
-      try {
-        const status = await getAdminWebhooks(password);
-        setAplicacaoSet(status.aplicacaoSet);
-        setExtensaoSet(status.extensaoSet);
-      } finally {
-        setLoadingWebhooks(false);
-      }
     } catch {
       setVerifyError('Senha incorreta.');
     } finally {
@@ -48,7 +45,13 @@ export default function AdminScreen({ onCancel }: { onCancel: () => void }) {
     setSaving(true);
     setSaveError(null);
     try {
-      const status = await saveAdminWebhooks(password, { aplicacao, extensao });
+      // Só inclui no payload os campos que o usuário de fato preencheu — campo em branco deve
+      // significar "manter o atual" (é isso que o placeholder promete), e o servidor interpreta
+      // ausência de chave como "manter" e string vazia como "limpar" (ver server/src/routes/admin.ts).
+      const payload: { aplicacao?: string; extensao?: string } = {};
+      if (aplicacao.trim()) payload.aplicacao = aplicacao;
+      if (extensao.trim()) payload.extensao = extensao;
+      const status = await saveAdminWebhooks(password, payload);
       setAplicacaoSet(status.aplicacaoSet);
       setExtensaoSet(status.extensaoSet);
       setAplicacao('');
@@ -141,7 +144,6 @@ export default function AdminScreen({ onCancel }: { onCancel: () => void }) {
               value={aplicacao}
               onChange={(e) => setAplicacao(e.target.value)}
               placeholder={aplicacaoSet ? 'Deixe em branco para manter o atual' : ''}
-              disabled={loadingWebhooks}
               style={inputStyle}
             />
           </Field>
@@ -151,7 +153,6 @@ export default function AdminScreen({ onCancel }: { onCancel: () => void }) {
               value={extensao}
               onChange={(e) => setExtensao(e.target.value)}
               placeholder={extensaoSet ? 'Deixe em branco para manter o atual' : ''}
-              disabled={loadingWebhooks}
               style={inputStyle}
             />
           </Field>
@@ -162,7 +163,7 @@ export default function AdminScreen({ onCancel }: { onCancel: () => void }) {
             <button type="button" onClick={onCancel} style={secondaryButtonStyle}>
               Fechar
             </button>
-            <button type="submit" disabled={saving || loadingWebhooks} style={primaryButtonStyle(saving || loadingWebhooks)}>
+            <button type="submit" disabled={saving} style={primaryButtonStyle(saving)}>
               {saving ? 'Salvando...' : 'Salvar'}
             </button>
           </div>
