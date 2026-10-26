@@ -92,6 +92,10 @@ export default function IndicatorsView({
     () => computeHoursPerPfByDeveloper(indicatorActivities, 100 - assumedTestSharePercent),
     [indicatorActivities, assumedTestSharePercent],
   );
+  const hoursPerPfByDeveloperMap = useMemo(
+    () => new Map(hoursPerPfByDeveloper.map((p) => [p.developer, p])),
+    [hoursPerPfByDeveloper],
+  );
   const sprintSummaries = useMemo(() => computeSprintSummaries(indicatorActivities), [indicatorActivities]);
   const statusSummaries = useMemo(() => computeStatusSummaries(indicatorActivities), [indicatorActivities]);
   const statusCycleTime = useMemo(() => computeStatusCycleTime(indicatorActivities), [indicatorActivities]);
@@ -353,35 +357,20 @@ export default function IndicatorsView({
           >
             <BugLabelsPieChart summaries={bugLabelSummaries} />
           </Section>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start', marginTop: 8 }}>
           <Section
             title="Gargalo do fluxo (média de dias por status)"
             subtitle="Inclui tarefas em andamento, com os status que elas já fecharam — o status atual delas ainda não entra, só quando fechar."
           >
             <StatusBottleneckChart summaries={statusCycleTime} />
           </Section>
+
+          <Section title="Sprint burndown">
+            {burndown ? <BurndownChart data={burndown} /> : <Empty text="Selecione 1 ou mais sprints para ver o burndown." />}
+          </Section>
         </div>
-
-        <Section title="Sprint burndown">
-          {burndown ? <BurndownChart data={burndown} /> : <Empty text="Selecione 1 ou mais sprints para ver o burndown." />}
-        </Section>
-      </div>
-
-      <div title={`Horas de Implementação apontadas dividido pelo PF de Implementação (Story Points × fração de Implementação, hoje ${(100 - assumedTestSharePercent).toFixed(0)}%) — considera TODAS as tarefas do dev, concluídas ou não. Ordenado do mais eficiente (menos horas por PF) para o menos.`}>
-        <Section title="Horas / PF por dev">
-          {hoursPerPfByDeveloper.length === 0 ? (
-            <Empty text="Sem dados." />
-          ) : (
-            <Table
-              columns={['Desenvolvedor', `PF Impl. (${(100 - assumedTestSharePercent).toFixed(0)}%)`, 'Horas Impl.', 'Horas/PF']}
-              rows={hoursPerPfByDeveloper.map((p) => [
-                p.developer,
-                p.pfImpl.toFixed(2),
-                p.implHours.toFixed(1),
-                p.hoursPerPf !== null ? p.hoursPerPf.toFixed(2) : '—',
-              ])}
-            />
-          )}
-        </Section>
       </div>
 
       <Section title="⚠️ Atividades em risco (previsão vencida e não concluídas)">
@@ -420,27 +409,45 @@ export default function IndicatorsView({
       </Section>
 
 
-      <Section title="Bugs por profissional">
-        <BarList items={people.filter((p) => p.bugs > 0).map((p) => ({ label: p.person, value: p.bugs }))} max={maxBugs} color="var(--seq-orange-450)" />
-      </Section>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+        <Section title="Bugs por profissional">
+          <BarList
+            items={people
+              .filter((p) => p.bugs > 0)
+              .sort((a, b) => b.bugs - a.bugs)
+              .map((p) => ({ label: p.person, value: p.bugs }))}
+            max={maxBugs}
+            color="var(--seq-orange-450)"
+          />
+        </Section>
 
-      <Section title="Story points em execução por profissional">
-        <BarList items={people.map((p) => ({ label: p.person, value: p.storyPoints }))} max={maxStoryPoints} color="var(--seq-blue-450)" format={(v) => v.toFixed(1)} />
-      </Section>
+        <Section title="Story points em execução por profissional">
+          <BarList items={people.map((p) => ({ label: p.person, value: p.storyPoints }))} max={maxStoryPoints} color="var(--seq-blue-450)" format={(v) => v.toFixed(1)} />
+        </Section>
+      </div>
 
-      <Section title="Indicadores por profissional">
+      <Section
+        title="Indicadores por profissional"
+        subtitle={`Horas/PF considera TODAS as tarefas do dev (concluídas ou não), dividindo as horas de Implementação apontadas pelo PF de Implementação (Story Points × fração de Implementação, hoje ${(100 - assumedTestSharePercent).toFixed(0)}%).`}
+      >
         <Table
-          columns={['Pessoa', 'Ativ.', 'SP', 'Bugs', 'Concluídas', 'Em risco', 'Em andamento', 'Sem estimativa']}
-          rows={people.map((p) => [
-            p.person,
-            p.activities,
-            p.storyPoints.toFixed(1),
-            p.bugs,
-            p.done,
-            <span style={p.atRisk > 0 ? { color: 'var(--status-critical)', fontWeight: 700 } : undefined}>{p.atRisk}</span>,
-            p.inProgress,
-            p.noEstimate,
-          ])}
+          columns={['Pessoa', 'Ativ.', 'SP', 'Bugs', 'Concluídas', 'Em risco', 'Em andamento', 'Sem estimativa', 'PF Impl.', 'Horas Impl.', 'Horas/PF']}
+          rows={people.map((p) => {
+            const hoursPerPf = hoursPerPfByDeveloperMap.get(p.person);
+            return [
+              p.person,
+              p.activities,
+              p.storyPoints.toFixed(1),
+              p.bugs,
+              p.done,
+              <span style={p.atRisk > 0 ? { color: 'var(--status-critical)', fontWeight: 700 } : undefined}>{p.atRisk}</span>,
+              p.inProgress,
+              p.noEstimate,
+              hoursPerPf ? hoursPerPf.pfImpl.toFixed(2) : '—',
+              hoursPerPf ? hoursPerPf.implHours.toFixed(1) : '—',
+              hoursPerPf?.hoursPerPf != null ? hoursPerPf.hoursPerPf.toFixed(2) : '—',
+            ];
+          })}
         />
       </Section>
 
