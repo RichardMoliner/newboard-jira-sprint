@@ -212,44 +212,45 @@ export default function BoardScreen({
             <TabButton active={tab === 'history'} onClick={() => setTab('history')} label="Histórico" />
           </nav>
 
-          {tab === 'history' ? (
-            <div style={{ paddingBottom: 60, overflow: 'auto' }}>
-              <HistoryView sprintSettingsById={sprintSettingsById} />
-            </div>
-          ) : tab === 'timeline' ? (
-            // Só a timeline ganha altura contida com scroll próprio (cabeçalho fixo dentro dela) —
-            // os Indicadores continuam no fluxo normal, a página inteira rola como antes.
-            <div style={{ flex: 1, minHeight: 0, paddingBottom: 24 }}>
-              <TimelineView
-                activities={data.activities}
-                sprints={data.sprints}
-                today={data.today}
-                hoursPerDay={data.hoursPerDay}
-                sprintFilter={sprintFilter}
-                onSprintClick={handleSprintClick}
-                dashDelayBar={dashDelayBar}
-                sprintSettingsById={sprintSettingsById}
-                onSprintSettingsSaved={handleSprintSettingsSaved}
-                onGroupSelectionChange={handleGroupSelectionChange}
-                onGroupClick={handleGroupClick}
-              />
-            </div>
-          ) : (
-            <div style={{ paddingBottom: 60, overflow: 'auto' }}>
-              <IndicatorsView
-                activities={data.activities}
-                sprints={data.sprints}
-                today={data.today}
-                hoursPerPfBySprintId={hoursPerPfBySprintId}
-                assumedTestSharePercent={data.assumedTestSharePercent}
-                sprintFilter={sprintFilter}
-                onSprintClick={handleSprintClick}
-                sprintSettingsById={sprintSettingsById}
-                onGroupSelectionChange={handleGroupSelectionChange}
-                onGroupClick={handleGroupClick}
-              />
-            </div>
-          )}
+          {
+            // As três abas ficam sempre montadas (só escondidas com display:none) em vez de
+            // alternar via render condicional — isso preserva o estado interno de cada uma (ex.:
+            // sprints/indicadores já carregados no Histórico) ao trocar de aba e voltar.
+          }
+          <div style={{ display: tab === 'history' ? undefined : 'none', paddingBottom: 60, overflow: 'auto' }}>
+            <HistoryView sprintSettingsById={sprintSettingsById} />
+          </div>
+          {/* Só a timeline ganha altura contida com scroll próprio (cabeçalho fixo dentro dela) —
+              os Indicadores continuam no fluxo normal, a página inteira rola como antes. */}
+          <div style={{ display: tab === 'timeline' ? 'flex' : 'none', flex: 1, minHeight: 0, paddingBottom: 24 }}>
+            <TimelineView
+              activities={data.activities}
+              sprints={data.sprints}
+              today={data.today}
+              hoursPerDay={data.hoursPerDay}
+              sprintFilter={sprintFilter}
+              onSprintClick={handleSprintClick}
+              dashDelayBar={dashDelayBar}
+              sprintSettingsById={sprintSettingsById}
+              onSprintSettingsSaved={handleSprintSettingsSaved}
+              onGroupSelectionChange={handleGroupSelectionChange}
+              onGroupClick={handleGroupClick}
+            />
+          </div>
+          <div style={{ display: tab === 'indicators' ? undefined : 'none', paddingBottom: 60, overflow: 'auto' }}>
+            <IndicatorsView
+              activities={data.activities}
+              sprints={data.sprints}
+              today={data.today}
+              hoursPerPfBySprintId={hoursPerPfBySprintId}
+              assumedTestSharePercent={data.assumedTestSharePercent}
+              sprintFilter={sprintFilter}
+              onSprintClick={handleSprintClick}
+              sprintSettingsById={sprintSettingsById}
+              onGroupSelectionChange={handleGroupSelectionChange}
+              onGroupClick={handleGroupClick}
+            />
+          </div>
         </>
       )}
     </div>
