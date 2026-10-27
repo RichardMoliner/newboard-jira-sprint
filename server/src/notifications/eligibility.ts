@@ -15,6 +15,15 @@ export interface DueNotification {
 
 export const MILESTONES: number[] = [5, 3, 1, 0];
 
+/** Status que marca a tarefa como rejeitada/não cumprida — fica fora da categoria "Concluído" do
+ * Jira (então `isDone` não cobre esse caso), mas também não deve mais receber aviso de liberação
+ * antecipada. */
+const NOT_ATTENDED_STATUS = 'não atendida';
+
+function normalizeStatus(status: string): string {
+  return status.trim().toLowerCase();
+}
+
 /**
  * Checks if an activity is eligible for early-release notifications.
  *
@@ -23,13 +32,15 @@ export const MILESTONES: number[] = [5, 3, 1, 0];
  * - Has a legalDeadline defined
  * - Is NOT in testDone state (Aguardando liberação)
  * - Is NOT isDone (Atendida)
+ * - Is NOT in "Não atendida" status
  */
 export function isEligibleForEarlyDeliveryNotification(activity: Activity): boolean {
   return (
     activity.earlyDelivery &&
     activity.legalDeadline !== null &&
     !activity.testDone &&
-    !activity.isDone
+    !activity.isDone &&
+    normalizeStatus(activity.status) !== NOT_ATTENDED_STATUS
   );
 }
 

@@ -76,6 +76,10 @@ describe('isEligibleForEarlyDeliveryNotification', () => {
   test('não elegível quando isDone (Atendida)', () => {
     expect(isEligibleForEarlyDeliveryNotification(activity({ isDone: true, testDone: true }))).toBe(false);
   });
+
+  test('não elegível quando status é Não atendida, mesmo com isDone false', () => {
+    expect(isEligibleForEarlyDeliveryNotification(activity({ status: 'Não atendida' }))).toBe(false);
+  });
 });
 
 describe('computeDueNotifications', () => {
