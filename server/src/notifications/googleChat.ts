@@ -4,7 +4,8 @@ import { DueNotification } from './eligibility.js';
  * Formats an early delivery notification into a message string for Google Chat.
  *
  * @param notification The DueNotification containing activity and milestone information
- * @returns Formatted message string with 4 lines: header, title, url, dev name
+ * @returns Formatted message string with header, title, url, status and dev name — plus a tester
+ * line when the activity has one assigned.
  */
 export function formatEarlyDeliveryMessage(notification: DueNotification): string {
   const { activity, daysRemaining, milestone } = notification;
@@ -23,7 +24,12 @@ export function formatEarlyDeliveryMessage(notification: DueNotification): strin
   // juntos) — anexa o marco pra que as mensagens não fiquem idênticas no Google Chat.
   header += ` (aviso de ${milestone} dias)`;
 
-  return `${header}\n${activity.title}\n${activity.url}\nDev: ${activity.developer}`;
+  const lines = [header, activity.title, activity.url, `Status: ${activity.status}`, `Dev: ${activity.developer}`];
+  if (activity.tester) {
+    lines.push(`Tester: ${activity.tester}`);
+  }
+
+  return lines.join('\n');
 }
 
 /**

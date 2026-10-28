@@ -58,7 +58,7 @@ describe('formatEarlyDeliveryMessage', () => {
       daysRemaining: 5,
     };
     expect(formatEarlyDeliveryMessage(notification)).toBe(
-      'Liberação antecipada — faltam 5 dias (aviso de 5 dias)\nCorrigir X\nhttps://jira/PROJ-1\nDev: Fulano',
+      'Liberação antecipada — faltam 5 dias (aviso de 5 dias)\nCorrigir X\nhttps://jira/PROJ-1\nStatus: Em andamento\nDev: Fulano',
     );
   });
 
@@ -69,7 +69,7 @@ describe('formatEarlyDeliveryMessage', () => {
       daysRemaining: 1,
     };
     expect(formatEarlyDeliveryMessage(notification)).toBe(
-      'Liberação antecipada — falta 1 dia (aviso de 1 dias)\nW\nhttps://jira/PROJ-9\nDev: Sicrano',
+      'Liberação antecipada — falta 1 dia (aviso de 1 dias)\nW\nhttps://jira/PROJ-9\nStatus: Em andamento\nDev: Sicrano',
     );
   });
 
@@ -80,7 +80,7 @@ describe('formatEarlyDeliveryMessage', () => {
       daysRemaining: 0,
     };
     expect(formatEarlyDeliveryMessage(notification)).toBe(
-      'Liberação antecipada — é hoje (aviso de 0 dias)\nY\nhttps://jira/PROJ-2\nDev: Ciclana',
+      'Liberação antecipada — é hoje (aviso de 0 dias)\nY\nhttps://jira/PROJ-2\nStatus: Em andamento\nDev: Ciclana',
     );
   });
 
@@ -91,7 +91,35 @@ describe('formatEarlyDeliveryMessage', () => {
       daysRemaining: -2,
     };
     expect(formatEarlyDeliveryMessage(notification)).toBe(
-      'Liberação antecipada — prazo já passou (aviso de 0 dias)\nZ\nhttps://jira/PROJ-3\nDev: Beltrano',
+      'Liberação antecipada — prazo já passou (aviso de 0 dias)\nZ\nhttps://jira/PROJ-3\nStatus: Em andamento\nDev: Beltrano',
+    );
+  });
+
+  test('inclui o status sempre, sem linha de Tester quando não há tester', () => {
+    const notification: DueNotification = {
+      activity: activity({ title: 'Corrigir X', url: 'https://jira/PROJ-1', developer: 'Fulano', status: 'Aguardando liberação', tester: null }),
+      milestone: 5,
+      daysRemaining: 5,
+    };
+    expect(formatEarlyDeliveryMessage(notification)).toBe(
+      'Liberação antecipada — faltam 5 dias (aviso de 5 dias)\nCorrigir X\nhttps://jira/PROJ-1\nStatus: Aguardando liberação\nDev: Fulano',
+    );
+  });
+
+  test('inclui a linha de Tester quando há tester definido', () => {
+    const notification: DueNotification = {
+      activity: activity({
+        title: 'Criar a listagem de transferências',
+        url: 'https://desenv.betha.com.br/browse/COM-67668',
+        developer: 'Alício Fernandes da Cunha Neto',
+        status: 'Em testes',
+        tester: 'Fernanda',
+      }),
+      milestone: 1,
+      daysRemaining: 1,
+    };
+    expect(formatEarlyDeliveryMessage(notification)).toBe(
+      'Liberação antecipada — falta 1 dia (aviso de 1 dias)\nCriar a listagem de transferências\nhttps://desenv.betha.com.br/browse/COM-67668\nStatus: Em testes\nDev: Alício Fernandes da Cunha Neto\nTester: Fernanda',
     );
   });
 
