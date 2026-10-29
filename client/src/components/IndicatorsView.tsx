@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Activity, SprintInfo, SprintSettings } from '../types.js';
 import {
   computeBugLabelSummaries,
+  computeBugResolverSummaries,
   computeBurndown,
   computeHoursPerPfByDeveloper,
   computeHoursSummary,
@@ -70,14 +71,19 @@ export default function IndicatorsView({
   );
 
   const [considerCarried, setConsiderCarried] = useState(false);
+  // Mesmo racional de "Considerar herdadas" — desmarcado por padrão, mostra o indicador livre das
+  // tarefas adicionadas depois do início da sprint, pra ver o que foi de fato planejado. Sem
+  // exceção: "Tarefas adicionadas"/"Pontos adicionados" também zeram quando desmarcada, o que é o
+  // próprio sinal de que o filtro está ativo.
+  const [considerAdded, setConsiderAdded] = useState(false);
   // Base usada pela maioria dos indicadores — exclui herdadas por padrão (elas costumam ficar muito
   // tempo paradas antes da entrega e distorcem as médias). "Herdadas", "Em risco" e as tabelas que
   // listam essas próprias atividades ficam de fora dessa regra e usam `filtered` direto, senão
   // desmarcar a checkbox sempre mostraria "Herdadas: 0"/lista vazia e esconderia atrasos reais.
-  const indicatorActivities = useMemo(
-    () => (considerCarried ? filtered : filtered.filter((a) => !a.isCarried)),
-    [filtered, considerCarried],
-  );
+  const indicatorActivities = useMemo(() => {
+    const base = considerCarried ? filtered : filtered.filter((a) => !a.isCarried);
+    return considerAdded ? base : base.filter((a) => !a.addedAfterSprintStart);
+  }, [filtered, considerCarried, considerAdded]);
 
   // Só para os dois campos que precisam sempre refletir TODAS as atividades (ver comentário acima).
   const kpisFull = useMemo(() => computeKpis(filtered, today), [filtered, today]);
@@ -96,11 +102,15 @@ export default function IndicatorsView({
     () => new Map(hoursPerPfByDeveloper.map((p) => [p.developer, p])),
     [hoursPerPfByDeveloper],
   );
-  const sprintSummaries = useMemo(() => computeSprintSummaries(indicatorActivities), [indicatorActivities]);
+  const sprintSummaries = useMemo(
+    () => computeSprintSummaries(indicatorActivities, hoursPerPfBySprintId, assumedTestSharePercent),
+    [indicatorActivities, hoursPerPfBySprintId, assumedTestSharePercent],
+  );
   const statusSummaries = useMemo(() => computeStatusSummaries(indicatorActivities), [indicatorActivities]);
   const statusCycleTime = useMemo(() => computeStatusCycleTime(indicatorActivities), [indicatorActivities]);
   const topBuggy = useMemo(() => topActivitiesByBugCount(indicatorActivities, 10), [indicatorActivities]);
   const bugLabelSummaries = useMemo(() => computeBugLabelSummaries(indicatorActivities), [indicatorActivities]);
+  const bugResolvers = useMemo(() => computeBugResolverSummaries(indicatorActivities), [indicatorActivities]);
   const hoursSummary = useMemo(
     () => computeHoursSummary(indicatorActivities, hoursPerPfBySprintId, assumedTestSharePercent),
     [indicatorActivities, hoursPerPfBySprintId, assumedTestSharePercent],
@@ -108,12 +118,17 @@ export default function IndicatorsView({
 
   const atRisk = filtered.filter((a) => a.isOverdue);
   const carried = filtered.filter((a) => a.isCarried);
-  // Sempre usa `filtered` (ignora a checkbox "Considerar herdadas") — é sobre o escopo real da
-  // sprint, mesmo racional de "Em risco"/"Herdadas" acima.
-  const burndown = useMemo(() => computeBurndown(filtered, sprints, sprintFilter, today), [filtered, sprints, sprintFilter, today]);
+  // Ao contrário de "Em risco"/"Herdadas" (que sempre usam `filtered` pra não esconder atraso
+  // real), o burndown reflete o mesmo escopo dos demais indicadores — respeita as checkboxes
+  // "Considerar herdadas"/"Considerar tarefas adicionadas".
+  const burndown = useMemo(
+    () => computeBurndown(indicatorActivities, sprints, sprintFilter, today),
+    [indicatorActivities, sprints, sprintFilter, today],
+  );
 
   const maxBugs = Math.max(1, ...people.map((p) => p.bugs));
   const maxStoryPoints = Math.max(1, ...people.map((p) => p.storyPoints));
+  const maxResolvedBugs = Math.max(1, ...bugResolvers.map((p) => p.resolvedBugs));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
@@ -151,18 +166,33 @@ export default function IndicatorsView({
         </p>
       </div>
 
-      <label
-        style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--text-secondary)', cursor: 'pointer' }}
-        title="Quando desmarcado (padrão), os indicadores abaixo ignoram tarefas herdadas de sprints anteriores — elas costumam ficar muito tempo paradas antes da entrega e distorcem o cálculo. Exceções: os cards &quot;Em risco&quot;/&quot;Herdadas&quot;, e as seções &quot;Atividades em risco&quot; e &quot;Tarefas herdadas&quot; sempre mostram todas as atividades, com ou sem herdadas."
-      >
-        <input
-          type="checkbox"
-          checked={considerCarried}
-          onChange={(e) => setConsiderCarried(e.target.checked)}
-          style={{ cursor: 'pointer' }}
-        />
-        Considerar herdadas nos indicadores
-      </label>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+        <label
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--text-secondary)', cursor: 'pointer' }}
+          title="Quando desmarcado (padrão), os indicadores abaixo ignoram tarefas herdadas de sprints anteriores — elas costumam ficar muito tempo paradas antes da entrega e distorcem o cálculo. Exceções: os cards &quot;Em risco&quot;/&quot;Herdadas&quot;, e as seções &quot;Atividades em risco&quot; e &quot;Tarefas herdadas&quot; sempre mostram todas as atividades, com ou sem herdadas."
+        >
+          <input
+            type="checkbox"
+            checked={considerCarried}
+            onChange={(e) => setConsiderCarried(e.target.checked)}
+            style={{ cursor: 'pointer' }}
+          />
+          Considerar herdadas nos indicadores
+        </label>
+
+        <label
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--text-secondary)', cursor: 'pointer' }}
+          title="Quando desmarcado (padrão), os indicadores abaixo ignoram tarefas adicionadas à sprint depois que ela começou — um indicador livre do que não estava planejado, sem exceções (inclusive &quot;Tarefas adicionadas&quot;/&quot;Pontos adicionados&quot; zeram)."
+        >
+          <input
+            type="checkbox"
+            checked={considerAdded}
+            onChange={(e) => setConsiderAdded(e.target.checked)}
+            style={{ cursor: 'pointer' }}
+          />
+          Considerar tarefas adicionadas nos indicadores
+        </label>
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <Section title="Visão geral">
@@ -409,7 +439,7 @@ export default function IndicatorsView({
       </Section>
 
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24, alignItems: 'start' }}>
         <Section title="Bugs por profissional">
           <BarList
             items={people
@@ -424,6 +454,14 @@ export default function IndicatorsView({
         <Section title="Story points em execução por profissional">
           <BarList items={people.map((p) => ({ label: p.person, value: p.storyPoints }))} max={maxStoryPoints} color="var(--seq-blue-450)" format={(v) => v.toFixed(1)} />
         </Section>
+
+        <Section title="Maiores resolutores de bugs" subtitle="Bugs com status Atendida, atribuídos ao desenvolvedor do próprio bug (quem de fato resolveu).">
+          <BarList
+            items={bugResolvers.map((p) => ({ label: p.person, value: p.resolvedBugs }))}
+            max={maxResolvedBugs}
+            color="var(--status-good)"
+          />
+        </Section>
       </div>
 
       <Section
@@ -431,29 +469,48 @@ export default function IndicatorsView({
         subtitle={`Horas/PF considera TODAS as tarefas do dev (concluídas ou não), dividindo as horas de Implementação apontadas pelo PF de Implementação (Story Points × fração de Implementação, hoje ${(100 - assumedTestSharePercent).toFixed(0)}%).`}
       >
         <Table
-          columns={['Pessoa', 'Ativ.', 'SP', 'Bugs', 'Concluídas', 'Em risco', 'Em andamento', 'Sem estimativa', 'PF Impl.', 'Horas Impl.', 'Horas/PF']}
-          rows={people.map((p) => {
-            const hoursPerPf = hoursPerPfByDeveloperMap.get(p.person);
-            return [
-              p.person,
-              p.activities,
-              p.storyPoints.toFixed(1),
-              p.bugs,
-              p.done,
-              <span style={p.atRisk > 0 ? { color: 'var(--status-critical)', fontWeight: 700 } : undefined}>{p.atRisk}</span>,
-              p.inProgress,
-              p.noEstimate,
-              hoursPerPf ? hoursPerPf.pfImpl.toFixed(2) : '—',
-              hoursPerPf ? hoursPerPf.implHours.toFixed(1) : '—',
-              hoursPerPf?.hoursPerPf != null ? hoursPerPf.hoursPerPf.toFixed(2) : '—',
-            ];
-          })}
+          columns={['Pessoa', 'Horas/PF', 'Ativ.', 'SP', 'Bugs', 'Concluídas', 'PF Impl.', 'Horas Impl.']}
+          rows={[...people]
+            .sort((a, b) => {
+              const hoursPerPfA = hoursPerPfByDeveloperMap.get(a.person)?.hoursPerPf ?? Infinity;
+              const hoursPerPfB = hoursPerPfByDeveloperMap.get(b.person)?.hoursPerPf ?? Infinity;
+              return hoursPerPfA - hoursPerPfB;
+            })
+            .map((p) => {
+              const hoursPerPf = hoursPerPfByDeveloperMap.get(p.person);
+              return [
+                p.person,
+                hoursPerPf?.hoursPerPf != null ? hoursPerPf.hoursPerPf.toFixed(2) : '—',
+                p.activities,
+                p.storyPoints.toFixed(1),
+                p.bugs,
+                p.done,
+                hoursPerPf ? hoursPerPf.pfImpl.toFixed(2) : '—',
+                hoursPerPf ? hoursPerPf.implHours.toFixed(1) : '—',
+              ];
+            })}
         />
       </Section>
 
-      <Section title="Indicadores por sprint">
+      <Section
+        title="Indicadores por sprint"
+        subtitle="Horas/PF, Horas/PF Impl. e Horas/PF Teste consideram só as tarefas concluídas (ou Aguardando liberação) com apontamento — mesmo cálculo da Produtividade realizada, restrito a cada sprint."
+      >
         <Table
-          columns={['Sprint', 'Atividades', 'SP total', 'Bugs', 'Concluídas', 'Em risco']}
+          columns={[
+            'Sprint',
+            'Atividades',
+            'SP total',
+            'Bugs',
+            'Concluídas',
+            'Em risco',
+            'Horas/PF',
+            'Horas/PF Impl.',
+            'Horas/PF Teste',
+            'Horas Correção Bugs',
+            'Horas Teste Bugs',
+            'Assertividade',
+          ]}
           rows={sprintSummaries.map((s) => [
             s.sprintName,
             s.activities,
@@ -461,6 +518,12 @@ export default function IndicatorsView({
             s.bugs,
             s.done,
             <span style={s.atRisk > 0 ? { color: 'var(--status-critical)' } : undefined}>{s.atRisk}</span>,
+            s.hoursPerPf != null ? s.hoursPerPf.toFixed(2) : '—',
+            s.hoursPerPfImpl != null ? s.hoursPerPfImpl.toFixed(2) : '—',
+            s.hoursPerPfTest != null ? s.hoursPerPfTest.toFixed(2) : '—',
+            s.bugFixHours.toFixed(1),
+            s.bugTestHours.toFixed(1),
+            s.accuracyPercent != null ? `${s.accuracyPercent.toFixed(0)}%` : '—',
           ])}
         />
       </Section>

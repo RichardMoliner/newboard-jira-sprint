@@ -111,6 +111,32 @@ export function computeRealizedProductivity(
   };
 }
 
+export interface BugResolverSummary {
+  person: string;
+  resolvedBugs: number;
+}
+
+/**
+ * Quantidade de bugs com status "Atendida" (resolvidos), agrupados pelo desenvolvedor atribuído ao
+ * PRÓPRIO bug — não o dev da atividade-pai, já que quem resolve o bug pode ser outra pessoa. Bugs
+ * sem desenvolvedor atribuído ficam de fora.
+ */
+export function computeBugResolverSummaries(activities: Activity[]): BugResolverSummary[] {
+  const byPerson = new Map<string, number>();
+
+  for (const activity of activities) {
+    for (const bug of activity.bugs) {
+      if (bug.developer === null) continue;
+      if (bug.status.trim().toLowerCase() !== 'atendida') continue;
+      byPerson.set(bug.developer, (byPerson.get(bug.developer) ?? 0) + 1);
+    }
+  }
+
+  return [...byPerson.entries()]
+    .map(([person, resolvedBugs]) => ({ person, resolvedBugs }))
+    .sort((a, b) => b.resolvedBugs - a.resolvedBugs);
+}
+
 export interface HoursPerPfSummary {
   developer: string;
   /** PF dedicados à Implementação — Story Points × implSharePercent/100, somados de todas as tarefas do dev. */
@@ -193,31 +219,50 @@ export interface SprintSummary {
   bugs: number;
   done: number;
   atRisk: number;
+  /** Mesmo cálculo de `RealizedProductivity`, restrito às atividades desta sprint. */
+  hoursPerPf: number | null;
+  hoursPerPfImpl: number | null;
+  hoursPerPfTest: number | null;
+  /** Mesmo cálculo de `HoursSummary.bugFixHours`/`bugTestHours`, restrito às atividades desta sprint. */
+  bugFixHours: number;
+  bugTestHours: number;
+  accuracyPercent: number | null;
 }
 
-export function computeSprintSummaries(activities: Activity[]): SprintSummary[] {
-  const bySprint = new Map<string, SprintSummary>();
+export function computeSprintSummaries(
+  activities: Activity[],
+  hoursPerPfBySprintId: Record<string, number>,
+  assumedTestSharePercent: number,
+): SprintSummary[] {
+  const bySprintName = new Map<string, Activity[]>();
 
   for (const activity of activities) {
-    const current = bySprint.get(activity.sprintName) ?? {
-      sprintName: activity.sprintName,
-      activities: 0,
-      totalStoryPoints: 0,
-      bugs: 0,
-      done: 0,
-      atRisk: 0,
-    };
-
-    current.activities += 1;
-    current.totalStoryPoints += activity.storyPoints ?? 0;
-    current.bugs += activity.bugs.length;
-    if (isCompleted(activity)) current.done += 1;
-    if (activity.isOverdue) current.atRisk += 1;
-
-    bySprint.set(activity.sprintName, current);
+    const list = bySprintName.get(activity.sprintName);
+    if (list) list.push(activity);
+    else bySprintName.set(activity.sprintName, [activity]);
   }
 
-  return [...bySprint.values()].sort((a, b) => b.totalStoryPoints - a.totalStoryPoints);
+  const summaries = [...bySprintName.entries()].map(([sprintName, sprintActivities]) => {
+    const productivity = computeRealizedProductivity(sprintActivities, hoursPerPfBySprintId, assumedTestSharePercent);
+    const hours = computeHoursSummary(sprintActivities, hoursPerPfBySprintId, assumedTestSharePercent);
+
+    return {
+      sprintName,
+      activities: sprintActivities.length,
+      totalStoryPoints: sum(sprintActivities.map((a) => a.storyPoints ?? 0)),
+      bugs: sum(sprintActivities.map((a) => a.bugs.length)),
+      done: count(sprintActivities, isCompleted),
+      atRisk: count(sprintActivities, (a) => a.isOverdue),
+      hoursPerPf: productivity.hoursPerPf,
+      hoursPerPfImpl: productivity.hoursPerPfImpl,
+      hoursPerPfTest: productivity.hoursPerPfTest,
+      bugFixHours: hours.bugFixHours,
+      bugTestHours: hours.bugTestHours,
+      accuracyPercent: productivity.accuracyPercent,
+    };
+  });
+
+  return summaries.sort((a, b) => b.totalStoryPoints - a.totalStoryPoints);
 }
 
 export interface StatusSummary {

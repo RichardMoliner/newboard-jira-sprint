@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   computeBugLabelSummaries,
+  computeBugResolverSummaries,
   computeBurndown,
   computeHoursPerPfByDeveloper,
   computeHoursSummary,
@@ -428,6 +429,46 @@ describe('computePersonSummaries', () => {
   });
 });
 
+describe('computeBugResolverSummaries', () => {
+  function bug(overrides: Partial<Activity['bugs'][number]> = {}) {
+    return {
+      key: 'B-1',
+      title: 'Bug',
+      developer: null,
+      status: 'Atendida',
+      startDate: '2026-09-01',
+      endDate: '2026-09-02',
+      worklogEntries: [],
+      artifact: null,
+      labels: [],
+      url: '',
+      ...overrides,
+    };
+  }
+
+  test('counts resolved ("Atendida") bugs grouped by the bug\'s own developer, sorted descending', () => {
+    const activities = [
+      activity({ key: 'A', developer: 'Dono da story', bugs: [bug({ developer: 'Fulano' }), bug({ developer: 'Fulano' })] }),
+      activity({ key: 'B', developer: 'Dono da story', bugs: [bug({ developer: 'Sicrano' })] }),
+    ];
+
+    expect(computeBugResolverSummaries(activities)).toEqual([
+      { person: 'Fulano', resolvedBugs: 2 },
+      { person: 'Sicrano', resolvedBugs: 1 },
+    ]);
+  });
+
+  test('ignores bugs that are not "Atendida" (ainda não resolvidos)', () => {
+    const activities = [activity({ key: 'A', bugs: [bug({ developer: 'Fulano', status: 'Em correção' })] })];
+    expect(computeBugResolverSummaries(activities)).toEqual([]);
+  });
+
+  test('ignores bugs sem desenvolvedor atribuído', () => {
+    const activities = [activity({ key: 'A', bugs: [bug({ developer: null })] })];
+    expect(computeBugResolverSummaries(activities)).toEqual([]);
+  });
+});
+
 describe('computeHoursPerPfByDeveloper', () => {
   test('computes PF dedicated to implementation (storyPoints * implSharePercent/100) and hours de Impl. dividido pelo PF', () => {
     const activities = [activity({ developer: 'Fulano', storyPoints: 10, implLoggedHours: 14 })];
@@ -483,7 +524,7 @@ describe('computeSprintSummaries', () => {
       activity({ key: 'C', sprintName: 'Sprint 2', storyPoints: 3 }),
     ];
 
-    const summaries = computeSprintSummaries(activities);
+    const summaries = computeSprintSummaries(activities, hpf(4), 30);
     const sprint1 = summaries.find((s) => s.sprintName === 'Sprint 1');
 
     expect(sprint1).toEqual({
@@ -493,13 +534,44 @@ describe('computeSprintSummaries', () => {
       bugs: 0,
       done: 1,
       atRisk: 1,
+      hoursPerPf: null,
+      hoursPerPfImpl: null,
+      hoursPerPfTest: null,
+      bugFixHours: 0,
+      bugTestHours: 0,
+      accuracyPercent: null,
     });
   });
 
   test('counts a testDone (Aguardando liberação) activity as done', () => {
     const activities = [activity({ key: 'A', sprintName: 'Sprint 1', isDone: false, testDone: true })];
-    const summaries = computeSprintSummaries(activities);
+    const summaries = computeSprintSummaries(activities, hpf(4), 30);
     expect(summaries.find((s) => s.sprintName === 'Sprint 1')?.done).toBe(1);
+  });
+
+  test('computes horas/PF, horas/PF impl/teste, horas de bug e assertividade por sprint', () => {
+    const activities = [
+      activity({
+        key: 'A',
+        sprintName: 'Sprint 1',
+        storyPoints: 10,
+        isDone: true,
+        implLoggedHours: 21,
+        testLoggedHours: 9,
+        implBugsLoggedHours: 2,
+        testBugsLoggedHours: 1,
+      }),
+    ];
+
+    const summaries = computeSprintSummaries(activities, hpf(4), 30);
+    const sprint1 = summaries.find((s) => s.sprintName === 'Sprint 1');
+
+    expect(sprint1?.hoursPerPf).toBeCloseTo(3); // (21+9) / 10
+    expect(sprint1?.hoursPerPfImpl).toBeCloseTo(3); // 21 / (10 * 0.7)
+    expect(sprint1?.hoursPerPfTest).toBeCloseTo(3); // 9 / (10 * 0.3)
+    expect(sprint1?.bugFixHours).toBe(2);
+    expect(sprint1?.bugTestHours).toBe(1);
+    expect(sprint1?.accuracyPercent).toBeCloseTo(75); // 30 apontadas / (10 * 4 estimado) * 100
   });
 });
 
