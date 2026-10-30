@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { addDays, isBusinessDay, listBusinessDays } from './businessDays.js';
+import { addBusinessDays, addDays, isBusinessDay, listBusinessDays } from './businessDays.js';
 
 describe('isBusinessDay', () => {
   test('returns true for a weekday with no holiday', () => {
@@ -26,6 +26,17 @@ describe('addDays', () => {
 
   test('crosses a month boundary', () => {
     expect(addDays('2026-09-30', 1)).toBe('2026-10-01');
+  });
+});
+
+describe('addBusinessDays', () => {
+  test('returns the start date itself when days is 0', () => {
+    expect(addBusinessDays('2026-09-03', 0)).toBe('2026-09-03');
+  });
+
+  test('skips weekend and the national holiday in between', () => {
+    // 2026-09-03 (qui) + 2 dias úteis: pula sexta 04 (conta), sábado 05, domingo 06, feriado 07/09 -> cai em 08 (ter)
+    expect(addBusinessDays('2026-09-03', 2)).toBe('2026-09-08');
   });
 });
 

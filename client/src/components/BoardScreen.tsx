@@ -37,7 +37,8 @@ export default function BoardScreen({
   const [sprintSettingsById, setSprintSettingsById] = useState<Record<string, SprintSettings>>({});
   const [sprintSettingsLoaded, setSprintSettingsLoaded] = useState(false);
   const appliedInitialSprintFilter = useRef(false);
-  const { data, loading, error, refresh, secondsToNextRefresh, progressMessages } = useBoardData(autoRefreshEnabled);
+  const { data, loading, error, refresh, recomputeSprintEstimates, secondsToNextRefresh, progressMessages } =
+    useBoardData(autoRefreshEnabled);
 
   useEffect(() => {
     getConfig().then((config) => {
@@ -64,11 +65,14 @@ export default function BoardScreen({
   }, [data, sprintSettingsById]);
 
   // Chamado pelo pop-up de configuração da sprint (ícone de engrenagem na pill, Linha do tempo) após
-  // salvar — atualiza a régua de prazo na hora (sem precisar recarregar) e busca os dados de novo
-  // (horas/PF pode ter mudado, o que recalcula as estimativas de toda atividade daquela sprint).
+  // salvar — atualiza a régua de prazo na hora e recalcula localmente as estimativas da sprint
+  // (horas/PF pode ter mudado), sem buscar os dados de novo no Jira.
   function handleSprintSettingsSaved(sprintId: string, settings: SprintSettings) {
     setSprintSettingsById((prev) => ({ ...prev, [sprintId]: settings }));
-    refresh();
+    if (!data) return;
+    const hoursPerPf = settings.hoursPerPf ?? data.defaultHoursPerPf;
+    const hoursPerDay = settings.hoursPerDay ?? data.hoursPerDay;
+    recomputeSprintEstimates(sprintId, hoursPerPf, hoursPerDay);
   }
 
   // Clique normal seleciona só aquela sprint; shift+clique soma/remove da seleção atual,

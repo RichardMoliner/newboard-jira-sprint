@@ -70,6 +70,19 @@ export function addDays(iso: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** Retorna a data `days` dias úteis depois de startISO (0 retorna a própria startISO). */
+export function addBusinessDays(startISO: string, days: number): string {
+  let current = startISO;
+  let remaining = days;
+  while (remaining > 0) {
+    current = addDays(current, 1);
+    if (isBusinessDay(current)) {
+      remaining -= 1;
+    }
+  }
+  return current;
+}
+
 /** Lista os dias úteis (sem fins de semana nem feriados) entre startISO e endISO, inclusive. */
 export function listBusinessDays(startISO: string, endISO: string): string[] {
   const days: string[] = [];

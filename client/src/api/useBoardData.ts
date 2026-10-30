@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getBoardData, getBoardDataProgress } from './client.js';
+import { recomputeActivityForSprintSettings } from '../compute/recomputeActivity.js';
 import type { BoardDataResponse } from '../types.js';
 
 export const AUTO_REFRESH_SECONDS = 5 * 60;
@@ -66,5 +67,22 @@ export function useBoardData(autoRefreshEnabled: boolean) {
     return () => clearInterval(interval);
   }, [refresh, autoRefreshEnabled]);
 
-  return { data, loading, error, refresh, secondsToNextRefresh, progressMessages };
+  // Recalcula localmente as atividades de uma sprint após salvar horas/PF (ou horas/dia) dela —
+  // sem buscar nada de novo no Jira, já que todos os dados de entrada (Story Points, data de
+  // início, horas apontadas) já estão carregados. Ver recomputeActivity.ts.
+  const recomputeSprintEstimates = useCallback((sprintId: string, hoursPerPf: number, hoursPerDay: number) => {
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        activities: prev.activities.map((activity) =>
+          activity.sprintId === sprintId
+            ? recomputeActivityForSprintSettings(activity, prev.today, hoursPerPf, hoursPerDay)
+            : activity,
+        ),
+      };
+    });
+  }, []);
+
+  return { data, loading, error, refresh, recomputeSprintEstimates, secondsToNextRefresh, progressMessages };
 }
