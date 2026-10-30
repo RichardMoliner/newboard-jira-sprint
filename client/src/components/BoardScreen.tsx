@@ -239,6 +239,7 @@ export default function BoardScreen({
               onSprintSettingsSaved={handleSprintSettingsSaved}
               onGroupSelectionChange={handleGroupSelectionChange}
               onGroupClick={handleGroupClick}
+              currentUserDisplayName={data.currentUserDisplayName}
             />
           </div>
           <div style={{ display: tab === 'indicators' ? undefined : 'none', paddingBottom: 60, overflow: 'auto' }}>

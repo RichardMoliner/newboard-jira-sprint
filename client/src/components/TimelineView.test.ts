@@ -665,6 +665,60 @@ describe('matchesLegendFilter', () => {
     expect(matchesLegendFilter(overdueNotLate, filters)).toBe(false);
     expect(matchesLegendFilter(both, filters)).toBe(true);
   });
+
+  test('myTasksOnly hides activities whose developer is not the given user', () => {
+    expect(
+      matchesLegendFilter(activity({ developer: 'Fulano' }), {
+        bugOnly: false,
+        atrasoOnly: false,
+        myTasksOnly: true,
+        currentUserDisplayName: 'Ciclana',
+      }),
+    ).toBe(false);
+  });
+
+  test('myTasksOnly keeps activities whose developer matches the given user', () => {
+    expect(
+      matchesLegendFilter(activity({ developer: 'Fulano' }), {
+        bugOnly: false,
+        atrasoOnly: false,
+        myTasksOnly: true,
+        currentUserDisplayName: 'Fulano',
+      }),
+    ).toBe(true);
+  });
+
+  test('myTasksOnly matches case/whitespace-insensitively', () => {
+    expect(
+      matchesLegendFilter(activity({ developer: '  Fulano  ' }), {
+        bugOnly: false,
+        atrasoOnly: false,
+        myTasksOnly: true,
+        currentUserDisplayName: 'fulano',
+      }),
+    ).toBe(true);
+  });
+
+  test('myTasksOnly hides everything when there is no current user to compare against', () => {
+    expect(
+      matchesLegendFilter(activity({ developer: 'Fulano' }), {
+        bugOnly: false,
+        atrasoOnly: false,
+        myTasksOnly: true,
+        currentUserDisplayName: null,
+      }),
+    ).toBe(false);
+  });
+
+  test('myTasksOnly combines with the other filters as AND', () => {
+    const mineNotOverdue = activity({ developer: 'Fulano', isOverdue: false });
+    const overdueNotMine = activity({ developer: 'Ciclana', isOverdue: true });
+    const both = activity({ developer: 'Fulano', isOverdue: true });
+    const filters = { bugOnly: false, atrasoOnly: true, myTasksOnly: true, currentUserDisplayName: 'Fulano' };
+    expect(matchesLegendFilter(mineNotOverdue, filters)).toBe(false);
+    expect(matchesLegendFilter(overdueNotMine, filters)).toBe(false);
+    expect(matchesLegendFilter(both, filters)).toBe(true);
+  });
 });
 
 describe('computeOverrunDash', () => {

@@ -119,4 +119,8 @@ export interface BoardDataResponse {
   assumedTestSharePercent: number;
   sprints: SprintInfo[];
   activities: Activity[];
+  /** Nome de exibição (displayName) do usuário autenticado no Jira, pro filtro "Minhas tarefas" da
+   * Linha do tempo — compara contra `Activity.developer`. Null quando não foi possível descobrir
+   * (ex.: Jira fora do ar) ou quando não é relevante (Histórico de sprints fechadas). */
+  currentUserDisplayName: string | null;
 }

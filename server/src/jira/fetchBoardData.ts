@@ -7,6 +7,7 @@ import { fillTruncatedWorklogs } from './fillTruncatedWorklogs.js';
 import { parseSprintField } from './parseSprintField.js';
 import { getIssueHistoryFacts } from './fetchSprintEntry.js';
 import { getImplCodeReviewEnteredAt, latestOrNull } from './fetchImplCodeReviewDate.js';
+import { fetchCurrentUserDisplayName } from './fetchCurrentUser.js';
 import { report } from './progressLog.js';
 import { mapActivity } from '../domain/mapActivity.js';
 import type { Activity, BoardDataResponse, SprintInfo } from '../domain/types.js';
@@ -261,15 +262,18 @@ export async function fetchBoardData(
   hoursPerDayBySprintId: Record<string, number | null>,
   fallbackHoursPerDay: number | undefined,
 ): Promise<BoardDataResponse> {
-  const { sprints, activities, today } = await fetchActivitiesForSprintScope(
-    vertical,
-    'sprint in openSprints()',
-    'now',
-    credentials,
-    hoursPerPfBySprintId,
-    hoursPerDayBySprintId,
-    fallbackHoursPerDay,
-  );
+  const [{ sprints, activities, today }, currentUserDisplayName] = await Promise.all([
+    fetchActivitiesForSprintScope(
+      vertical,
+      'sprint in openSprints()',
+      'now',
+      credentials,
+      hoursPerPfBySprintId,
+      hoursPerDayBySprintId,
+      fallbackHoursPerDay,
+    ),
+    fetchCurrentUserDisplayName(credentials),
+  ]);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -280,6 +284,7 @@ export async function fetchBoardData(
     assumedTestSharePercent: (1 - IMPL_SHARE) * 100,
     sprints,
     activities,
+    currentUserDisplayName,
   };
 }
 
@@ -317,6 +322,7 @@ export async function fetchClosedSprintsData(
     assumedTestSharePercent: (1 - IMPL_SHARE) * 100,
     sprints,
     activities,
+    currentUserDisplayName: null,
   };
 }
 

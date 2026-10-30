@@ -52,6 +52,7 @@ export default function TimelineView({
   onSprintSettingsSaved,
   onGroupSelectionChange,
   onGroupClick,
+  currentUserDisplayName,
 }: {
   activities: Activity[];
   sprints: SprintInfo[];
@@ -60,6 +61,9 @@ export default function TimelineView({
   sprintFilter: string[];
   onSprintClick: (id: string, shiftKey: boolean) => void;
   dashDelayBar: boolean;
+  /** Nome de exibição do usuário autenticado no Jira, pro botão "Minhas tarefas" — null desabilita o
+   * botão (não foi possível descobrir quem é o usuário atual). */
+  currentUserDisplayName: string | null;
   /** Configuração (horas/PF e prazos) por sprint — sem entrada aqui, a sprint usa o padrão do
    * sistema pra horas/PF e não tem nenhuma régua de prazo. Editável pelo ícone de engrenagem ao
    * lado da pill de cada sprint. */
@@ -89,6 +93,7 @@ export default function TimelineView({
   const [bugFilterActive, setBugFilterActive] = useState(false);
   const [atrasoFilterActive, setAtrasoFilterActive] = useState(false);
   const [addedLateFilterActive, setAddedLateFilterActive] = useState(false);
+  const [myTasksFilterActive, setMyTasksFilterActive] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   function handlePhaseFilterClick(phase: 'impl' | 'test') {
@@ -99,7 +104,13 @@ export default function TimelineView({
     const bySprint = sprintFilter.length === 0 ? activities : activities.filter((a) => sprintFilter.includes(a.sprintId));
     const byDone = hideDone ? bySprint.filter((a) => !a.isDone && !a.testDone) : bySprint;
     const byLegend = byDone.filter((a) =>
-      matchesLegendFilter(a, { bugOnly: bugFilterActive, atrasoOnly: atrasoFilterActive, addedLateOnly: addedLateFilterActive }),
+      matchesLegendFilter(a, {
+        bugOnly: bugFilterActive,
+        atrasoOnly: atrasoFilterActive,
+        addedLateOnly: addedLateFilterActive,
+        myTasksOnly: myTasksFilterActive,
+        currentUserDisplayName,
+      }),
     );
     const query = searchQuery.trim().toLowerCase();
     if (!query) return byLegend;
@@ -110,7 +121,17 @@ export default function TimelineView({
         a.developer.toLowerCase().includes(query) ||
         (a.tester ?? '').toLowerCase().includes(query),
     );
-  }, [activities, sprintFilter, hideDone, bugFilterActive, atrasoFilterActive, addedLateFilterActive, searchQuery]);
+  }, [
+    activities,
+    sprintFilter,
+    hideDone,
+    bugFilterActive,
+    atrasoFilterActive,
+    addedLateFilterActive,
+    myTasksFilterActive,
+    currentUserDisplayName,
+    searchQuery,
+  ]);
 
   // Composição de cada sprint (para os números/tooltip dos botões de filtro) — sempre sobre TODAS
   // as atividades daquela sprint, independente de busca/"ocultar concluídas" ativos no momento.
@@ -412,16 +433,23 @@ export default function TimelineView({
       </div>
 
       <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--gridline)', flexShrink: 0 }}>
-        <Legend
-          phaseFilter={phaseFilter}
-          onPhaseFilterClick={handlePhaseFilterClick}
-          bugFilterActive={bugFilterActive}
-          onBugFilterClick={() => setBugFilterActive((v) => !v)}
-          atrasoFilterActive={atrasoFilterActive}
-          onAtrasoFilterClick={() => setAtrasoFilterActive((v) => !v)}
-          addedLateFilterActive={addedLateFilterActive}
-          onAddedLateFilterClick={() => setAddedLateFilterActive((v) => !v)}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <Legend
+            phaseFilter={phaseFilter}
+            onPhaseFilterClick={handlePhaseFilterClick}
+            bugFilterActive={bugFilterActive}
+            onBugFilterClick={() => setBugFilterActive((v) => !v)}
+            atrasoFilterActive={atrasoFilterActive}
+            onAtrasoFilterClick={() => setAtrasoFilterActive((v) => !v)}
+            addedLateFilterActive={addedLateFilterActive}
+            onAddedLateFilterClick={() => setAddedLateFilterActive((v) => !v)}
+          />
+          <MyTasksFilterButton
+            active={myTasksFilterActive}
+            disabled={!currentUserDisplayName}
+            onClick={() => setMyTasksFilterActive((v) => !v)}
+          />
+        </div>
         {availableDevs.length > 0 && (
           <p style={{ margin: '8px 0 0', fontSize: 10.5, color: 'var(--text-secondary)' }}>
             <span style={{ marginRight: 4 }}>⚠️</span>
@@ -1725,6 +1753,41 @@ function Legend({
   );
 }
 
+/** Botão "Minhas tarefas", ao lado da legenda — mesmo funcionamento de toggle dos itens da legenda
+ * (ex.: "Adicionada"), mas sem cor de categoria própria: filtra o board pelas atividades cujo dev é
+ * o usuário autenticado no Jira. Desabilitado quando não foi possível descobrir esse usuário. */
+function MyTasksFilterButton({ active, disabled, onClick }: { active: boolean; disabled: boolean; onClick: () => void }) {
+  return (
+    <span
+      onClick={disabled ? undefined : onClick}
+      title={
+        disabled
+          ? 'Não foi possível identificar o usuário atual no Jira.'
+          : active
+            ? 'Clique para remover o filtro "Minhas tarefas"'
+            : 'Clique para mostrar só as suas tarefas'
+      }
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '3px 10px',
+        borderRadius: 20,
+        border: `1px solid ${active ? 'var(--series-impl)' : 'var(--gridline)'}`,
+        background: active ? 'color-mix(in srgb, var(--series-impl) 16%, transparent)' : 'transparent',
+        color: disabled ? 'var(--text-muted)' : active ? 'var(--series-impl)' : 'var(--text-secondary)',
+        fontWeight: active ? 700 : 400,
+        fontSize: 11.5,
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
+        marginBottom: 14,
+      }}
+    >
+      Minhas tarefas
+    </span>
+  );
+}
+
 // Nomes em que exibir apenas o primeiro nome gera ambiguidade com outra pessoa.
 const LAST_NAME_OVERRIDES = new Set(['Rafael Pauli']);
 
@@ -2350,11 +2413,21 @@ export function isWorkingOnBugs(developerName: string, activities: Activity[]): 
 /** Filtro de linhas acionado ao clicar nos itens da legenda — combina como E (AND). */
 export function matchesLegendFilter(
   activity: Activity,
-  filters: { bugOnly: boolean; atrasoOnly: boolean; addedLateOnly?: boolean },
+  filters: {
+    bugOnly: boolean;
+    atrasoOnly: boolean;
+    addedLateOnly?: boolean;
+    myTasksOnly?: boolean;
+    currentUserDisplayName?: string | null;
+  },
 ): boolean {
   if (filters.bugOnly && activity.bugs.length === 0) return false;
   if (filters.atrasoOnly && !activity.isOverdue) return false;
   if (filters.addedLateOnly && !activity.addedAfterSprintStart) return false;
+  if (filters.myTasksOnly) {
+    const currentUser = filters.currentUserDisplayName?.trim().toLowerCase();
+    if (!currentUser || activity.developer.trim().toLowerCase() !== currentUser) return false;
+  }
   return true;
 }
 
