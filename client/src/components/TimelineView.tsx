@@ -2377,6 +2377,21 @@ function groupByDeveloper(activities: Activity[]): [string, Activity[]][] {
   return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
 
+/**
+ * A próxima atividade "Ainda não iniciada" da fila de um dev (entre todas as sprints dele). A
+ * ordem natural é por `createdDate` (quem foi criada primeiro é a próxima) — exceto quando o dev
+ * já iniciou alguma outra atividade criada DEPOIS dela: nesse caso ele "pulou a fila", e a
+ * pulada vai para o fim da sub-fila de não iniciadas (atrás das que não foram puladas).
+ */
+export function resolveNextQueuedActivity(activities: Activity[]): Activity | null {
+  const notStarted = activities.filter((a) => a.notStarted);
+  const wasSkipped = (a: Activity) => activities.some((b) => !b.notStarted && b.createdDate > a.createdDate);
+  const queue = [...notStarted].sort(
+    (a, b) => Number(wasSkipped(a)) - Number(wasSkipped(b)) || a.createdDate.localeCompare(b.createdDate),
+  );
+  return queue[0] ?? null;
+}
+
 /** True quando o dev não tem mais nada por implementar entre as atividades listadas — Implementação atendida (ou a story inteira concluída) em todas. Não considera o Teste: esperar o teste não ocupa o dev. */
 export function isDeveloperAvailable(activities: Activity[]): boolean {
   return activities.length > 0 && activities.every((a) => a.implDone || a.isDone);

@@ -21,6 +21,7 @@ import {
   matchesLegendFilter,
   projectDeveloperAvailabilityDate,
   projectTestWindow,
+  resolveNextQueuedActivity,
   shouldShowAvailabilityDate,
   resolveDeadlineRulers,
   type DeadlineRuler,
@@ -62,6 +63,7 @@ function activity(overrides: Partial<Activity> = {}): Activity {
     tester: 'Ciclana',
     storyPoints: 5,
     startDate: '2026-09-03',
+    createdDate: '2026-09-03',
     dueDate: '2026-09-10',
     deliveredDate: null,
     deliveredOnTime: null,
@@ -583,6 +585,57 @@ describe('shouldShowAvailabilityDate', () => {
 
   test('true for a real dev name that is not available', () => {
     expect(shouldShowAvailabilityDate('Fulano', false)).toBe(true);
+  });
+});
+
+describe('resolveNextQueuedActivity', () => {
+  test('returns null when the developer has no notStarted activity', () => {
+    expect(resolveNextQueuedActivity([activity({ notStarted: false })])).toBeNull();
+  });
+
+  test('returns the only notStarted activity when there is just one', () => {
+    const a = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
+    expect(resolveNextQueuedActivity([a])).toBe(a);
+  });
+
+  test('returns the earliest-created notStarted activity when none were skipped', () => {
+    const older = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
+    const newer = activity({ key: 'B', notStarted: true, createdDate: '2026-09-05' });
+    expect(resolveNextQueuedActivity([newer, older])?.key).toBe('A');
+  });
+
+  test('does not consider an activity skipped when the already-started sibling was created before it (normal prioritization)', () => {
+    const olderStartedB = activity({ key: 'B', notStarted: false, createdDate: '2026-08-20' });
+    const newerA = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
+    expect(resolveNextQueuedActivity([olderStartedB, newerA])?.key).toBe('A');
+  });
+
+  test('pushes a skipped notStarted activity to the back of the queue, behind a not-yet-skipped one', () => {
+    // A foi criada primeiro (01/09) mas o dev já iniciou B, criada depois (05/09) — A foi pulada.
+    const skippedA = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
+    const startedB = activity({ key: 'B', notStarted: false, createdDate: '2026-09-05' });
+    const nextC = activity({ key: 'C', notStarted: true, createdDate: '2026-09-08' });
+    expect(resolveNextQueuedActivity([skippedA, startedB, nextC])?.key).toBe('C');
+  });
+
+  test('a skipped notStarted activity is still returned as next when it is the only one in queue', () => {
+    const skippedA = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
+    const doneB = activity({ key: 'B', notStarted: false, isDone: true, createdDate: '2026-09-05' });
+    expect(resolveNextQueuedActivity([skippedA, doneB])?.key).toBe('A');
+  });
+
+  test('sorts two skipped activities between themselves by createdDate too', () => {
+    const skippedOlder = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
+    const skippedNewer = activity({ key: 'B', notStarted: true, createdDate: '2026-09-03' });
+    const startedC = activity({ key: 'C', notStarted: false, createdDate: '2026-09-10' });
+    expect(resolveNextQueuedActivity([skippedNewer, skippedOlder, startedC])?.key).toBe('A');
+  });
+
+  test('two notStarted activities with the exact same createdDate sort deterministically (no crash)', () => {
+    const a = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
+    const b = activity({ key: 'B', notStarted: true, createdDate: '2026-09-01' });
+    expect(() => resolveNextQueuedActivity([a, b])).not.toThrow();
+    expect(['A', 'B']).toContain(resolveNextQueuedActivity([a, b])?.key);
   });
 });
 
