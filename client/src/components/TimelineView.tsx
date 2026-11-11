@@ -3,6 +3,7 @@ import type { Activity, SprintInfo, SprintSettings, TimelineWindow, WorklogEntry
 import { computeStatusSummaries } from '../indicators/computeIndicators.js';
 import { describeBugLabel } from '../bugLabels.js';
 import { addDays, isBusinessDay } from '../businessDays.js';
+import { computeTimeline } from '../compute/timeline.js';
 import {
   groupSprintsByType,
   computeGroupClickFilter,
@@ -2404,7 +2405,7 @@ export function isDeveloperAvailable(activities: Activity[]): boolean {
  * previsão (null).
  */
 export function projectDeveloperAvailabilityDate(activities: Activity[], today: string, hoursPerDay: number): string | null {
-  const pending = activities.filter((a) => !(a.implDone || a.isDone));
+  const pending = activities.filter((a) => !(a.implDone || a.isDone) && !a.notStarted);
   if (pending.length === 0) return null;
   const remainingHours = pending.reduce(
     (sum, a) => sum + Math.max(0, (a.implEstimatedHours ?? 0) - (a.implLoggedHours ?? 0)),
@@ -2413,6 +2414,28 @@ export function projectDeveloperAvailabilityDate(activities: Activity[], today: 
   const daysNeeded = hoursPerDay > 0 ? Math.max(1, Math.ceil(remainingHours / hoursPerDay)) : 1;
   const earliestStart = ceilToBusinessDay(today);
   return addBusinessDays(earliestStart, daysNeeded - 1);
+}
+
+/**
+ * Projeta a janela de Implementação da próxima atividade da fila (ver `resolveNextQueuedActivity`)
+ * de um dev, ancorada em quando ele projeta ficar livre do trabalho REAL já em andamento (ver
+ * `projectDeveloperAvailabilityDate`). Null quando não há próxima atividade na fila, quando ela não
+ * tem Pontos de Função (não dá pra projetar nada), ou quando o dev já está disponível agora (nesse
+ * caso não há âncora de trabalho real pra projetar a partir dela — ver non-goal no design).
+ */
+export function projectNextQueuedWindow(
+  activities: Activity[],
+  today: string,
+  hoursPerDay: number,
+  hoursPerPfBySprintId: Record<string, number>,
+): { activityKey: string; window: TimelineWindow } | null {
+  const next = resolveNextQueuedActivity(activities);
+  if (!next || next.storyPoints === null) return null;
+  const anchor = projectDeveloperAvailabilityDate(activities, today, hoursPerDay);
+  if (anchor === null) return null;
+  const hoursPerPf = hoursPerPfBySprintId[next.sprintId];
+  const timeline = computeTimeline(next.storyPoints, anchor, hoursPerPf, hoursPerDay);
+  return { activityKey: next.key, window: timeline.impl };
 }
 
 /** "-" é o placeholder de nenhum dev vinculado (ver mapActivity no server) — não faz sentido projetar disponibilidade pra "ninguém". */
