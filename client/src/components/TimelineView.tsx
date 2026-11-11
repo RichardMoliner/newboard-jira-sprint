@@ -46,6 +46,7 @@ export default function TimelineView({
   sprints,
   today,
   hoursPerDay,
+  hoursPerPfBySprintId,
   sprintFilter,
   onSprintClick,
   dashDelayBar,
@@ -59,6 +60,9 @@ export default function TimelineView({
   sprints: SprintInfo[];
   today: string;
   hoursPerDay: number;
+  /** Horas/PF efetivas por sprint (config da sprint, com fallback pro padrão da vertical) — usado
+   * pra projetar a janela de Implementação da próxima atividade ainda não iniciada de cada dev. */
+  hoursPerPfBySprintId: Record<string, number>;
   sprintFilter: string[];
   onSprintClick: (id: string, shiftKey: boolean) => void;
   dashDelayBar: boolean;
@@ -158,14 +162,36 @@ export default function TimelineView({
   const groupedSprintIds = useMemo(() => new Set(sprintGroups.flatMap((g) => g.sprints.map((s) => s.id))), [sprintGroups]);
   const allSprintIds = useMemo(() => sprints.map((s) => s.id), [sprints]);
 
+  // Disponibilidade é uma propriedade da PESSOA, não do filtro de sprint/busca ativo no momento —
+  // usa todas as atividades (todas as sprints), senão um dev alocado numa tarefa de outra sprint
+  // aparece como "disponível" só porque essa tarefa está fora do filtro atual.
+  const byDeveloperAcrossAllSprints = useMemo(() => new Map(groupByDeveloper(activities)), [activities]);
+  // Projeção da próxima atividade na fila de cada dev — só entra aqui quando o dev está ocupado
+  // (mesmo critério de `shouldShowAvailabilityDate`), senão não há trabalho real pra ancorar a
+  // projeção (ver non-goal no design: dev já disponível não ganha barra/label de projeção).
+  const nextQueuedWindowByDeveloper = useMemo(() => {
+    const map = new Map<string, { activityKey: string; window: TimelineWindow }>();
+    for (const [developer, items] of byDeveloperAcrossAllSprints) {
+      const available = isDeveloperAvailable(items);
+      if (!shouldShowAvailabilityDate(developer, available)) continue;
+      const result = projectNextQueuedWindow(items, today, hoursPerDay, hoursPerPfBySprintId);
+      if (result) map.set(developer, result);
+    }
+    return map;
+  }, [byDeveloperAcrossAllSprints, today, hoursPerDay, hoursPerPfBySprintId]);
+
   const deadlineRulers = useMemo(
     () => resolveDeadlineRulers(deadlinesActive, sprintSettingsById, sprintFilter, sprints),
     [deadlinesActive, sprintSettingsById, sprintFilter, sprints],
   );
 
   const { minDate, maxDate } = useMemo(
-    () => computeDomain(activities, sprints, today, deadlineRulers.map((r) => r.date)),
-    [activities, sprints, today, deadlineRulers],
+    () =>
+      computeDomain(activities, sprints, today, [
+        ...deadlineRulers.map((r) => r.date),
+        ...[...nextQueuedWindowByDeveloper.values()].map((w) => w.window.end),
+      ]),
+    [activities, sprints, today, deadlineRulers, nextQueuedWindowByDeveloper],
   );
   const days = useMemo(() => buildDayList(minDate, maxDate, today), [minDate, maxDate, today]);
   const dayIndexByDate = useMemo(() => new Map(days.map((d) => [d.date, d.index])), [days]);
@@ -201,10 +227,6 @@ export default function TimelineView({
   const timelineWidth = Math.max(realTimelineWidth, monthStartX + RIGHT_SCROLL_BUFFER);
 
   const grouped = useMemo(() => groupByDeveloper(filtered), [filtered]);
-  // Disponibilidade é uma propriedade da PESSOA, não do filtro de sprint/busca ativo no momento —
-  // usa todas as atividades (todas as sprints), senão um dev alocado numa tarefa de outra sprint
-  // aparece como "disponível" só porque essa tarefa está fora do filtro atual.
-  const byDeveloperAcrossAllSprints = useMemo(() => new Map(groupByDeveloper(activities)), [activities]);
   const devsWorkingOnBugs = useMemo(() => {
     const set = new Set<string>();
     for (const a of activities) {
@@ -585,8 +607,9 @@ export default function TimelineView({
             const developerActivities = byDeveloperAcrossAllSprints.get(developer) ?? [];
             const available = isDeveloperAvailable(developerActivities);
             const workingOnBugs = available && devsWorkingOnBugs.has(developer);
+            const queued = nextQueuedWindowByDeveloper.get(developer) ?? null;
             const availabilityDate = shouldShowAvailabilityDate(developer, available)
-              ? projectDeveloperAvailabilityDate(developerActivities, today, hoursPerDay)
+              ? (queued ? queued.window.end : projectDeveloperAvailabilityDate(developerActivities, today, hoursPerDay))
               : null;
             return (
             <div key={developer} style={{ display: 'contents' }}>
@@ -617,7 +640,7 @@ export default function TimelineView({
                 )}
                 {availabilityDate && (
                   <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 10 }}>
-                    Disponível a partir de {formatShort(availabilityDate)}
+                    Projeção de disponibilidade em {formatShort(availabilityDate)}
                   </span>
                 )}
               </div>
@@ -636,6 +659,7 @@ export default function TimelineView({
                   phaseFilter={phaseFilter}
                   hidePhaseBars={bugFilterActive}
                   dashDelayBar={dashDelayBar}
+                  projectedImplWindow={queued && queued.activityKey === activity.key ? queued.window : null}
                 />
               ))}
             </div>
@@ -744,6 +768,7 @@ function ActivityRow({
   phaseFilter,
   hidePhaseBars,
   dashDelayBar,
+  projectedImplWindow,
 }: {
   activity: Activity;
   x: (d: string) => number;
@@ -756,6 +781,10 @@ function ActivityRow({
   phaseFilter: 'impl' | 'test' | null;
   hidePhaseBars: boolean;
   dashDelayBar: boolean;
+  /** Janela de Implementação projetada pra essa atividade, quando ela é a próxima da fila do dev
+   * (ver `projectNextQueuedWindow`) — null fora desse caso (inclusive quando a atividade já
+   * começou, ou quando ela nem é a "próxima" da fila do dev). */
+  projectedImplWindow: TimelineWindow | null;
 }) {
   const [showStatusHistory, setShowStatusHistory] = useState(false);
   const showImplBar = !hidePhaseBars && phaseFilter !== 'test';
@@ -1038,6 +1067,12 @@ function ActivityRow({
                 />
               )}
             </>
+          ) : activity.notStarted && projectedImplWindow ? (
+            <ProjectedQueueBar
+              boxLeft={x(projectedImplWindow.start)}
+              boxRight={x(projectedImplWindow.end)}
+              boxTitle={`Projeção (ainda não iniciada): ${formatShort(projectedImplWindow.start)} a ${formatShort(projectedImplWindow.end)}`}
+            />
           ) : activity.notStarted ? (
             <span style={{ position: 'absolute', left: 4, top: 10, fontSize: 10, color: 'var(--text-muted)' }}>
               ainda não iniciada
@@ -1298,6 +1333,32 @@ function Bar({
  * fase deveria ter terminado. `bandTop` posiciona a faixa (Implementação/Teste ficam em faixas
  * separadas dentro da linha, para não uma tampar a outra quando há apontamentos em paralelo).
  */
+/** Barra tracejada "fantasma" (sem preenchimento) para a janela de Impl. projetada de uma atividade
+ * ainda não iniciada que é a próxima da fila do dev — ver `projectNextQueuedWindow`. */
+function ProjectedQueueBar({ boxLeft, boxRight, boxTitle }: { boxLeft: number; boxRight: number; boxTitle: string }) {
+  const boxWidth = Math.max(boxRight - boxLeft, 6);
+  return (
+    <div
+      title={boxTitle}
+      style={{
+        position: 'absolute',
+        left: boxLeft,
+        width: boxWidth,
+        top: 9,
+        height: 16,
+        border: '1.5px dashed var(--series-impl)',
+        borderRadius: 4,
+        boxSizing: 'border-box',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: 'var(--series-impl)' }}>PROJEÇÃO</span>
+    </div>
+  );
+}
+
 function PhaseBar({
   boxLeft,
   boxRight,

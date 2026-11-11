@@ -232,6 +232,7 @@ export default function BoardScreen({
               sprints={data.sprints}
               today={data.today}
               hoursPerDay={data.hoursPerDay}
+              hoursPerPfBySprintId={hoursPerPfBySprintId}
               sprintFilter={sprintFilter}
               onSprintClick={handleSprintClick}
               dashDelayBar={dashDelayBar}
