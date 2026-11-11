@@ -1171,6 +1171,18 @@ describe('mapActivity', () => {
     expect(activity.bugsLoggedHours).toBeCloseTo(2);
   });
 
+  test('createdDate reflects the story creation date (date-only), regardless of whether implementation has started', () => {
+    const activity = mapActivity({
+      story: baseStory(), // created: '2026-07-08T10:26:04.000-0300' (default)
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.createdDate).toBe('2026-07-08');
+  });
+
   test('developer is always the Implementação subtask assignee, regardless of who else is assigned to other subtasks', () => {
     const activity = mapActivity({
       story: baseStory(),

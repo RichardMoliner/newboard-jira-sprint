@@ -27,6 +27,7 @@ function activity(overrides: Partial<Activity> = {}): Activity {
     tester: null,
     storyPoints: null,
     startDate: '2026-10-01',
+    createdDate: '2026-10-01',
     dueDate: null,
     deliveredDate: null,
     deliveredOnTime: null,

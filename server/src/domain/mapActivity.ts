@@ -274,6 +274,7 @@ export function mapActivity(params: {
     tester: story.testador,
     storyPoints: story.storyPoints,
     startDate,
+    createdDate: dateOnly(story.created),
     dueDate,
     deliveredDate,
     deliveredOnTime: isDeliveredOnTime(deliveredDate, dueDate),
