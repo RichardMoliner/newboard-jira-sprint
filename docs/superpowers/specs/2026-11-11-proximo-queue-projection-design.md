@@ -14,10 +14,21 @@ em andamento) e tem "COM-68465" (16 PF) na fila, ainda não iniciada. Hoje o
 painel mostra "Disponível a partir de 13/11" olhando só pra COM-68467 — não dá
 pra saber quando ele realmente fica livre de tudo que já está na fila dele.
 
-O objetivo é projetar, só para a **próxima** tarefa ainda não iniciada de cada
-dev (a primeira da fila), uma barra na Linha do tempo mostrando quando ela
-deve rodar — e atualizar o texto de disponibilidade do dev pra refletir esse
-trabalho futuro também.
+O objetivo é projetar a **fila inteira** de tarefas ainda não iniciadas de cada
+dev, uma barra por tarefa, encadeadas em sequência — e atualizar o texto de
+disponibilidade do dev pra refletir quando ele termina a ÚLTIMA da fila, não
+só a próxima.
+
+**Revisão 2026-11-11 (pós-implementação inicial)**: a primeira versão deste
+design projetava só a próxima tarefa da fila (ver Goals/Non-goals abaixo,
+mantidos como registro histórico da decisão original). Ao validar com o dev
+Gustavo Junior Vieira — que tinha 3 tarefas não iniciadas com a mesma
+`createdDate` na fila, além de uma 4ª mais recente — ficou claro que não
+mostrar barra nem contar pro "Projeção de disponibilidade em" nada além da
+imediata também não refletia a realidade da fila dele. Richard confirmou
+explicitamente que quer a fila inteira projetada, revertendo o non-goal
+original. O restante deste documento abaixo é o registro da decisão
+original (histórico); a implementação atual segue a revisão acima.
 
 ## Goals
 

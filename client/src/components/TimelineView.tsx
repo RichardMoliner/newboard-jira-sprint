@@ -166,19 +166,29 @@ export default function TimelineView({
   // usa todas as atividades (todas as sprints), senão um dev alocado numa tarefa de outra sprint
   // aparece como "disponível" só porque essa tarefa está fora do filtro atual.
   const byDeveloperAcrossAllSprints = useMemo(() => new Map(groupByDeveloper(activities)), [activities]);
-  // Projeção da próxima atividade na fila de cada dev — só entra aqui quando o dev está ocupado
-  // (mesmo critério de `shouldShowAvailabilityDate`), senão não há trabalho real pra ancorar a
-  // projeção (ver non-goal no design: dev já disponível não ganha barra/label de projeção).
-  const nextQueuedWindowByDeveloper = useMemo(() => {
-    const map = new Map<string, { activityKey: string; window: TimelineWindow }>();
+  // Projeção da fila inteira de atividades ainda não iniciadas de cada dev, encadeadas — só entra
+  // aqui quando o dev está ocupado (mesmo critério de `shouldShowAvailabilityDate`), senão não há
+  // trabalho real pra ancorar a projeção (ver non-goal no design: dev já disponível não ganha
+  // barra/label de projeção).
+  const queuedProjectionsByDeveloper = useMemo(() => {
+    const map = new Map<string, QueuedProjection[]>();
     for (const [developer, items] of byDeveloperAcrossAllSprints) {
       const available = isDeveloperAvailable(items);
       if (!shouldShowAvailabilityDate(developer, available)) continue;
-      const result = projectNextQueuedWindow(items, hoursPerDay, hoursPerPfBySprintId);
-      if (result) map.set(developer, result);
+      const result = projectQueuedWindows(items, hoursPerDay, hoursPerPfBySprintId);
+      if (result.length > 0) map.set(developer, result);
     }
     return map;
-  }, [byDeveloperAcrossAllSprints, today, hoursPerDay, hoursPerPfBySprintId]);
+  }, [byDeveloperAcrossAllSprints, hoursPerDay, hoursPerPfBySprintId]);
+  // Mapa achatado atividade->janela, pra procurar direto pela key na hora de renderizar cada linha
+  // sem precisar saber de qual dev ela é (cada activity.key só pode estar na fila de UM dev).
+  const projectedWindowByActivityKey = useMemo(() => {
+    const map = new Map<string, TimelineWindow>();
+    for (const projections of queuedProjectionsByDeveloper.values()) {
+      for (const p of projections) map.set(p.activityKey, p.window);
+    }
+    return map;
+  }, [queuedProjectionsByDeveloper]);
 
   const deadlineRulers = useMemo(
     () => resolveDeadlineRulers(deadlinesActive, sprintSettingsById, sprintFilter, sprints),
@@ -189,9 +199,9 @@ export default function TimelineView({
     () =>
       computeDomain(activities, sprints, today, [
         ...deadlineRulers.map((r) => r.date),
-        ...[...nextQueuedWindowByDeveloper.values()].map((w) => w.window.end),
+        ...[...projectedWindowByActivityKey.values()].map((w) => w.end),
       ]),
-    [activities, sprints, today, deadlineRulers, nextQueuedWindowByDeveloper],
+    [activities, sprints, today, deadlineRulers, projectedWindowByActivityKey],
   );
   const days = useMemo(() => buildDayList(minDate, maxDate, today), [minDate, maxDate, today]);
   const dayIndexByDate = useMemo(() => new Map(days.map((d) => [d.date, d.index])), [days]);
@@ -607,9 +617,11 @@ export default function TimelineView({
             const developerActivities = byDeveloperAcrossAllSprints.get(developer) ?? [];
             const available = isDeveloperAvailable(developerActivities);
             const workingOnBugs = available && devsWorkingOnBugs.has(developer);
-            const queued = nextQueuedWindowByDeveloper.get(developer) ?? null;
+            const projections = queuedProjectionsByDeveloper.get(developer) ?? [];
             const availabilityDate = shouldShowAvailabilityDate(developer, available)
-              ? (queued ? queued.window.end : projectDeveloperAvailabilityDate(developerActivities, today, hoursPerDay))
+              ? (projections.length > 0
+                  ? projections[projections.length - 1].window.end
+                  : projectDeveloperAvailabilityDate(developerActivities, today, hoursPerDay))
               : null;
             return (
             <div key={developer} style={{ display: 'contents' }}>
@@ -659,7 +671,7 @@ export default function TimelineView({
                   phaseFilter={phaseFilter}
                   hidePhaseBars={bugFilterActive}
                   dashDelayBar={dashDelayBar}
-                  projectedImplWindow={queued && queued.activityKey === activity.key ? queued.window : null}
+                  projectedImplWindow={projectedWindowByActivityKey.get(activity.key) ?? null}
                 />
               ))}
             </div>
@@ -2440,18 +2452,22 @@ function groupByDeveloper(activities: Activity[]): [string, Activity[]][] {
 }
 
 /**
- * A próxima atividade "Ainda não iniciada" da fila de um dev (entre todas as sprints dele). A
- * ordem natural é por `createdDate` (quem foi criada primeiro é a próxima) — exceto quando o dev
- * já iniciou alguma outra atividade criada DEPOIS dela: nesse caso ele "pulou a fila", e a
- * pulada vai para o fim da sub-fila de não iniciadas (atrás das que não foram puladas).
+ * A fila de atividades "Ainda não iniciada" de um dev (entre todas as sprints dele), já ordenada: a
+ * primeira é a próxima a rodar. A ordem natural é por `createdDate` (quem foi criada primeiro é a
+ * próxima) — exceto quando o dev já iniciou alguma outra atividade criada DEPOIS dela: nesse caso
+ * ele "pulou a fila", e a pulada vai para o fim da sub-fila de não iniciadas (atrás das que não
+ * foram puladas). Em caso de empate de `createdDate` (comum — várias stories criadas no mesmo dia),
+ * desempata por `key` pra ser determinístico, já que a ordem de chegada da API do Jira não é.
  */
-export function resolveNextQueuedActivity(activities: Activity[]): Activity | null {
+export function resolveQueuedActivities(activities: Activity[]): Activity[] {
   const notStarted = activities.filter((a) => a.notStarted);
   const wasSkipped = (a: Activity) => activities.some((b) => !b.notStarted && b.createdDate > a.createdDate);
-  const queue = [...notStarted].sort(
-    (a, b) => Number(wasSkipped(a)) - Number(wasSkipped(b)) || a.createdDate.localeCompare(b.createdDate),
+  return [...notStarted].sort(
+    (a, b) =>
+      Number(wasSkipped(a)) - Number(wasSkipped(b)) ||
+      a.createdDate.localeCompare(b.createdDate) ||
+      a.key.localeCompare(b.key),
   );
-  return queue[0] ?? null;
 }
 
 /** True quando o dev não tem mais nada por implementar entre as atividades listadas — Implementação atendida (ou a story inteira concluída) em todas. Não considera o Teste: esperar o teste não ocupa o dev. */
@@ -2477,29 +2493,41 @@ export function projectDeveloperAvailabilityDate(activities: Activity[], today: 
   return addBusinessDays(earliestStart, daysNeeded - 1);
 }
 
+export interface QueuedProjection {
+  activityKey: string;
+  window: TimelineWindow;
+}
+
 /**
- * Projeta a janela de Implementação da próxima atividade da fila (ver `resolveNextQueuedActivity`)
- * de um dev, ancorada no fim da caixa tracejada (estimativa original, `implWindow.end`) já exibida
- * na tela para cada atividade em andamento do dev — a mais tardia, se houver mais de uma. Null
- * quando não há próxima atividade na fila, quando ela não tem Pontos de Função (não dá pra projetar
- * nada), ou quando o dev não tem nenhuma atividade em andamento com `implWindow` pra ancorar (nesse
- * caso não há âncora de trabalho real — ver non-goal no design).
+ * Projeta a janela de Implementação de CADA atividade da fila (ver `resolveQueuedActivities`) de um
+ * dev, encadeadas em sequência — a 1ª ancorada no fim da caixa tracejada (estimativa original,
+ * `implWindow.end`) já exibida na tela para cada atividade em andamento do dev (a mais tardia, se
+ * houver mais de uma), e cada próxima ancorada no fim projetado da anterior. Array vazio quando não
+ * há fila, ou quando o dev não tem nenhuma atividade em andamento com `implWindow` pra ancorar a
+ * partir dela (nesse caso não há âncora de trabalho real — ver non-goal no design). Uma atividade da
+ * fila sem Pontos de Função é pulada (sem entrada no resultado) e não consome tempo da fila — a
+ * próxima continua ancorada normalmente a partir da anterior.
  */
-export function projectNextQueuedWindow(
+export function projectQueuedWindows(
   activities: Activity[],
   hoursPerDay: number,
   hoursPerPfBySprintId: Record<string, number>,
-): { activityKey: string; window: TimelineWindow } | null {
-  const next = resolveNextQueuedActivity(activities);
-  if (!next || next.storyPoints === null) return null;
+): QueuedProjection[] {
+  const queue = resolveQueuedActivities(activities);
   const inProgressWindowEnds = activities
     .filter((a) => !a.implDone && !a.isDone && !a.notStarted && a.implWindow !== null)
     .map((a) => a.implWindow!.end);
-  if (inProgressWindowEnds.length === 0) return null;
-  const anchor = inProgressWindowEnds.reduce((latest, end) => (end > latest ? end : latest));
-  const hoursPerPf = hoursPerPfBySprintId[next.sprintId];
-  const timeline = computeTimeline(next.storyPoints, anchor, hoursPerPf, hoursPerDay);
-  return { activityKey: next.key, window: timeline.impl };
+  if (inProgressWindowEnds.length === 0) return [];
+  let anchor = inProgressWindowEnds.reduce((latest, end) => (end > latest ? end : latest));
+  const results: QueuedProjection[] = [];
+  for (const a of queue) {
+    if (a.storyPoints === null) continue;
+    const hoursPerPf = hoursPerPfBySprintId[a.sprintId];
+    const timeline = computeTimeline(a.storyPoints, anchor, hoursPerPf, hoursPerDay);
+    results.push({ activityKey: a.key, window: timeline.impl });
+    anchor = timeline.impl.end;
+  }
+  return results;
 }
 
 /** "-" é o placeholder de nenhum dev vinculado (ver mapActivity no server) — não faz sentido projetar disponibilidade pra "ninguém". */

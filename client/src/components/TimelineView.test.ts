@@ -20,9 +20,9 @@ import {
   lastWorklogDate,
   matchesLegendFilter,
   projectDeveloperAvailabilityDate,
-  projectNextQueuedWindow,
+  projectQueuedWindows,
   projectTestWindow,
-  resolveNextQueuedActivity,
+  resolveQueuedActivities,
   shouldShowAvailabilityDate,
   resolveDeadlineRulers,
   type DeadlineRuler,
@@ -595,26 +595,26 @@ describe('shouldShowAvailabilityDate', () => {
   });
 });
 
-describe('resolveNextQueuedActivity', () => {
-  test('returns null when the developer has no notStarted activity', () => {
-    expect(resolveNextQueuedActivity([activity({ notStarted: false })])).toBeNull();
+describe('resolveQueuedActivities', () => {
+  test('returns an empty array when the developer has no notStarted activity', () => {
+    expect(resolveQueuedActivities([activity({ notStarted: false })])).toEqual([]);
   });
 
   test('returns the only notStarted activity when there is just one', () => {
     const a = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
-    expect(resolveNextQueuedActivity([a])).toBe(a);
+    expect(resolveQueuedActivities([a])).toEqual([a]);
   });
 
-  test('returns the earliest-created notStarted activity when none were skipped', () => {
+  test('orders by earliest-created first when none were skipped', () => {
     const older = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
     const newer = activity({ key: 'B', notStarted: true, createdDate: '2026-09-05' });
-    expect(resolveNextQueuedActivity([newer, older])?.key).toBe('A');
+    expect(resolveQueuedActivities([newer, older]).map((a) => a.key)).toEqual(['A', 'B']);
   });
 
   test('does not consider an activity skipped when the already-started sibling was created before it (normal prioritization)', () => {
     const olderStartedB = activity({ key: 'B', notStarted: false, createdDate: '2026-08-20' });
     const newerA = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
-    expect(resolveNextQueuedActivity([olderStartedB, newerA])?.key).toBe('A');
+    expect(resolveQueuedActivities([olderStartedB, newerA]).map((a) => a.key)).toEqual(['A']);
   });
 
   test('pushes a skipped notStarted activity to the back of the queue, behind a not-yet-skipped one', () => {
@@ -622,51 +622,45 @@ describe('resolveNextQueuedActivity', () => {
     const skippedA = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
     const startedB = activity({ key: 'B', notStarted: false, createdDate: '2026-09-05' });
     const nextC = activity({ key: 'C', notStarted: true, createdDate: '2026-09-08' });
-    expect(resolveNextQueuedActivity([skippedA, startedB, nextC])?.key).toBe('C');
+    expect(resolveQueuedActivities([skippedA, startedB, nextC]).map((a) => a.key)).toEqual(['C', 'A']);
   });
 
-  test('a skipped notStarted activity is still returned as next when it is the only one in queue', () => {
+  test('a skipped notStarted activity is still returned when it is the only one in queue', () => {
     const skippedA = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
     const doneB = activity({ key: 'B', notStarted: false, isDone: true, createdDate: '2026-09-05' });
-    expect(resolveNextQueuedActivity([skippedA, doneB])?.key).toBe('A');
+    expect(resolveQueuedActivities([skippedA, doneB]).map((a) => a.key)).toEqual(['A']);
   });
 
   test('sorts two skipped activities between themselves by createdDate too', () => {
     const skippedOlder = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
     const skippedNewer = activity({ key: 'B', notStarted: true, createdDate: '2026-09-03' });
     const startedC = activity({ key: 'C', notStarted: false, createdDate: '2026-09-10' });
-    expect(resolveNextQueuedActivity([skippedNewer, skippedOlder, startedC])?.key).toBe('A');
+    expect(resolveQueuedActivities([skippedNewer, skippedOlder, startedC]).map((a) => a.key)).toEqual(['A', 'B']);
   });
 
-  test('two notStarted activities with the exact same createdDate sort deterministically (no crash)', () => {
-    const a = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
-    const b = activity({ key: 'B', notStarted: true, createdDate: '2026-09-01' });
-    expect(() => resolveNextQueuedActivity([a, b])).not.toThrow();
-    expect(['A', 'B']).toContain(resolveNextQueuedActivity([a, b])?.key);
+  test('two notStarted activities with the exact same createdDate sort deterministically by key (real case: Jira can return several stories created the same day)', () => {
+    const b = activity({ key: 'COM-66037', notStarted: true, createdDate: '2026-08-12' });
+    const a = activity({ key: 'COM-66036', notStarted: true, createdDate: '2026-08-12' });
+    const c = activity({ key: 'COM-66044', notStarted: true, createdDate: '2026-08-12' });
+    expect(resolveQueuedActivities([b, a, c]).map((x) => x.key)).toEqual(['COM-66036', 'COM-66037', 'COM-66044']);
   });
 });
 
-describe('projectNextQueuedWindow', () => {
-  test('null when the developer has no notStarted activity in queue', () => {
-    expect(projectNextQueuedWindow([activity({ notStarted: false, implDone: true })], 8, { S1: 4 })).toBeNull();
+describe('projectQueuedWindows', () => {
+  test('empty array when the developer has no notStarted activity in queue', () => {
+    expect(projectQueuedWindows([activity({ notStarted: false, implDone: true })], 8, { S1: 4 })).toEqual([]);
   });
 
-  test('null when the developer is already fully available (no in-progress activity to anchor the projection on)', () => {
+  test('empty array when the developer is already fully available (no in-progress activity to anchor the projection on)', () => {
     const queued = activity({ key: 'Q', notStarted: true, storyPoints: 16, createdDate: '2026-09-01' });
     const done = activity({ key: 'D', notStarted: false, implDone: true, implWindow: { start: '2026-08-20', end: '2026-08-25' } });
-    expect(projectNextQueuedWindow([queued, done], 6.5, { S1: 4 })).toBeNull();
+    expect(projectQueuedWindows([queued, done], 6.5, { S1: 4 })).toEqual([]);
   });
 
-  test('null when an in-progress activity exists but has no implWindow (e.g. missing storyPoints) to anchor on', () => {
+  test('empty array when an in-progress activity exists but has no implWindow (e.g. missing storyPoints) to anchor on', () => {
     const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implWindow: null });
     const queued = activity({ key: 'Q', notStarted: true, storyPoints: 16, createdDate: '2026-09-01' });
-    expect(projectNextQueuedWindow([inProgress, queued], 8, { S1: 4 })).toBeNull();
-  });
-
-  test('null when the next queued activity has no storyPoints', () => {
-    const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implWindow: { start: '2026-08-27', end: '2026-09-02' } });
-    const queued = activity({ key: 'Q', notStarted: true, storyPoints: null, createdDate: '2026-09-01' });
-    expect(projectNextQueuedWindow([inProgress, queued], 8, { S1: 4 })).toBeNull();
+    expect(projectQueuedWindows([inProgress, queued], 8, { S1: 4 })).toEqual([]);
   });
 
   test("projects the Impl window of the next queued activity, anchored on the in-progress activity's own implWindow.end (the dashed estimate box already on screen), using the queued activity's own sprint hoursPerPf", () => {
@@ -674,9 +668,9 @@ describe('projectNextQueuedWindow', () => {
     const queued = activity({ key: 'Q', notStarted: true, storyPoints: 16, createdDate: '2026-09-01', sprintId: 'S9' });
     const all = [inProgress, queued];
     const hoursPerPfBySprintId = { S9: 4 };
-    const result = projectNextQueuedWindow(all, 6.5, hoursPerPfBySprintId);
+    const result = projectQueuedWindows(all, 6.5, hoursPerPfBySprintId);
     const expectedWindow = computeTimeline(16, '2026-11-12', 4, 6.5).impl;
-    expect(result).toEqual({ activityKey: 'Q', window: expectedWindow });
+    expect(result).toEqual([{ activityKey: 'Q', window: expectedWindow }]);
   });
 
   test('anchors on the LATEST implWindow.end when the developer has more than one in-progress activity', () => {
@@ -684,9 +678,33 @@ describe('projectNextQueuedWindow', () => {
     const inProgressB = activity({ key: 'B', notStarted: false, implDone: false, implWindow: { start: '2026-11-04', end: '2026-11-16' } });
     const queued = activity({ key: 'Q', notStarted: true, storyPoints: 16, createdDate: '2026-09-01', sprintId: 'S9' });
     const hoursPerPfBySprintId = { S9: 4 };
-    const result = projectNextQueuedWindow([inProgressA, inProgressB, queued], 6.5, hoursPerPfBySprintId);
+    const result = projectQueuedWindows([inProgressA, inProgressB, queued], 6.5, hoursPerPfBySprintId);
     const expectedWindow = computeTimeline(16, '2026-11-16', 4, 6.5).impl;
-    expect(result).toEqual({ activityKey: 'Q', window: expectedWindow });
+    expect(result).toEqual([{ activityKey: 'Q', window: expectedWindow }]);
+  });
+
+  test('projects the WHOLE queue in sequence — each activity starts right where the previous one ends', () => {
+    const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implWindow: { start: '2026-11-06', end: '2026-11-12' } });
+    const first = activity({ key: 'Q1', notStarted: true, storyPoints: 16, createdDate: '2026-09-01', sprintId: 'S9' });
+    const second = activity({ key: 'Q2', notStarted: true, storyPoints: 3.5, createdDate: '2026-09-02', sprintId: 'S9' });
+    const hoursPerPfBySprintId = { S9: 4 };
+    const result = projectQueuedWindows([inProgress, first, second], 6.5, hoursPerPfBySprintId);
+    const firstWindow = computeTimeline(16, '2026-11-12', 4, 6.5).impl;
+    const secondWindow = computeTimeline(3.5, firstWindow.end, 4, 6.5).impl;
+    expect(result).toEqual([
+      { activityKey: 'Q1', window: firstWindow },
+      { activityKey: 'Q2', window: secondWindow },
+    ]);
+  });
+
+  test('a queued activity without storyPoints is skipped (no entry), and does not advance the anchor for the next one', () => {
+    const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implWindow: { start: '2026-11-06', end: '2026-11-12' } });
+    const noEstimate = activity({ key: 'Q1', notStarted: true, storyPoints: null, createdDate: '2026-09-01', sprintId: 'S9' });
+    const second = activity({ key: 'Q2', notStarted: true, storyPoints: 3.5, createdDate: '2026-09-02', sprintId: 'S9' });
+    const hoursPerPfBySprintId = { S9: 4 };
+    const result = projectQueuedWindows([inProgress, noEstimate, second], 6.5, hoursPerPfBySprintId);
+    const secondWindow = computeTimeline(3.5, '2026-11-12', 4, 6.5).impl;
+    expect(result).toEqual([{ activityKey: 'Q2', window: secondWindow }]);
   });
 });
 
