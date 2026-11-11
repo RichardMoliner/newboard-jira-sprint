@@ -648,29 +648,44 @@ describe('resolveNextQueuedActivity', () => {
 
 describe('projectNextQueuedWindow', () => {
   test('null when the developer has no notStarted activity in queue', () => {
-    expect(projectNextQueuedWindow([activity({ notStarted: false, implDone: true })], '2026-09-01', 8, { S1: 4 })).toBeNull();
+    expect(projectNextQueuedWindow([activity({ notStarted: false, implDone: true })], 8, { S1: 4 })).toBeNull();
   });
 
-  test('null when the developer is already fully available (no real pending work to anchor the projection on)', () => {
+  test('null when the developer is already fully available (no in-progress activity to anchor the projection on)', () => {
     const queued = activity({ key: 'Q', notStarted: true, storyPoints: 16, createdDate: '2026-09-01' });
-    const done = activity({ key: 'D', notStarted: false, implDone: true });
-    expect(projectNextQueuedWindow([queued, done], '2026-09-01', 6.5, { S1: 4 })).toBeNull();
+    const done = activity({ key: 'D', notStarted: false, implDone: true, implWindow: { start: '2026-08-20', end: '2026-08-25' } });
+    expect(projectNextQueuedWindow([queued, done], 6.5, { S1: 4 })).toBeNull();
+  });
+
+  test('null when an in-progress activity exists but has no implWindow (e.g. missing storyPoints) to anchor on', () => {
+    const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implWindow: null });
+    const queued = activity({ key: 'Q', notStarted: true, storyPoints: 16, createdDate: '2026-09-01' });
+    expect(projectNextQueuedWindow([inProgress, queued], 8, { S1: 4 })).toBeNull();
   });
 
   test('null when the next queued activity has no storyPoints', () => {
-    const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implEstimatedHours: 10, implLoggedHours: 0 });
+    const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implWindow: { start: '2026-08-27', end: '2026-09-02' } });
     const queued = activity({ key: 'Q', notStarted: true, storyPoints: null, createdDate: '2026-09-01' });
-    expect(projectNextQueuedWindow([inProgress, queued], '2026-09-01', 8, { S1: 4 })).toBeNull();
+    expect(projectNextQueuedWindow([inProgress, queued], 8, { S1: 4 })).toBeNull();
   });
 
-  test("projects the Impl window of the next queued activity, anchored on when the dev frees from current real work, using that activity's own sprint hoursPerPf", () => {
-    const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implEstimatedHours: 20, implLoggedHours: 0 });
+  test("projects the Impl window of the next queued activity, anchored on the in-progress activity's own implWindow.end (the dashed estimate box already on screen), using the queued activity's own sprint hoursPerPf", () => {
+    const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implWindow: { start: '2026-11-06', end: '2026-11-12' } });
     const queued = activity({ key: 'Q', notStarted: true, storyPoints: 16, createdDate: '2026-09-01', sprintId: 'S9' });
     const all = [inProgress, queued];
     const hoursPerPfBySprintId = { S9: 4 };
-    const result = projectNextQueuedWindow(all, '2026-09-01', 8, hoursPerPfBySprintId);
-    const expectedAnchor = projectDeveloperAvailabilityDate(all, '2026-09-01', 8)!;
-    const expectedWindow = computeTimeline(16, expectedAnchor, 4, 8).impl;
+    const result = projectNextQueuedWindow(all, 6.5, hoursPerPfBySprintId);
+    const expectedWindow = computeTimeline(16, '2026-11-12', 4, 6.5).impl;
+    expect(result).toEqual({ activityKey: 'Q', window: expectedWindow });
+  });
+
+  test('anchors on the LATEST implWindow.end when the developer has more than one in-progress activity', () => {
+    const inProgressA = activity({ key: 'A', notStarted: false, implDone: false, implWindow: { start: '2026-11-02', end: '2026-11-10' } });
+    const inProgressB = activity({ key: 'B', notStarted: false, implDone: false, implWindow: { start: '2026-11-04', end: '2026-11-16' } });
+    const queued = activity({ key: 'Q', notStarted: true, storyPoints: 16, createdDate: '2026-09-01', sprintId: 'S9' });
+    const hoursPerPfBySprintId = { S9: 4 };
+    const result = projectNextQueuedWindow([inProgressA, inProgressB, queued], 6.5, hoursPerPfBySprintId);
+    const expectedWindow = computeTimeline(16, '2026-11-16', 4, 6.5).impl;
     expect(result).toEqual({ activityKey: 'Q', window: expectedWindow });
   });
 });

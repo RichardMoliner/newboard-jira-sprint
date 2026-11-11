@@ -174,7 +174,7 @@ export default function TimelineView({
     for (const [developer, items] of byDeveloperAcrossAllSprints) {
       const available = isDeveloperAvailable(items);
       if (!shouldShowAvailabilityDate(developer, available)) continue;
-      const result = projectNextQueuedWindow(items, today, hoursPerDay, hoursPerPfBySprintId);
+      const result = projectNextQueuedWindow(items, hoursPerDay, hoursPerPfBySprintId);
       if (result) map.set(developer, result);
     }
     return map;
@@ -2479,21 +2479,24 @@ export function projectDeveloperAvailabilityDate(activities: Activity[], today: 
 
 /**
  * Projeta a janela de Implementação da próxima atividade da fila (ver `resolveNextQueuedActivity`)
- * de um dev, ancorada em quando ele projeta ficar livre do trabalho REAL já em andamento (ver
- * `projectDeveloperAvailabilityDate`). Null quando não há próxima atividade na fila, quando ela não
- * tem Pontos de Função (não dá pra projetar nada), ou quando o dev já está disponível agora (nesse
- * caso não há âncora de trabalho real pra projetar a partir dela — ver non-goal no design).
+ * de um dev, ancorada no fim da caixa tracejada (estimativa original, `implWindow.end`) já exibida
+ * na tela para cada atividade em andamento do dev — a mais tardia, se houver mais de uma. Null
+ * quando não há próxima atividade na fila, quando ela não tem Pontos de Função (não dá pra projetar
+ * nada), ou quando o dev não tem nenhuma atividade em andamento com `implWindow` pra ancorar (nesse
+ * caso não há âncora de trabalho real — ver non-goal no design).
  */
 export function projectNextQueuedWindow(
   activities: Activity[],
-  today: string,
   hoursPerDay: number,
   hoursPerPfBySprintId: Record<string, number>,
 ): { activityKey: string; window: TimelineWindow } | null {
   const next = resolveNextQueuedActivity(activities);
   if (!next || next.storyPoints === null) return null;
-  const anchor = projectDeveloperAvailabilityDate(activities, today, hoursPerDay);
-  if (anchor === null) return null;
+  const inProgressWindowEnds = activities
+    .filter((a) => !a.implDone && !a.isDone && !a.notStarted && a.implWindow !== null)
+    .map((a) => a.implWindow!.end);
+  if (inProgressWindowEnds.length === 0) return null;
+  const anchor = inProgressWindowEnds.reduce((latest, end) => (end > latest ? end : latest));
   const hoursPerPf = hoursPerPfBySprintId[next.sprintId];
   const timeline = computeTimeline(next.storyPoints, anchor, hoursPerPf, hoursPerDay);
   return { activityKey: next.key, window: timeline.impl };
