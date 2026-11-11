@@ -1184,7 +1184,7 @@ describe('mapActivity', () => {
     expect(activity.developer).toBe('Guilherme Henrique Gibim de Mello');
   });
 
-  test('defaults developer to "-" when there is no Implementação subtask yet (e.g. only a Protótipo subtask exists)', () => {
+  test('defaults developer to "-" when there is no Implementação subtask and no story assignee either', () => {
     const activity = mapActivity({
       story: baseStory(),
       sprint,
@@ -1209,13 +1209,12 @@ describe('mapActivity', () => {
     expect(activity.developer).toBe('-');
   });
 
-  test('falls back to the story assignee as developer when there are no subtasks of any type yet (brand new backlog item)', () => {
+  test('falls back to the story assignee as developer when there is no Implementação subtask yet (brand new backlog item)', () => {
     const activity = mapActivity({
       story: baseStory({ assignee: 'Moises Delfino Campos' }),
       sprint,
       implStartDate: null,
       implementationAssignee: null,
-      hasNoSubtasksYet: true,
       bugs: [],
       baseUrl: 'https://desenv.betha.com.br',
       today: '2026-09-08',
@@ -1223,18 +1222,17 @@ describe('mapActivity', () => {
     expect(activity.developer).toBe('Moises Delfino Campos');
   });
 
-  test('does not fall back to the story assignee when some other subtask already exists (e.g. a Protótipo), even without an Implementação subtask yet', () => {
+  test('falls back to the story assignee even when some other subtask already exists (e.g. a Requisitos/Protótipo), as long as there is no Implementação subtask yet', () => {
     const activity = mapActivity({
       story: baseStory({ assignee: 'Lucas Fernandes' }),
       sprint,
       implStartDate: null,
       implementationAssignee: null,
-      hasNoSubtasksYet: false,
       bugs: [],
       baseUrl: 'https://desenv.betha.com.br',
       today: '2026-09-08',
     });
-    expect(activity.developer).toBe('-');
+    expect(activity.developer).toBe('Lucas Fernandes');
   });
 
   test('implementationAssignee takes priority over the story-assignee fallback', () => {
@@ -1243,7 +1241,6 @@ describe('mapActivity', () => {
       sprint,
       implStartDate: '2026-08-04',
       implementationAssignee: 'Guilherme Henrique Gibim de Mello',
-      hasNoSubtasksYet: true,
       bugs: [],
       baseUrl: 'https://desenv.betha.com.br',
       today: '2026-09-08',

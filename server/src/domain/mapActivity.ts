@@ -12,8 +12,8 @@ export interface RawStory {
   status: string;
   statusCategory: string;
   storyPoints: number | null;
-  /** Responsável (assignee) da story no Jira — só usado como fallback de Dev quando a story ainda
-   * não tem nenhuma subtarefa criada (ver `hasNoSubtasksYet` em mapActivity). */
+  /** Responsável (assignee) da story no Jira — usado como fallback de Dev sempre que ainda não existe
+   * subtarefa de Implementação (independente de haver outras subtarefas, como Requisitos/Protótipo). */
   assignee: string | null;
   testador: string | null;
   created: string;
@@ -117,12 +117,6 @@ export function mapActivity(params: {
    * customizado "Desenvolvedor" da story (que pode ficar preenchido com quem está em outra
    * subtarefa, ex.: Protótipo). Null enquanto não existe subtarefa de Implementação ainda. */
   implementationAssignee?: string | null;
-  /** True quando a story ainda não tem nenhuma subtarefa criada, de nenhum tipo (nem Protótipo,
-   * Requisitos, Implementação, Teste ou Bug) — só nesse caso o assignee da própria story vale como
-   * fallback de Dev. Assim que qualquer subtarefa existir (mesmo sem ser Implementação ainda), o
-   * assignee da story deixa de valer: ele pode refletir quem está noutra fase, não o futuro dev
-   * (ver FROT-7839, onde o assignee era de quem estava no Protótipo). */
-  hasNoSubtasksYet?: boolean;
   /** Papel (dev/tester) de cada pessoa na sprint, usado para separar as horas de bug entre Impl./Teste. */
   developerRoles?: Map<string, DeveloperRole>;
   /** Timestamp ISO de quando a issue entrou na sprint atual (via changelog do Jira); null sem esse histórico. */
@@ -160,7 +154,6 @@ export function mapActivity(params: {
     worklogEntries = [],
     bugs,
     implementationAssignee = null,
-    hasNoSubtasksYet = false,
     developerRoles = new Map(),
     sprintEnteredAt = null,
     doneTransitionDate = null,
@@ -277,7 +270,7 @@ export function mapActivity(params: {
     sprintId: sprint.id,
     sprintName: sprint.name,
     isCarried: carried,
-    developer: implementationAssignee ?? (hasNoSubtasksYet ? story.assignee : null) ?? '-',
+    developer: implementationAssignee ?? story.assignee ?? '-',
     tester: story.testador,
     storyPoints: story.storyPoints,
     startDate,
