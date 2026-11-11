@@ -1067,7 +1067,7 @@ function ActivityRow({
                 />
               )}
             </>
-          ) : activity.notStarted && projectedImplWindow ? (
+          ) : activity.notStarted && projectedImplWindow && showImplBar ? (
             <ProjectedQueueBar
               boxLeft={x(projectedImplWindow.start)}
               boxRight={x(projectedImplWindow.end)}
