@@ -166,20 +166,19 @@ export default function TimelineView({
   // usa todas as atividades (todas as sprints), senão um dev alocado numa tarefa de outra sprint
   // aparece como "disponível" só porque essa tarefa está fora do filtro atual.
   const byDeveloperAcrossAllSprints = useMemo(() => new Map(groupByDeveloper(activities)), [activities]);
-  // Projeção da fila inteira de atividades ainda não iniciadas de cada dev, encadeadas — só entra
-  // aqui quando o dev está ocupado (mesmo critério de `shouldShowAvailabilityDate`), senão não há
-  // trabalho real pra ancorar a projeção (ver non-goal no design: dev já disponível não ganha
-  // barra/label de projeção).
+  // Projeção da fila inteira de atividades ainda não iniciadas de cada dev, encadeadas — mesmo um
+  // dev já disponível (sem nada em andamento) ganha as barras, ancoradas em hoje (ver
+  // `projectQueuedWindows`). "-" é só o placeholder de "sem dev vinculado" (ver mapActivity), não
+  // faz sentido projetar fila pra "ninguém".
   const queuedProjectionsByDeveloper = useMemo(() => {
     const map = new Map<string, QueuedProjection[]>();
     for (const [developer, items] of byDeveloperAcrossAllSprints) {
-      const available = isDeveloperAvailable(items);
-      if (!shouldShowAvailabilityDate(developer, available)) continue;
-      const result = projectQueuedWindows(items, hoursPerDay, hoursPerPfBySprintId);
+      if (developer === '-') continue;
+      const result = projectQueuedWindows(items, today, hoursPerDay, hoursPerPfBySprintId);
       if (result.length > 0) map.set(developer, result);
     }
     return map;
-  }, [byDeveloperAcrossAllSprints, hoursPerDay, hoursPerPfBySprintId]);
+  }, [byDeveloperAcrossAllSprints, today, hoursPerDay, hoursPerPfBySprintId]);
   // Mapa achatado atividade->janela, pra procurar direto pela key na hora de renderizar cada linha
   // sem precisar saber de qual dev ela é (cada activity.key só pode estar na fila de UM dev).
   const projectedWindowByActivityKey = useMemo(() => {
@@ -2453,21 +2452,22 @@ function groupByDeveloper(activities: Activity[]): [string, Activity[]][] {
 
 /**
  * A fila de atividades "Ainda não iniciada" de um dev (entre todas as sprints dele), já ordenada: a
- * primeira é a próxima a rodar. A ordem natural é por `createdDate` (quem foi criada primeiro é a
- * próxima) — exceto quando o dev já iniciou alguma outra atividade criada DEPOIS dela: nesse caso
- * ele "pulou a fila", e a pulada vai para o fim da sub-fila de não iniciadas (atrás das que não
- * foram puladas). Em caso de empate de `createdDate` (comum — várias stories criadas no mesmo dia),
- * desempata por `key` pra ser determinístico, já que a ordem de chegada da API do Jira não é.
+ * primeira é a próxima a rodar. Ordem FIFO simples por `createdDate` (quem foi criada primeiro é a
+ * próxima). Em caso de empate (comum — várias stories criadas no mesmo dia), mantém a ordem em que as
+ * atividades chegaram no array (sort é estável) — essa é a mesma ordem já exibida nas linhas do board
+ * (`fetchBoardData.ts` ordena por dev + título), então a barra projetada de cada uma bate com a
+ * posição que o usuário já vê na tela.
+ *
+ * Havia uma regra de "pulou a fila" (empurrar pro fim uma atividade antiga quando o dev já iniciou
+ * outra criada depois dela) que foi removida: neste Jira, tickets de backlog (ex. "Extensões") podem
+ * ter `createdDate` anos mais velho que qualquer sprint atual, então basta o dev estar trabalhando em
+ * QUALQUER coisa mais nova pra regra classificar o ticket antigo como "pulado" — na prática isso
+ * invertia a fila pra mais-nova-primeiro quase sempre, o oposto do que faz sentido (validado com
+ * Richard em casos reais — ver histórico de commits).
  */
 export function resolveQueuedActivities(activities: Activity[]): Activity[] {
   const notStarted = activities.filter((a) => a.notStarted);
-  const wasSkipped = (a: Activity) => activities.some((b) => !b.notStarted && b.createdDate > a.createdDate);
-  return [...notStarted].sort(
-    (a, b) =>
-      Number(wasSkipped(a)) - Number(wasSkipped(b)) ||
-      a.createdDate.localeCompare(b.createdDate) ||
-      a.key.localeCompare(b.key),
-  );
+  return [...notStarted].sort((a, b) => a.createdDate.localeCompare(b.createdDate));
 }
 
 /** True quando o dev não tem mais nada por implementar entre as atividades listadas — Implementação atendida (ou a story inteira concluída) em todas. Não considera o Teste: esperar o teste não ocupa o dev. */
@@ -2476,21 +2476,22 @@ export function isDeveloperAvailable(activities: Activity[]): boolean {
 }
 
 /**
- * Data prevista do último dia de Implementação do dev — soma as horas de Implementação restantes
- * (estimado − apontado, nunca negativo) de todas as atividades com Implementação pendente e
- * projeta em sequência a partir de hoje, em dias úteis. Dev já disponível (nada pendente) não tem
- * previsão (null).
+ * Data em que o dev projeta ficar livre de todo trabalho de Implementação pendente — o próximo dia
+ * útil após a ÚLTIMA barra de Implementação em andamento (a caixa tracejada `implWindow.end` já
+ * exibida na tela pra cada atividade pendente), nunca antes de amanhã (o dev está em cima de alguma
+ * dessas atividades hoje, não importa quantas horas restam nela — ver histórico de commits: um
+ * cálculo por soma de horas restantes já errou a data em 4 casos reais diferentes, incl. tarefas
+ * atrasadas com `implWindow.end` no passado e tarefas com horas estimadas muito altas que empurravam
+ * a data dias além do que fazia sentido). Dev já disponível (nada pendente) não tem previsão (null).
  */
 export function projectDeveloperAvailabilityDate(activities: Activity[], today: string, hoursPerDay: number): string | null {
   const pending = activities.filter((a) => !(a.implDone || a.isDone) && !a.notStarted);
   if (pending.length === 0) return null;
-  const remainingHours = pending.reduce(
-    (sum, a) => sum + Math.max(0, (a.implEstimatedHours ?? 0) - (a.implLoggedHours ?? 0)),
-    0,
-  );
-  const daysNeeded = hoursPerDay > 0 ? Math.max(1, Math.ceil(remainingHours / hoursPerDay)) : 1;
-  const earliestStart = ceilToBusinessDay(today);
-  return addBusinessDays(earliestStart, daysNeeded - 1);
+  const tomorrow = nextBusinessDay(today);
+  const implEnds = pending.map((a) => a.implWindow?.end).filter((end): end is string => end != null);
+  if (implEnds.length === 0) return tomorrow;
+  const latestImplEnd = implEnds.reduce((latest, end) => (end > latest ? end : latest));
+  return latestImplEnd > tomorrow ? latestImplEnd : tomorrow;
 }
 
 export interface QueuedProjection {
@@ -2500,25 +2501,25 @@ export interface QueuedProjection {
 
 /**
  * Projeta a janela de Implementação de CADA atividade da fila (ver `resolveQueuedActivities`) de um
- * dev, encadeadas em sequência — a 1ª ancorada no fim da caixa tracejada (estimativa original,
- * `implWindow.end`) já exibida na tela para cada atividade em andamento do dev (a mais tardia, se
- * houver mais de uma), e cada próxima ancorada no fim projetado da anterior. Array vazio quando não
- * há fila, ou quando o dev não tem nenhuma atividade em andamento com `implWindow` pra ancorar a
- * partir dela (nesse caso não há âncora de trabalho real — ver non-goal no design). Uma atividade da
- * fila sem Pontos de Função é pulada (sem entrada no resultado) e não consome tempo da fila — a
- * próxima continua ancorada normalmente a partir da anterior.
+ * dev, encadeadas em sequência — a 1ª ancorada em `projectDeveloperAvailabilityDate` (quando o dev
+ * projeta ficar livre de todo trabalho real pendente: o próximo dia útil após a última barra de
+ * Implementação em andamento, real ou já ultrapassada, nunca antes de amanhã), e cada próxima
+ * ancorada no fim projetado da anterior (usando a duração real de cada uma via `computeTimeline`).
+ * Quando o dev não tem NADA em andamento (já está livre), a âncora cai pra hoje mesmo (ou o próximo
+ * dia útil, se hoje for fim de semana/feriado). Array vazio só quando não há fila (nenhuma atividade
+ * "Ainda não iniciada"). Uma atividade da fila sem Pontos de Função é pulada (sem entrada no
+ * resultado) e não consome tempo da fila — a próxima continua ancorada normalmente a partir da
+ * anterior.
  */
 export function projectQueuedWindows(
   activities: Activity[],
+  today: string,
   hoursPerDay: number,
   hoursPerPfBySprintId: Record<string, number>,
 ): QueuedProjection[] {
   const queue = resolveQueuedActivities(activities);
-  const inProgressWindowEnds = activities
-    .filter((a) => !a.implDone && !a.isDone && !a.notStarted && a.implWindow !== null)
-    .map((a) => a.implWindow!.end);
-  if (inProgressWindowEnds.length === 0) return [];
-  let anchor = inProgressWindowEnds.reduce((latest, end) => (end > latest ? end : latest));
+  if (queue.length === 0) return [];
+  let anchor = projectDeveloperAvailabilityDate(activities, today, hoursPerDay) ?? ceilToBusinessDay(today);
   const results: QueuedProjection[] = [];
   for (const a of queue) {
     if (a.storyPoints === null) continue;

@@ -47,7 +47,7 @@ export interface Activity {
   startDate: string;
   /** Data (YYYY-MM-DD) de criação da story no Jira, sempre presente — ao contrário de `startDate`,
    * que muda de significado (início real vs. fallback de criação) conforme a atividade já começou
-   * ou não. Usado para detectar quando o dev "pulou a fila" de atividades ainda não iniciadas. */
+   * ou não. Usado pelo client como ordem FIFO da fila de atividades ainda não iniciadas. */
   createdDate: string;
   dueDate: string | null;
   deliveredDate: string | null;

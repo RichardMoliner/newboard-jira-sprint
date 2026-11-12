@@ -541,42 +541,48 @@ describe('projectDeveloperAvailabilityDate', () => {
     expect(projectDeveloperAvailabilityDate([], '2026-09-01', 8)).toBeNull();
   });
 
-  test('remaining hours under one day land on today (already a business day)', () => {
-    const pending = activity({ implDone: false, implEstimatedHours: 20, implLoggedHours: 16 });
-    expect(projectDeveloperAvailabilityDate([pending], '2026-09-01', 8)).toBe('2026-09-01');
+  test('tomorrow when the pending activity has no implWindow at all (e.g. missing storyPoints)', () => {
+    const pending = activity({ implDone: false, implWindow: null });
+    // 2026-09-01 é terça — amanhã é 2026-09-02.
+    expect(projectDeveloperAvailabilityDate([pending], '2026-09-01', 8)).toBe('2026-09-02');
   });
 
-  test('sums remaining hours across every pending activity, skipping done ones', () => {
-    const pendingA = activity({ key: 'A', implDone: false, implEstimatedHours: 10, implLoggedHours: 0 });
-    const pendingB = activity({ key: 'B', implDone: false, implEstimatedHours: 10, implLoggedHours: 0 });
-    const done = activity({ key: 'C', implDone: true, implEstimatedHours: 999, implLoggedHours: 0 });
-    // 20h restantes / 8h por dia = 3 dias úteis a partir de hoje (terça 2026-09-01 -> quinta 2026-09-03).
-    expect(projectDeveloperAvailabilityDate([pendingA, pendingB, done], '2026-09-01', 8)).toBe('2026-09-03');
+  test("uses the pending activity's own implWindow.end directly when it lands AFTER tomorrow — real case: Thiago/COM-66165, implWindow.end 17/11 (not the hours-remaining projection, which overshot to 19/11)", () => {
+    const pending = activity({ implDone: false, implWindow: { start: '2026-11-09', end: '2026-11-17' } });
+    expect(projectDeveloperAvailabilityDate([pending], '2026-11-12', 8)).toBe('2026-11-17');
   });
 
-  test('missing estimate/logged hours count as zero, not NaN', () => {
-    const pending = activity({ implDone: false, implEstimatedHours: null, implLoggedHours: null });
-    expect(projectDeveloperAvailabilityDate([pending], '2026-09-01', 8)).toBe('2026-09-01');
+  test('floors at TOMORROW when the pending activity is overdue and its implWindow.end already fell in the past — real case: Moises/COM-66958, implWindow.end 16/10 while today is 12/11', () => {
+    const pending = activity({ implDone: false, implWindow: { start: '2026-10-15', end: '2026-10-16' } });
+    expect(projectDeveloperAvailabilityDate([pending], '2026-11-12', 8)).toBe('2026-11-13');
   });
 
-  test('never counts negative remaining hours when logged exceeds estimated', () => {
-    const pending = activity({ implDone: false, implEstimatedHours: 5, implLoggedHours: 40 });
-    expect(projectDeveloperAvailabilityDate([pending], '2026-09-01', 8)).toBe('2026-09-01');
+  test('takes the LATEST implWindow.end across every pending activity, skipping done ones — real case: Alício with 3 overdue activities, all implWindow.end in the past, still floors at tomorrow', () => {
+    const pendingA = activity({ key: 'A', implDone: false, implWindow: { start: '2026-10-22', end: '2026-11-03' } });
+    const pendingB = activity({ key: 'B', implDone: false, implWindow: { start: '2026-10-29', end: '2026-11-04' } });
+    const pendingC = activity({ key: 'C', implDone: false, implWindow: { start: '2026-11-06', end: '2026-11-09' } });
+    const done = activity({ key: 'D', implDone: true, implWindow: { start: '2026-01-01', end: '2026-12-31' } });
+    expect(projectDeveloperAvailabilityDate([pendingA, pendingB, pendingC, done], '2026-11-12', 8)).toBe('2026-11-13');
   });
 
-  test('skips weekend and holiday when projecting forward', () => {
-    const pending = activity({ implDone: false, implEstimatedHours: 16, implLoggedHours: 0 });
-    // Sexta 2026-09-04 + 2 dias úteis pula sáb/dom e o feriado 2026-09-07, cai em 2026-09-08.
+  test('implWindow.end landing exactly on TODAY still floors at tomorrow — real case: Guilherme/COM-68467, implWindow.end 12/11 == today', () => {
+    const pending = activity({ implDone: false, implWindow: { start: '2026-11-06', end: '2026-11-12' } });
+    expect(projectDeveloperAvailabilityDate([pending], '2026-11-12', 8)).toBe('2026-11-13');
+  });
+
+  test('skips weekend and holiday when flooring at tomorrow', () => {
+    const pending = activity({ implDone: false, implWindow: null });
+    // Sexta 2026-09-04 -> amanhã pula sáb/dom e o feriado 2026-09-07, cai em 2026-09-08.
     expect(projectDeveloperAvailabilityDate([pending], '2026-09-04', 8)).toBe('2026-09-08');
   });
 
   test('projects from the next business day when today falls on a weekend', () => {
-    const pending = activity({ implDone: false, implEstimatedHours: 4, implLoggedHours: 0 });
+    const pending = activity({ implDone: false, implWindow: null });
     expect(projectDeveloperAvailabilityDate([pending], '2026-09-05', 8)).toBe('2026-09-08');
   });
 
-  test('excludes notStarted activities from the pending sum, even if one somehow carries implEstimatedHours', () => {
-    const queued = activity({ notStarted: true, implDone: false, implEstimatedHours: 999, implLoggedHours: 0 });
+  test('excludes notStarted activities from the pending list, even if one somehow carries an implWindow', () => {
+    const queued = activity({ notStarted: true, implDone: false, implWindow: { start: '2026-09-01', end: '2026-12-31' } });
     expect(projectDeveloperAvailabilityDate([queued], '2026-09-01', 8)).toBeNull();
   });
 });
@@ -605,92 +611,110 @@ describe('resolveQueuedActivities', () => {
     expect(resolveQueuedActivities([a])).toEqual([a]);
   });
 
-  test('orders by earliest-created first when none were skipped', () => {
+  test('orders by earliest-created first (FIFO)', () => {
     const older = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
     const newer = activity({ key: 'B', notStarted: true, createdDate: '2026-09-05' });
     expect(resolveQueuedActivities([newer, older]).map((a) => a.key)).toEqual(['A', 'B']);
   });
 
-  test('does not consider an activity skipped when the already-started sibling was created before it (normal prioritization)', () => {
-    const olderStartedB = activity({ key: 'B', notStarted: false, createdDate: '2026-08-20' });
-    const newerA = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
-    expect(resolveQueuedActivities([olderStartedB, newerA]).map((a) => a.key)).toEqual(['A']);
+  test('does NOT push an old notStarted activity to the back just because the dev already started something created later (real case: backlog tickets can be years older than whatever the dev is currently working on — treating that as "queue jumping" inverted the order to newest-first for stale backlog items)', () => {
+    const oldQueued = activity({ key: 'OLD', notStarted: true, createdDate: '2024-04-25' });
+    const midQueued = activity({ key: 'MID', notStarted: true, createdDate: '2025-09-04' });
+    const newQueued = activity({ key: 'NEW', notStarted: true, createdDate: '2026-10-05' });
+    const started = activity({ key: 'S', notStarted: false, createdDate: '2026-09-03' });
+    expect(resolveQueuedActivities([newQueued, started, oldQueued, midQueued]).map((a) => a.key)).toEqual(['OLD', 'MID', 'NEW']);
   });
 
-  test('pushes a skipped notStarted activity to the back of the queue, behind a not-yet-skipped one', () => {
-    // A foi criada primeiro (01/09) mas o dev já iniciou B, criada depois (05/09) — A foi pulada.
-    const skippedA = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
-    const startedB = activity({ key: 'B', notStarted: false, createdDate: '2026-09-05' });
-    const nextC = activity({ key: 'C', notStarted: true, createdDate: '2026-09-08' });
-    expect(resolveQueuedActivities([skippedA, startedB, nextC]).map((a) => a.key)).toEqual(['C', 'A']);
-  });
-
-  test('a skipped notStarted activity is still returned when it is the only one in queue', () => {
-    const skippedA = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
-    const doneB = activity({ key: 'B', notStarted: false, isDone: true, createdDate: '2026-09-05' });
-    expect(resolveQueuedActivities([skippedA, doneB]).map((a) => a.key)).toEqual(['A']);
-  });
-
-  test('sorts two skipped activities between themselves by createdDate too', () => {
-    const skippedOlder = activity({ key: 'A', notStarted: true, createdDate: '2026-09-01' });
-    const skippedNewer = activity({ key: 'B', notStarted: true, createdDate: '2026-09-03' });
-    const startedC = activity({ key: 'C', notStarted: false, createdDate: '2026-09-10' });
-    expect(resolveQueuedActivities([skippedNewer, skippedOlder, startedC]).map((a) => a.key)).toEqual(['A', 'B']);
-  });
-
-  test('two notStarted activities with the exact same createdDate sort deterministically by key (real case: Jira can return several stories created the same day)', () => {
+  test('two notStarted activities with the exact same createdDate keep the order they arrive in, not key order (real case: Jira can return several stories created the same day)', () => {
     const b = activity({ key: 'COM-66037', notStarted: true, createdDate: '2026-08-12' });
-    const a = activity({ key: 'COM-66036', notStarted: true, createdDate: '2026-08-12' });
-    const c = activity({ key: 'COM-66044', notStarted: true, createdDate: '2026-08-12' });
-    expect(resolveQueuedActivities([b, a, c]).map((x) => x.key)).toEqual(['COM-66036', 'COM-66037', 'COM-66044']);
+    const a = activity({ key: 'COM-66044', notStarted: true, createdDate: '2026-08-12' });
+    const c = activity({ key: 'COM-66036', notStarted: true, createdDate: '2026-08-12' });
+    expect(resolveQueuedActivities([b, a, c]).map((x) => x.key)).toEqual(['COM-66037', 'COM-66044', 'COM-66036']);
   });
 });
 
 describe('projectQueuedWindows', () => {
   test('empty array when the developer has no notStarted activity in queue', () => {
-    expect(projectQueuedWindows([activity({ notStarted: false, implDone: true })], 8, { S1: 4 })).toEqual([]);
+    expect(projectQueuedWindows([activity({ notStarted: false, implDone: true })], '2026-11-12', 8, { S1: 4 })).toEqual([]);
   });
 
-  test('empty array when the developer is already fully available (no in-progress activity to anchor the projection on)', () => {
-    const queued = activity({ key: 'Q', notStarted: true, storyPoints: 16, createdDate: '2026-09-01' });
-    const done = activity({ key: 'D', notStarted: false, implDone: true, implWindow: { start: '2026-08-20', end: '2026-08-25' } });
-    expect(projectQueuedWindows([queued, done], 6.5, { S1: 4 })).toEqual([]);
-  });
-
-  test('empty array when an in-progress activity exists but has no implWindow (e.g. missing storyPoints) to anchor on', () => {
-    const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implWindow: null });
-    const queued = activity({ key: 'Q', notStarted: true, storyPoints: 16, createdDate: '2026-09-01' });
-    expect(projectQueuedWindows([inProgress, queued], 8, { S1: 4 })).toEqual([]);
-  });
-
-  test("projects the Impl window of the next queued activity, anchored on the in-progress activity's own implWindow.end (the dashed estimate box already on screen), using the queued activity's own sprint hoursPerPf", () => {
-    const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implWindow: { start: '2026-11-06', end: '2026-11-12' } });
+  test('anchors on TODAY when the developer is already fully available (no in-progress Impl. work to anchor on) — the queue still projects even for a dev with nothing in progress', () => {
     const queued = activity({ key: 'Q', notStarted: true, storyPoints: 16, createdDate: '2026-09-01', sprintId: 'S9' });
-    const all = [inProgress, queued];
+    const done = activity({ key: 'D', notStarted: false, implDone: true, implEstimatedHours: 40, implLoggedHours: 40 });
+    const today = '2026-11-12'; // quinta-feira, dia útil
+    const hoursPerDay = 6.5;
     const hoursPerPfBySprintId = { S9: 4 };
-    const result = projectQueuedWindows(all, 6.5, hoursPerPfBySprintId);
-    const expectedWindow = computeTimeline(16, '2026-11-12', 4, 6.5).impl;
+    const result = projectQueuedWindows([queued, done], today, hoursPerDay, hoursPerPfBySprintId);
+    const expectedWindow = computeTimeline(16, today, 4, hoursPerDay).impl;
     expect(result).toEqual([{ activityKey: 'Q', window: expectedWindow }]);
   });
 
-  test('anchors on the LATEST implWindow.end when the developer has more than one in-progress activity', () => {
-    const inProgressA = activity({ key: 'A', notStarted: false, implDone: false, implWindow: { start: '2026-11-02', end: '2026-11-10' } });
-    const inProgressB = activity({ key: 'B', notStarted: false, implDone: false, implWindow: { start: '2026-11-04', end: '2026-11-16' } });
+  test('anchors on the next business day (not today) when the developer is fully available and today is a weekend/holiday', () => {
     const queued = activity({ key: 'Q', notStarted: true, storyPoints: 16, createdDate: '2026-09-01', sprintId: 'S9' });
+    const today = '2026-11-14'; // sábado
+    const hoursPerDay = 6.5;
     const hoursPerPfBySprintId = { S9: 4 };
-    const result = projectQueuedWindows([inProgressA, inProgressB, queued], 6.5, hoursPerPfBySprintId);
-    const expectedWindow = computeTimeline(16, '2026-11-16', 4, 6.5).impl;
+    const result = projectQueuedWindows([queued], today, hoursPerDay, hoursPerPfBySprintId);
+    const expectedWindow = computeTimeline(16, '2026-11-16', 4, hoursPerDay).impl; // segunda-feira
+    expect(result).toEqual([{ activityKey: 'Q', window: expectedWindow }]);
+  });
+
+  test('anchors on TOMORROW when a single in-progress activity has no implWindow to go by', () => {
+    const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implWindow: null });
+    const queued = activity({ key: 'Q', notStarted: true, storyPoints: 16, createdDate: '2026-09-01', sprintId: 'S9' });
+    const today = '2026-11-12'; // quinta-feira
+    const hoursPerDay = 6.5;
+    const hoursPerPfBySprintId = { S9: 4 };
+    const result = projectQueuedWindows([inProgress, queued], today, hoursPerDay, hoursPerPfBySprintId);
+    const expectedWindow = computeTimeline(16, '2026-11-13', 4, hoursPerDay).impl; // sexta-feira
+    expect(result).toEqual([{ activityKey: 'Q', window: expectedWindow }]);
+  });
+
+  test("anchors on the in-progress activity's own implWindow.end when it lands AFTER tomorrow — real case: Thiago/COM-66165, implWindow.end 17/11", () => {
+    const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implWindow: { start: '2026-11-09', end: '2026-11-17' } });
+    const queued = activity({ key: 'Q', notStarted: true, storyPoints: 16, createdDate: '2026-09-01', sprintId: 'S9' });
+    const today = '2026-11-12'; // quinta-feira
+    const hoursPerDay = 6.5;
+    const hoursPerPfBySprintId = { S9: 4 };
+    const result = projectQueuedWindows([inProgress, queued], today, hoursPerDay, hoursPerPfBySprintId);
+    const expectedWindow = computeTimeline(16, '2026-11-17', 4, hoursPerDay).impl;
+    expect(result).toEqual([{ activityKey: 'Q', window: expectedWindow }]);
+  });
+
+  test('real case: an overdue in-progress activity whose implWindow.end already fell in the past still anchors the queue on TOMORROW — real case: Moises/COM-66958, implWindow.end 16/10 while today is 12/11', () => {
+    const overdue = activity({ key: 'COM-66958', notStarted: false, implDone: false, implWindow: { start: '2026-10-15', end: '2026-10-16' } });
+    const queued = activity({ key: 'COM-42109', notStarted: true, storyPoints: 7, createdDate: '2024-04-25', sprintId: 'S9' });
+    const today = '2026-11-12'; // quinta-feira
+    const hoursPerDay = 6.5;
+    const hoursPerPfBySprintId = { S9: 4 };
+    const result = projectQueuedWindows([overdue, queued], today, hoursPerDay, hoursPerPfBySprintId);
+    const expectedWindow = computeTimeline(7, '2026-11-13', 4, hoursPerDay).impl; // sexta-feira
+    expect(result).toEqual([{ activityKey: 'COM-42109', window: expectedWindow }]);
+  });
+
+  test('takes the LATEST implWindow.end across every in-progress activity — real case: Alício with 3 overdue/near-done activities, all with implWindow.end in the past, still anchors on tomorrow', () => {
+    const inProgressA = activity({ key: 'A', notStarted: false, implDone: false, implWindow: { start: '2026-10-22', end: '2026-11-03' } });
+    const inProgressB = activity({ key: 'B', notStarted: false, implDone: false, implWindow: { start: '2026-10-29', end: '2026-11-04' } });
+    const inProgressC = activity({ key: 'C', notStarted: false, implDone: false, implWindow: { start: '2026-11-06', end: '2026-11-09' } });
+    const queued = activity({ key: 'Q', notStarted: true, storyPoints: 19, createdDate: '2026-10-27', sprintId: 'S9' });
+    const today = '2026-11-12'; // quinta-feira
+    const hoursPerDay = 6.5;
+    const hoursPerPfBySprintId = { S9: 4 };
+    const result = projectQueuedWindows([inProgressA, inProgressB, inProgressC, queued], today, hoursPerDay, hoursPerPfBySprintId);
+    const expectedWindow = computeTimeline(19, '2026-11-13', 4, hoursPerDay).impl; // sexta-feira
     expect(result).toEqual([{ activityKey: 'Q', window: expectedWindow }]);
   });
 
   test('projects the WHOLE queue in sequence — each activity starts right where the previous one ends', () => {
-    const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implWindow: { start: '2026-11-06', end: '2026-11-12' } });
+    const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implEstimatedHours: 40, implLoggedHours: 10 });
     const first = activity({ key: 'Q1', notStarted: true, storyPoints: 16, createdDate: '2026-09-01', sprintId: 'S9' });
     const second = activity({ key: 'Q2', notStarted: true, storyPoints: 3.5, createdDate: '2026-09-02', sprintId: 'S9' });
+    const today = '2026-11-12'; // quinta-feira
+    const hoursPerDay = 6.5;
     const hoursPerPfBySprintId = { S9: 4 };
-    const result = projectQueuedWindows([inProgress, first, second], 6.5, hoursPerPfBySprintId);
-    const firstWindow = computeTimeline(16, '2026-11-12', 4, 6.5).impl;
-    const secondWindow = computeTimeline(3.5, firstWindow.end, 4, 6.5).impl;
+    const result = projectQueuedWindows([inProgress, first, second], today, hoursPerDay, hoursPerPfBySprintId);
+    const firstWindow = computeTimeline(16, '2026-11-13', 4, hoursPerDay).impl;
+    const secondWindow = computeTimeline(3.5, firstWindow.end, 4, hoursPerDay).impl;
     expect(result).toEqual([
       { activityKey: 'Q1', window: firstWindow },
       { activityKey: 'Q2', window: secondWindow },
@@ -698,12 +722,14 @@ describe('projectQueuedWindows', () => {
   });
 
   test('a queued activity without storyPoints is skipped (no entry), and does not advance the anchor for the next one', () => {
-    const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implWindow: { start: '2026-11-06', end: '2026-11-12' } });
+    const inProgress = activity({ key: 'P', notStarted: false, implDone: false, implEstimatedHours: 40, implLoggedHours: 10 });
     const noEstimate = activity({ key: 'Q1', notStarted: true, storyPoints: null, createdDate: '2026-09-01', sprintId: 'S9' });
     const second = activity({ key: 'Q2', notStarted: true, storyPoints: 3.5, createdDate: '2026-09-02', sprintId: 'S9' });
+    const today = '2026-11-12'; // quinta-feira
+    const hoursPerDay = 6.5;
     const hoursPerPfBySprintId = { S9: 4 };
-    const result = projectQueuedWindows([inProgress, noEstimate, second], 6.5, hoursPerPfBySprintId);
-    const secondWindow = computeTimeline(3.5, '2026-11-12', 4, 6.5).impl;
+    const result = projectQueuedWindows([inProgress, noEstimate, second], today, hoursPerDay, hoursPerPfBySprintId);
+    const secondWindow = computeTimeline(3.5, '2026-11-13', 4, hoursPerDay).impl;
     expect(result).toEqual([{ activityKey: 'Q2', window: secondWindow }]);
   });
 });
@@ -1153,3 +1179,4 @@ describe('groupDeadlineBadges', () => {
     expect(groupDeadlineBadges([bar], dayIndexByDate)).toEqual([]);
   });
 });
+
