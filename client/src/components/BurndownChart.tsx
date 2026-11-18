@@ -24,15 +24,20 @@ export default function BurndownChart({ data }: { data: BurndownData }) {
   const [width, setWidth] = useState(MIN_WIDTH);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
+  // ResizeObserver em vez de só `window.resize`: o container pode mudar de tamanho sem a janela
+  // mudar (ex.: montar enquanto a aba Indicadores ainda está com `display: none`, onde
+  // `clientWidth` é 0 — medir só uma vez nesse momento prendia o gráfico no MIN_WIDTH pra sempre,
+  // até a janela ser redimensionada). Ignora leituras de largura 0 (elemento ainda escondido) em
+  // vez de forçar o mínimo — quando a aba aparecer, o observer dispara de novo com a largura real.
   useLayoutEffect(() => {
-    function recompute() {
-      const el = containerRef.current;
-      if (!el) return;
-      setWidth(Math.max(MIN_WIDTH, el.clientWidth));
-    }
-    recompute();
-    window.addEventListener('resize', recompute);
-    return () => window.removeEventListener('resize', recompute);
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const measuredWidth = entries[0]?.contentRect.width ?? 0;
+      if (measuredWidth > 0) setWidth(Math.max(MIN_WIDTH, measuredWidth));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   const { totalStoryPoints, points } = data;
