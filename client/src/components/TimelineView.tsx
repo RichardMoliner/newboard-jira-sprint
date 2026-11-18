@@ -13,6 +13,8 @@ import {
 } from '../sprintGrouping.js';
 import SprintSettingsPopup from './SprintSettingsPopup.js';
 import StatusHistoryModal from './StatusHistoryModal.js';
+import { PersonAvatar, AvatarStack } from './PersonAvatar.js';
+import WorklogModal from './WorklogModal.js';
 
 const MIN_COLUMN_WIDTH = 28;
 const MAX_COLUMN_WIDTH = 96;
@@ -55,6 +57,8 @@ export default function TimelineView({
   onGroupSelectionChange,
   onGroupClick,
   currentUserDisplayName,
+  avatarUrlByPerson,
+  developerRoles,
 }: {
   activities: Activity[];
   sprints: SprintInfo[];
@@ -69,6 +73,10 @@ export default function TimelineView({
   /** Nome de exibição do usuário autenticado no Jira, pro botão "Minhas tarefas" — null desabilita o
    * botão (não foi possível descobrir quem é o usuário atual). */
   currentUserDisplayName: string | null;
+  /** URL do avatar de cada pessoa — ver `BoardDataResponse.avatarUrlByPerson`. */
+  avatarUrlByPerson: Record<string, string | null>;
+  /** Papel (dev/tester) inferido de cada pessoa — ver `BoardDataResponse.developerRoles`. */
+  developerRoles: Record<string, 'dev' | 'tester'>;
   /** Configuração (horas/PF e prazos) por sprint — sem entrada aqui, a sprint usa o padrão do
    * sistema pra horas/PF e não tem nenhuma régua de prazo. Editável pelo ícone de engrenagem ao
    * lado da pill de cada sprint. */
@@ -240,7 +248,8 @@ export default function TimelineView({
     const set = new Set<string>();
     for (const a of activities) {
       for (const bug of a.bugs) {
-        if (bug.developer && !isResolvedBug(bug.status)) set.add(bug.developer);
+        const responsible = resolveBugResponsible(bug, a.tester);
+        if (responsible && !isResolvedBug(bug.status)) set.add(responsible);
       }
     }
     return set;
@@ -671,6 +680,8 @@ export default function TimelineView({
                   hidePhaseBars={bugFilterActive}
                   dashDelayBar={dashDelayBar}
                   projectedImplWindow={projectedWindowByActivityKey.get(activity.key) ?? null}
+                  avatarUrlByPerson={avatarUrlByPerson}
+                  developerRoles={developerRoles}
                 />
               ))}
             </div>
@@ -780,6 +791,8 @@ function ActivityRow({
   hidePhaseBars,
   dashDelayBar,
   projectedImplWindow,
+  avatarUrlByPerson,
+  developerRoles,
 }: {
   activity: Activity;
   x: (d: string) => number;
@@ -796,6 +809,10 @@ function ActivityRow({
    * (ver `projectNextQueuedWindow`) — null fora desse caso (inclusive quando a atividade já
    * começou, ou quando ela nem é a "próxima" da fila do dev). */
   projectedImplWindow: TimelineWindow | null;
+  /** URL do avatar de cada pessoa — ver `BoardDataResponse.avatarUrlByPerson`. */
+  avatarUrlByPerson: Record<string, string | null>;
+  /** Papel (dev/tester) inferido de cada pessoa — ver `BoardDataResponse.developerRoles`. */
+  developerRoles: Record<string, 'dev' | 'tester'>;
 }) {
   const [showStatusHistory, setShowStatusHistory] = useState(false);
   const showImplBar = !hidePhaseBars && phaseFilter !== 'test';
@@ -851,6 +868,11 @@ function ActivityRow({
   const implFillRight = implFillEndDate
     ? x(implFillEndDate) + (implPhaseDone ? dayFillRatio(implHoursByDate.get(implFillEndDate) ?? 0, hoursPerDay) * dayPixelWidth : 0)
     : null;
+  // Só pra ancorar o avatar: diferente de `implFillRight` (usado também pra detectar atraso/overrun,
+  // não pode mudar), quando a fase ainda está em andamento o preenchimento é desenhado dia a dia
+  // (`buildDailyFillCells`) e cada dia útil ocupa a coluna INTEIRA (`dayPixelWidth`), cheia ou não —
+  // o pixel mais à direita de fato pintado fica um `dayPixelWidth` depois de `implFillRight`.
+  const implFillVisualRight = implFillRight !== null ? implFillRight + (implPhaseDone ? 0 : dayPixelWidth) : null;
 
   const testFillRange = computeTestFillRange({
     testWindow: activity.testWindow,
@@ -867,6 +889,8 @@ function ActivityRow({
   const testFillRight = testFillEndDate
     ? x(testFillEndDate) + (testPhaseDone ? dayFillRatio(testHoursByDate.get(testFillEndDate) ?? 0, hoursPerDay) * dayPixelWidth : 0)
     : null;
+  // Mesmo racional de `implFillVisualRight` — ver o comentário lá.
+  const testFillVisualRight = testFillRight !== null ? testFillRight + (testPhaseDone ? 0 : dayPixelWidth) : null;
   // Atrasada: cada fase ainda em aberto mostra sua própria barra vermelha, preenchendo dia a dia
   // pelos apontamentos do mesmo jeito que quando está em dia — em vez de uma faixa vermelha única
   // por cima de tudo. Uma fase já concluída fica verde mesmo que a tarefa como um todo esteja
@@ -1034,7 +1058,7 @@ function ActivityRow({
               </button>
             )}
           </div>
-          <SideList activity={activity} />
+          <SideList activity={activity} avatarUrlByPerson={avatarUrlByPerson} developerRoles={developerRoles} />
         </div>
       </div>
       <div
@@ -1052,12 +1076,15 @@ function ActivityRow({
                   boxLeft={implBoxLeft!}
                   boxRight={implBoxRight!}
                   fillRight={implFillRight!}
+                  fillVisualRight={implFillVisualRight!}
                   boxColor="var(--series-impl)"
                   boxTitle={`Implementação (previsto): ${formatShort(activity.implWindow!.start)} a ${formatShort(activity.implWindow!.end)}`}
                   markerTitle={`Previsão era terminar a Implementação até ${formatShort(activity.implWindow!.end)}`}
                   fillCells={implFillCells}
                   bandTop={IMPL_BAND_TOP}
                   dashDelayBar={dashDelayBar}
+                  personName={activity.developer}
+                  avatarUrl={avatarUrlByPerson[activity.developer]}
                 />
               )}
               {showTestBar && (
@@ -1065,6 +1092,7 @@ function ActivityRow({
                   boxLeft={testBoxLeft!}
                   boxRight={testBoxRight!}
                   fillRight={testFillRight!}
+                  fillVisualRight={testFillVisualRight!}
                   boxColor="var(--series-test)"
                   boxTitle={
                     testWindowIsProjected
@@ -1075,6 +1103,8 @@ function ActivityRow({
                   markerTitle={`Previsão era terminar o Teste até ${formatShort(projectedTestEnd!)}`}
                   fillCells={testFillCells}
                   dashDelayBar={dashDelayBar}
+                  personName={activity.tester}
+                  avatarUrl={activity.tester ? avatarUrlByPerson[activity.tester] : undefined}
                 />
               )}
             </>
@@ -1114,7 +1144,13 @@ function ActivityRow({
           <div key={String(group.key)} style={{ display: 'contents' }}>
             <BugArtifactHeader group={group} />
             {groupBugsByStatus(group.bugs).map((statusGroup) => (
-              <BugStatusSection key={statusGroup.key} group={statusGroup} x={x} />
+              <BugStatusSection
+                key={statusGroup.key}
+                group={statusGroup}
+                x={x}
+                avatarUrlByPerson={avatarUrlByPerson}
+                activityTester={activity.tester}
+              />
             ))}
           </div>
         ))}
@@ -1131,6 +1167,22 @@ function normalizeStatus(text: string): string {
 
 function isResolvedBug(status: string): boolean {
   return normalizeStatus(status) === 'atendida';
+}
+
+/**
+ * Quem exibir como responsável por um bug — normalmente `bug.developer` (assignee no Jira), mas
+ * esse campo é só quem está responsável NO MOMENTO, e pode ser o tester da própria atividade
+ * fechando/validando o chamado, não quem de fato corrigiu (caso real: COM-69476, reatribuído pra
+ * Fernanda — tester de COM-67274 — enquanto quem apontou a correção foi o Patrick). Nesse caso,
+ * troca pelo autor de apontamento no bug com mais horas, excluindo o tester; sem ninguém além do
+ * tester tendo apontado, mantém o assignee original (melhor que mostrar "—" sem necessidade).
+ */
+export function resolveBugResponsible(bug: Activity['bugs'][number], activityTester: string | null): string | null {
+  if (!bug.developer) return null;
+  if (bug.developer !== activityTester) return bug.developer;
+
+  const others = authorsByTypeOrderedByHours(bug.worklogEntries, 'Bug').filter((author) => author !== activityTester);
+  return others[0] ?? bug.developer;
 }
 
 export interface BugArtifactGroup {
@@ -1229,7 +1281,17 @@ function BugArtifactHeader({ group }: { group: BugArtifactGroup }) {
   );
 }
 
-function BugStatusSection({ group, x }: { group: BugStatusGroup; x: (d: string) => number }) {
+function BugStatusSection({
+  group,
+  x,
+  avatarUrlByPerson,
+  activityTester,
+}: {
+  group: BugStatusGroup;
+  x: (d: string) => number;
+  avatarUrlByPerson: Record<string, string | null>;
+  activityTester: string | null;
+}) {
   const [expanded, setExpanded] = useState(!group.collapsedByDefault);
   const onToggle = group.collapsedByDefault ? () => setExpanded((v) => !v) : undefined;
   return (
@@ -1259,12 +1321,26 @@ function BugStatusSection({ group, x }: { group: BugStatusGroup; x: (d: string) 
         </div>
         <div style={{ background: 'var(--page-plane)', borderBottom: '1px solid var(--gridline)' }} />
       </div>
-      {expanded && group.bugs.map((bug) => <BugRow key={bug.key} bug={bug} x={x} />)}
+      {expanded &&
+        group.bugs.map((bug) => (
+          <BugRow key={bug.key} bug={bug} x={x} avatarUrlByPerson={avatarUrlByPerson} activityTester={activityTester} />
+        ))}
     </div>
   );
 }
 
-function BugRow({ bug, x }: { bug: Activity['bugs'][number]; x: (d: string) => number }) {
+function BugRow({
+  bug,
+  x,
+  avatarUrlByPerson,
+  activityTester,
+}: {
+  bug: Activity['bugs'][number];
+  x: (d: string) => number;
+  avatarUrlByPerson: Record<string, string | null>;
+  activityTester: string | null;
+}) {
+  const responsible = resolveBugResponsible(bug, activityTester);
   const isResolved = isResolvedBug(bug.status);
   const textColor = isResolved ? 'var(--status-good)' : 'var(--text-muted)';
   return (
@@ -1282,8 +1358,9 @@ function BugRow({ bug, x }: { bug: Activity['bugs'][number]; x: (d: string) => n
           {bug.title}
         </div>
         <div style={{ color: textColor, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span>
-            {bug.developer ?? '—'} - {bug.status}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            {responsible && <PersonAvatar name={responsible} avatarUrl={avatarUrlByPerson[responsible]} size={14} />}
+            {responsible ?? '—'} - {bug.status}
             {isResolved && ` em ${formatShort(bug.endDate)}`}
           </span>
           {bug.labels.map((label) => {
@@ -1370,30 +1447,48 @@ function ProjectedQueueBar({ boxLeft, boxRight, boxTitle }: { boxLeft: number; b
   );
 }
 
+const PHASE_BAR_AVATAR_SIZE = 16;
+
 function PhaseBar({
   boxLeft,
   boxRight,
   fillRight,
+  fillVisualRight,
   boxColor,
   boxTitle,
   markerTitle,
   fillCells,
   bandTop,
   dashDelayBar,
+  personName,
+  avatarUrl,
 }: {
   boxLeft: number;
   boxRight: number;
   fillRight: number;
+  /** Ponta direita de fato pintada do preenchimento — igual a `fillRight` quando a fase já está
+   * concluída, mas um `dayPixelWidth` a mais quando ainda em andamento (ver o comentário de
+   * `implFillVisualRight` em `ActivityRow`). Só usado pra ancorar o avatar; `fillRight` continua
+   * sendo o valor usado pra detectar atraso/overrun, sem mudança de comportamento ali. */
+  fillVisualRight: number;
   boxColor: string;
   boxTitle: string;
   markerTitle: string;
   fillCells: React.ReactNode;
   bandTop: number;
   dashDelayBar: boolean;
+  /** Dev (barra de Implementação) ou tester (barra de Teste) dessa atividade — null quando não há
+   * tester. Mostrado como avatar colado na ponta direita da barra. */
+  personName: string | null;
+  avatarUrl: string | null | undefined;
 }) {
   const boxWidth = Math.max(boxRight - boxLeft, 6);
   const overruns = fillRight > boxRight + 1;
   const overrunDash = computeOverrunDash(boxRight, fillRight, dashDelayBar);
+  // Fim visual de verdade da barra: quando o apontamento real estoura a caixa estimada
+  // (`overruns`), a barra desenhada vai até `fillVisualRight`, bem além de `boxRight` — o avatar
+  // precisa acompanhar essa ponta real, não a da estimativa.
+  const barEnd = Math.max(boxRight, fillVisualRight);
   return (
     <>
       <div
@@ -1411,6 +1506,14 @@ function PhaseBar({
         }}
       />
       {fillCells}
+      {personName && (
+        <div
+          title={personName}
+          style={{ position: 'absolute', left: barEnd + 4, top: bandTop + 3 + (16 - PHASE_BAR_AVATAR_SIZE) / 2 }}
+        >
+          <PersonAvatar name={personName} avatarUrl={avatarUrl} size={PHASE_BAR_AVATAR_SIZE} />
+        </div>
+      )}
       {overruns && (
         <div
           title={markerTitle}
@@ -1928,7 +2031,16 @@ function checkIndicator(color: string | null, title: string): React.ReactNode {
   );
 }
 
-function SideList({ activity }: { activity: Activity }) {
+function SideList({
+  activity,
+  avatarUrlByPerson,
+  developerRoles,
+}: {
+  activity: Activity;
+  avatarUrlByPerson: Record<string, string | null>;
+  developerRoles: Record<string, 'dev' | 'tester'>;
+}) {
+  const [worklogModal, setWorklogModal] = useState<{ title: string; entries: WorklogEntry[] } | null>(null);
   const assertividadeTitle =
     activity.assertividadePercent !== null
       ? 'Horas apontadas (Implementação + Teste) dividido pelas horas estimadas (PF × horas/PF). 100% = estimativa bateu exatamente com o apontado; abaixo de 100% superestimamos, acima subestimamos.'
@@ -1937,7 +2049,18 @@ function SideList({ activity }: { activity: Activity }) {
     'Mesma % de Assertividade, somando também as horas apontadas em bugs — esforço real total, incluindo correções fora da estimativa original.';
   const implCheckColor = hoursCheckColor(activity.implDone, activity.implLoggedHours, activity.implEstimatedHours);
   const testCheckColor = hoursCheckColor(activity.testDone, activity.testLoggedHours, activity.testEstimatedHours);
-  const items: [string, React.ReactNode, string?][] = [
+  // Quem de fato apontou hora na subtarefa — pode ser mais de uma pessoa (pareamento, ajuda
+  // pontual), diferente do "Dev"/"Tester" titular da atividade mostrado acima.
+  const implEntries = activity.worklogEntries.filter((e) => e.subtaskType === 'Implementação');
+  const testEntries = activity.worklogEntries.filter((e) => e.subtaskType === 'Teste');
+  // Mesmo critério de `splitBugWorklogHoursByRole` no servidor: apontamento em bug classificado por
+  // quem apontou ter papel de dev ou de tester na sprint (inferido pelas subtarefas de
+  // Implementação/Teste que cada um assume) — não por quem é o "Dev"/"Tester" titular desta story.
+  const implBugEntries = activity.worklogEntries.filter((e) => e.subtaskType === 'Bug' && developerRoles[e.author] === 'dev');
+  const testBugEntries = activity.worklogEntries.filter((e) => e.subtaskType === 'Bug' && developerRoles[e.author] === 'tester');
+  const implAuthors = authorsByTypeOrderedByHours(implEntries, 'Implementação');
+  const testAuthors = authorsByTypeOrderedByHours(testEntries, 'Teste');
+  const items: [string, React.ReactNode, string?, React.ReactNode?, (() => void)?][] = [
     ['PF', activity.storyPoints !== null ? String(activity.storyPoints) : '—'],
     ['Dev', firstName(activity.developer)],
     ['Tester', activity.tester ? firstName(activity.tester) : '—'],
@@ -1945,11 +2068,15 @@ function SideList({ activity }: { activity: Activity }) {
       'Impl. (h)',
       <HoursWithCheck logged={activity.implLoggedHours} estimated={activity.implEstimatedHours} indicator={checkIndicator(implCheckColor, 'Implementação atendida')} />,
       HOURS_PAIR_TITLE,
+      <AvatarStack names={implAuthors} avatarUrlByPerson={avatarUrlByPerson} />,
+      implEntries.length > 0 ? () => setWorklogModal({ title: 'Implementação', entries: implEntries }) : undefined,
     ],
     [
       'Teste (h)',
       <HoursWithCheck logged={activity.testLoggedHours} estimated={activity.testEstimatedHours} indicator={checkIndicator(testCheckColor, 'Teste atendido')} />,
       HOURS_PAIR_TITLE,
+      <AvatarStack names={testAuthors} avatarUrlByPerson={avatarUrlByPerson} />,
+      testEntries.length > 0 ? () => setWorklogModal({ title: 'Teste', entries: testEntries }) : undefined,
     ],
     ...(activity.bugsLoggedHours !== null
       ? ([
@@ -1957,12 +2084,16 @@ function SideList({ activity }: { activity: Activity }) {
             'Impl Bugs (h)',
             formatHoursMinutes(activity.implBugsLoggedHours ?? 0),
             'Apontamentos em bugs feitos por quem tem papel de dev na sprint (inferido pelas subtarefas de Implementação/Teste que cada um assume).',
-          ] as [string, React.ReactNode, string?],
+            <AvatarStack names={authorsByTypeOrderedByHours(implBugEntries, 'Bug')} avatarUrlByPerson={avatarUrlByPerson} />,
+            implBugEntries.length > 0 ? () => setWorklogModal({ title: 'Bugs (Implementação)', entries: implBugEntries }) : undefined,
+          ] as [string, React.ReactNode, string?, React.ReactNode?, (() => void)?],
           [
             'Teste Bugs (h)',
             formatHoursMinutes(activity.testBugsLoggedHours ?? 0),
             'Apontamentos em bugs feitos por quem tem papel de tester na sprint (inferido pelas subtarefas de Implementação/Teste que cada um assume).',
-          ] as [string, React.ReactNode, string?],
+            <AvatarStack names={authorsByTypeOrderedByHours(testBugEntries, 'Bug')} avatarUrlByPerson={avatarUrlByPerson} />,
+            testBugEntries.length > 0 ? () => setWorklogModal({ title: 'Bugs (Teste)', entries: testBugEntries }) : undefined,
+          ] as [string, React.ReactNode, string?, React.ReactNode?, (() => void)?],
         ])
       : []),
     ['Assert.', activity.assertividadePercent !== null ? `${Math.round(activity.assertividadePercent)}%` : '—', assertividadeTitle],
@@ -1972,19 +2103,43 @@ function SideList({ activity }: { activity: Activity }) {
             'Assert. c/ bugs',
             activity.assertividadeComBugsPercent !== null ? `${Math.round(activity.assertividadeComBugsPercent)}%` : '—',
             assertividadeComBugsTitle,
-          ] as [string, React.ReactNode, string?],
+          ] as [string, React.ReactNode, string?, React.ReactNode?, (() => void)?],
         ])
       : []),
   ];
   return (
-    <dl style={{ width: 190, flexShrink: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10.5, color: 'var(--text-secondary)' }}>
-      {items.map(([label, value, title]) => (
-        <div key={label} title={title} style={{ display: 'flex', gap: 4, overflow: 'hidden', cursor: title ? 'help' : undefined }}>
-          <dt style={{ margin: 0, color: 'var(--text-muted)', flexShrink: 0 }}>{label}:</dt>
-          <dd style={{ margin: 0, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</dd>
-        </div>
-      ))}
-    </dl>
+    <>
+      <dl style={{ width: 230, flexShrink: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10.5, color: 'var(--text-secondary)' }}>
+        {items.map(([label, value, title, avatarGroup, onOpen]) => (
+          <div key={label} title={title} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, cursor: title ? 'help' : undefined }}>
+            <dt
+              onClick={onOpen}
+              style={{
+                margin: 0,
+                color: 'var(--text-muted)',
+                flexShrink: 0,
+                cursor: onOpen ? 'pointer' : undefined,
+                textDecoration: onOpen ? 'underline' : undefined,
+                textDecorationStyle: 'dotted',
+              }}
+            >
+              {label}:
+            </dt>
+            <dd style={{ margin: 0, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</dd>
+            {avatarGroup}
+          </div>
+        ))}
+      </dl>
+      {worklogModal && (
+        <WorklogModal
+          activity={activity}
+          title={worklogModal.title}
+          entries={worklogModal.entries}
+          avatarUrlByPerson={avatarUrlByPerson}
+          onClose={() => setWorklogModal(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -2059,6 +2214,18 @@ export function projectTestWindow({
   return { start: earliestStart, end: addBusinessDays(earliestStart, durationDays - 1) };
 }
 
+/** Quem apontou hora num tipo de subtarefa (Implementação/Teste/Bug), sem repetir — ordenado pelo
+ * total de horas apontadas naquele tipo, do maior pro menor (quem contribuiu mais aparece primeiro
+ * no grupo de avatares). */
+export function authorsByTypeOrderedByHours(entries: WorklogEntry[], type: WorklogEntry['subtaskType']): string[] {
+  const hoursByAuthor = new Map<string, number>();
+  for (const entry of entries) {
+    if (entry.subtaskType !== type) continue;
+    hoursByAuthor.set(entry.author, (hoursByAuthor.get(entry.author) ?? 0) + entry.hours);
+  }
+  return [...hoursByAuthor.entries()].sort((a, b) => b[1] - a[1]).map(([author]) => author);
+}
+
 /** Data do apontamento mais recente de um tipo de subtarefa (Implementação/Teste/Bug), ou null se não houver nenhum. */
 export function lastWorklogDate(entries: WorklogEntry[], type: WorklogEntry['subtaskType']): string | null {
   let last: string | null = null;
@@ -2070,7 +2237,7 @@ export function lastWorklogDate(entries: WorklogEntry[], type: WorklogEntry['sub
   return last;
 }
 
-function formatShort(iso: string): string {
+export function formatShort(iso: string): string {
   const [, m, d] = iso.split('-');
   return `${d}/${m}`;
 }

@@ -117,18 +117,32 @@ export interface BugResolverSummary {
 }
 
 /**
- * Quantidade de bugs com status "Atendida" (resolvidos), agrupados pelo desenvolvedor atribuído ao
- * PRÓPRIO bug — não o dev da atividade-pai, já que quem resolve o bug pode ser outra pessoa. Bugs
- * sem desenvolvedor atribuído ficam de fora.
+ * Quantidade de bugs com status "Atendida" (resolvidos), agrupados por quem de fato lançou
+ * apontamento de correção neles — NÃO o `bug.developer` (assignee do bug no Jira), que é só quem
+ * está responsável no momento da consulta e pode ser um tester fechando o chamado depois que o dev
+ * já corrigiu (caso real: COM-69431/69422/69419/69404, reatribuídos pra Fernanda — tester — depois
+ * do Paulo já ter corrigido e logado as horas; contar pelo assignee dava o crédito pra pessoa
+ * errada). `developerRoles` (inferido por `inferDeveloperRoles`, a partir de quem foi assignee de
+ * subtarefas de Implementação/Teste na sprint) filtra os apontamentos pra só considerar autores com
+ * papel 'dev' — quem nunca foi assignee de Implementação em nenhuma sprint buscada (papel
+ * desconhecido) também fica de fora, mesma linha do YAGNI já aplicado à divisão dev/tester de horas
+ * de bug em `mapActivity.ts` (sem um 3º balde "não classificado"). Um bug com apontamento de mais de
+ * um dev conta pra cada um deles (pareamento); o mesmo dev com vários apontamentos no mesmo bug só
+ * conta uma vez.
  */
-export function computeBugResolverSummaries(activities: Activity[]): BugResolverSummary[] {
+export function computeBugResolverSummaries(
+  activities: Activity[],
+  developerRoles: Record<string, 'dev' | 'tester'>,
+): BugResolverSummary[] {
   const byPerson = new Map<string, number>();
 
   for (const activity of activities) {
     for (const bug of activity.bugs) {
-      if (bug.developer === null) continue;
       if (bug.status.trim().toLowerCase() !== 'atendida') continue;
-      byPerson.set(bug.developer, (byPerson.get(bug.developer) ?? 0) + 1);
+      const devAuthors = new Set(bug.worklogEntries.filter((w) => developerRoles[w.author] === 'dev').map((w) => w.author));
+      for (const author of devAuthors) {
+        byPerson.set(author, (byPerson.get(author) ?? 0) + 1);
+      }
     }
   }
 
@@ -177,6 +191,12 @@ export interface PersonSummary {
   activities: number;
   storyPoints: number;
   bugs: number;
+  /** Bugs cujo "Artefato do bug" (Jira) é Requisito — gerados no requisito/produto. */
+  bugsRequisitoCount: number;
+  /** Bugs cujo "Artefato do bug" (Jira) é Solução — gerados na implementação/dev. */
+  bugsImplementacaoCount: number;
+  /** Bugs sem artefato preenchido ou com valor não reconhecido. */
+  bugsSemArtefatoCount: number;
   done: number;
   atRisk: number;
   inProgress: number;
@@ -192,6 +212,9 @@ export function computePersonSummaries(activities: Activity[]): PersonSummary[] 
       activities: 0,
       storyPoints: 0,
       bugs: 0,
+      bugsRequisitoCount: 0,
+      bugsImplementacaoCount: 0,
+      bugsSemArtefatoCount: 0,
       done: 0,
       atRisk: 0,
       inProgress: 0,
@@ -201,6 +224,9 @@ export function computePersonSummaries(activities: Activity[]): PersonSummary[] 
     current.activities += 1;
     current.storyPoints += activity.storyPoints ?? 0;
     current.bugs += activity.bugs.length;
+    current.bugsRequisitoCount += activity.bugs.filter((b) => b.artifact === 'requisito').length;
+    current.bugsImplementacaoCount += activity.bugs.filter((b) => b.artifact === 'implementacao').length;
+    current.bugsSemArtefatoCount += activity.bugs.filter((b) => b.artifact === null).length;
     if (isCompleted(activity)) current.done += 1;
     if (activity.isOverdue) current.atRisk += 1;
     if (!isCompleted(activity) && !activity.isOverdue) current.inProgress += 1;
@@ -455,9 +481,11 @@ export interface BurndownData {
  * Reconstrói o burndown a partir da data de entrega de cada atividade (deliveredDate, quando
  * funcionalmente concluída) — o painel não guarda um histórico diário real do backlog. Combina
  * todas as sprints selecionadas num único período (do início mais cedo ao fim mais tarde) e um
- * único total; sempre conta todas as atividades recebidas, independente de herdada ou da checkbox
- * "Considerar herdadas" (é sobre o escopo real da sprint, não uma métrica de produtividade — mesmo
- * racional dos cards "Em risco"/"Herdadas"). Retorna null sem nenhuma sprint selecionada.
+ * único total a partir de `activities` tal como recebido — a função em si não aplica nenhum filtro
+ * próprio de herdada/adicionada; quem decide esse escopo é o chamador (`IndicatorsView` passa
+ * `indicatorActivities`, já filtrado pelas checkboxes "Considerar herdadas"/"Considerar tarefas
+ * adicionadas", pelo mesmo motivo dos demais indicadores — ver `fab78c4`). Retorna null sem nenhuma
+ * sprint selecionada.
  */
 export function computeBurndown(activities: Activity[], sprints: SprintInfo[], sprintFilter: string[], today: string): BurndownData | null {
   if (sprintFilter.length === 0) return null;

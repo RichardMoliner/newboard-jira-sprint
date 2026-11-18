@@ -13,8 +13,10 @@ import {
   computeStatusCycleTime,
   computeRealizedProductivity,
   topActivitiesByBugCount,
+  type PersonSummary,
 } from '../indicators/computeIndicators.js';
 import { groupSprintsByType, type SprintGroupType } from '../sprintGrouping.js';
+import { PersonLabel } from './PersonAvatar.js';
 import { computeSprintCompletion, formatStatusBreakdownTooltip, FilterPill, SprintGroupPill } from './TimelineView.js';
 import StatusPieChart from './StatusPieChart.js';
 import BugLabelsPieChart from './BugLabelsPieChart.js';
@@ -31,6 +33,8 @@ export default function IndicatorsView({
   onSprintClick,
   hoursPerPfBySprintId,
   assumedTestSharePercent,
+  developerRoles,
+  avatarUrlByPerson,
   sprintSettingsById,
   onGroupSelectionChange,
   onGroupClick,
@@ -43,6 +47,10 @@ export default function IndicatorsView({
   /** Horas/PF efetivo de cada sprint (já com o padrão do sistema aplicado pra quem não configurou a própria). */
   hoursPerPfBySprintId: Record<string, number>;
   assumedTestSharePercent: number;
+  /** Papel (dev/tester) inferido de cada pessoa — ver `BoardDataResponse.developerRoles`. */
+  developerRoles: Record<string, 'dev' | 'tester'>;
+  /** URL do avatar de cada pessoa — ver `BoardDataResponse.avatarUrlByPerson`. */
+  avatarUrlByPerson: Record<string, string | null>;
   /** Configuração (horas/PF, prazos e tipo de grupo) por sprint — usada aqui só pro agrupador. Sem
    * entrada aqui (ex.: Histórico, Relatório), o agrupador simplesmente não aparece. */
   sprintSettingsById?: Record<string, SprintSettings>;
@@ -110,7 +118,10 @@ export default function IndicatorsView({
   const statusCycleTime = useMemo(() => computeStatusCycleTime(indicatorActivities), [indicatorActivities]);
   const topBuggy = useMemo(() => topActivitiesByBugCount(indicatorActivities, 10), [indicatorActivities]);
   const bugLabelSummaries = useMemo(() => computeBugLabelSummaries(indicatorActivities), [indicatorActivities]);
-  const bugResolvers = useMemo(() => computeBugResolverSummaries(indicatorActivities), [indicatorActivities]);
+  const bugResolvers = useMemo(
+    () => computeBugResolverSummaries(indicatorActivities, developerRoles),
+    [indicatorActivities, developerRoles],
+  );
   const hoursSummary = useMemo(
     () => computeHoursSummary(indicatorActivities, hoursPerPfBySprintId, assumedTestSharePercent),
     [indicatorActivities, hoursPerPfBySprintId, assumedTestSharePercent],
@@ -441,18 +452,33 @@ export default function IndicatorsView({
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24, alignItems: 'start' }}>
         <Section title="Bugs por profissional">
-          <BarList
+          <BugArtifactLegend people={people} />
+          <StackedBarList
             items={people
               .filter((p) => p.bugs > 0)
               .sort((a, b) => b.bugs - a.bugs)
-              .map((p) => ({ label: p.person, value: p.bugs }))}
+              .map((p) => ({
+                label: p.person,
+                total: p.bugs,
+                segments: [
+                  { value: p.bugsRequisitoCount, color: 'var(--seq-blue-450)' },
+                  { value: p.bugsImplementacaoCount, color: 'var(--seq-orange-450)' },
+                  { value: p.bugsSemArtefatoCount, color: 'var(--text-muted)' },
+                ],
+              }))}
             max={maxBugs}
-            color="var(--seq-orange-450)"
+            avatarUrlByPerson={avatarUrlByPerson}
           />
         </Section>
 
         <Section title="Story points em execução por profissional">
-          <BarList items={people.map((p) => ({ label: p.person, value: p.storyPoints }))} max={maxStoryPoints} color="var(--seq-blue-450)" format={(v) => v.toFixed(1)} />
+          <BarList
+            items={people.map((p) => ({ label: p.person, value: p.storyPoints }))}
+            max={maxStoryPoints}
+            color="var(--seq-blue-450)"
+            avatarUrlByPerson={avatarUrlByPerson}
+            format={(v) => v.toFixed(1)}
+          />
         </Section>
 
         <Section title="Maiores resolutores de bugs" subtitle="Bugs com status Atendida, atribuídos ao desenvolvedor do próprio bug (quem de fato resolveu).">
@@ -460,6 +486,7 @@ export default function IndicatorsView({
             items={bugResolvers.map((p) => ({ label: p.person, value: p.resolvedBugs }))}
             max={maxResolvedBugs}
             color="var(--status-good)"
+            avatarUrlByPerson={avatarUrlByPerson}
           />
         </Section>
       </div>
@@ -479,7 +506,7 @@ export default function IndicatorsView({
             .map((p) => {
               const hoursPerPf = hoursPerPfByDeveloperMap.get(p.person);
               return [
-                p.person,
+                <PersonLabel name={p.person} avatarUrl={avatarUrlByPerson[p.person]} />,
                 hoursPerPf?.hoursPerPf != null ? hoursPerPf.hoursPerPf.toFixed(2) : '—',
                 p.activities,
                 p.storyPoints.toFixed(1),
@@ -659,15 +686,117 @@ function Table({ columns, rows }: { columns: string[]; rows: React.ReactNode[][]
   );
 }
 
+/** Legenda das cores usadas em `StackedBarList` pra "Bugs por profissional" — já com o total de
+ * cada artefato somado entre todas as pessoas, pra não precisar subir até os cards "Bugs de
+ * requisito"/"Bugs de implementação" em "Visão geral" pra ver o mesmo número. "Sem artefato" só
+ * aparece se alguém de fato tiver bug sem artefato preenchido, mesmo critério de
+ * `groupBugsByArtifact` (Linha do tempo) de omitir grupos vazios. */
+function BugArtifactLegend({ people }: { people: PersonSummary[] }) {
+  const totalRequisito = people.reduce((acc, p) => acc + p.bugsRequisitoCount, 0);
+  const totalImplementacao = people.reduce((acc, p) => acc + p.bugsImplementacaoCount, 0);
+  const totalSemArtefato = people.reduce((acc, p) => acc + p.bugsSemArtefatoCount, 0);
+  const entries: { label: string; color: string; total: number }[] = [
+    { label: 'Requisito', color: 'var(--seq-blue-450)', total: totalRequisito },
+    { label: 'Implementação', color: 'var(--seq-orange-450)', total: totalImplementacao },
+    ...(totalSemArtefato > 0 ? [{ label: 'Sem artefato', color: 'var(--text-muted)', total: totalSemArtefato }] : []),
+  ];
+  return (
+    <div style={{ display: 'flex', gap: 14, marginBottom: 10, fontSize: 11 }}>
+      {entries.map((entry) => (
+        <span key={entry.label} style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-secondary)' }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: entry.color, flexShrink: 0 }} />
+          {entry.label}
+          <strong className="tabular-nums" style={{ color: 'var(--text-primary)' }}>
+            {entry.total}
+          </strong>
+        </span>
+      ))}
+      <span style={{ color: 'var(--text-muted)' }}>
+        · Total:{' '}
+        <strong className="tabular-nums" style={{ color: 'var(--text-primary)' }}>
+          {totalRequisito + totalImplementacao + totalSemArtefato}
+        </strong>
+      </span>
+    </div>
+  );
+}
+
+/** Mesmo layout/dimensões do `BarList`, mas cada barra é dividida em segmentos coloridos (ex.: bugs
+ * por artefato) em vez de uma cor só — segmentos com valor 0 não são renderizados (sem gap vazio). */
+function StackedBarList({
+  items,
+  max,
+  avatarUrlByPerson,
+  format = (v: number) => String(v),
+}: {
+  items: { label: string; total: number; segments: { value: number; color: string }[] }[];
+  max: number;
+  avatarUrlByPerson: Record<string, string | null>;
+  format?: (v: number) => string;
+}) {
+  if (items.length === 0) return <Empty text="Sem dados." />;
+  return (
+    <div>
+      {items.map((item) => {
+        const visibleSegments = item.segments.filter((s) => s.value > 0);
+        return (
+          <div key={item.label} style={{ display: 'grid', gridTemplateColumns: '190px 1fr 46px', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 11.5 }}>
+            <PersonLabel name={item.label} avatarUrl={avatarUrlByPerson[item.label]} />
+            <div
+              style={{
+                background: 'var(--page-plane)',
+                borderRadius: 4,
+                height: 14,
+                width: `${(item.total / max) * 100}%`,
+                display: 'flex',
+                gap: 2,
+              }}
+            >
+              {visibleSegments.map((segment, i) => (
+                <div
+                  key={i}
+                  title={format(segment.value)}
+                  style={{
+                    flex: segment.value,
+                    height: '100%',
+                    background: segment.color,
+                    borderRadius: 4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <span
+                    className="tabular-nums"
+                    style={{ fontSize: 9.5, fontWeight: 700, color: '#fff', textShadow: '0 1px 1px rgba(0,0,0,0.35)', whiteSpace: 'nowrap' }}
+                  >
+                    {format(segment.value)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="tabular-nums" style={{ textAlign: 'right', fontWeight: 700 }}>
+              {format(item.total)}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function BarList({
   items,
   max,
   color,
+  avatarUrlByPerson,
   format = (v: number) => String(v),
 }: {
   items: { label: string; value: number }[];
   max: number;
   color: string;
+  avatarUrlByPerson: Record<string, string | null>;
   format?: (v: number) => string;
 }) {
   if (items.length === 0) return <Empty text="Sem dados." />;
@@ -675,7 +804,7 @@ function BarList({
     <div>
       {items.map((item) => (
         <div key={item.label} style={{ display: 'grid', gridTemplateColumns: '190px 1fr 46px', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 11.5 }}>
-          <div style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</div>
+          <PersonLabel name={item.label} avatarUrl={avatarUrlByPerson[item.label]} />
           <div style={{ background: 'var(--page-plane)', borderRadius: 4, height: 14, position: 'relative' }}>
             <div style={{ width: `${(item.value / max) * 100}%`, height: '100%', borderRadius: 4, background: color }} />
           </div>

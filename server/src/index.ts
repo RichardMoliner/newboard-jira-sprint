@@ -14,6 +14,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '../..');
 const CONFIG_PATH = resolve(REPO_ROOT, 'config.json');
 const SPRINT_CACHE_DIR = resolve(REPO_ROOT, '.sprint-cache');
+const AVATAR_CACHE_PATH = resolve(REPO_ROOT, '.avatar-cache.json');
 const NOTIFIED_STATE_PATH = resolve(REPO_ROOT, 'notified.json');
 
 dotenv.config({ path: resolve(REPO_ROOT, '.env') });
@@ -28,12 +29,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use('/api', configRouter(CONFIG_PATH));
-app.use('/api', boardDataRouter(CONFIG_PATH));
-app.use('/api', historicalSprintsRouter(CONFIG_PATH, SPRINT_CACHE_DIR));
+app.use('/api', boardDataRouter(CONFIG_PATH, AVATAR_CACHE_PATH));
+app.use('/api', historicalSprintsRouter(CONFIG_PATH, SPRINT_CACHE_DIR, AVATAR_CACHE_PATH));
 app.use('/api', sprintSettingsRouter(CONFIG_PATH));
 app.use('/api', adminRouter(CONFIG_PATH));
 
-startDailyEarlyDeliveryCheck(CONFIG_PATH, NOTIFIED_STATE_PATH);
+startDailyEarlyDeliveryCheck(CONFIG_PATH, NOTIFIED_STATE_PATH, AVATAR_CACHE_PATH);
 
 const port = Number(process.env.PORT ?? 3001);
 const server = app.listen(port, () => {

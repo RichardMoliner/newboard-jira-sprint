@@ -12,7 +12,7 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
  * notificação estão pendentes e envia cada um ao Google Chat do grupo correspondente, persistindo
  * o progresso a cada envio bem-sucedido (para não perder avanço se um envio posterior falhar).
  */
-export async function runEarlyDeliveryCheck(configPath: string, notifiedStatePath: string): Promise<void> {
+export async function runEarlyDeliveryCheck(configPath: string, notifiedStatePath: string, avatarCachePath: string): Promise<void> {
   const config = await readConfig(configPath);
   if (!config.vertical || !config.jiraUsername || !config.jiraPassword) {
     console.log('[scheduler] Configuração incompleta (vertical/usuário/senha do Jira) — checagem de liberação antecipada ignorada.');
@@ -32,6 +32,7 @@ export async function runEarlyDeliveryCheck(configPath: string, notifiedStatePat
     hoursPerPfBySprintId,
     hoursPerDayBySprintId,
     config.hoursPerDay ?? undefined,
+    avatarCachePath,
   );
 
   let state = await readNotifiedState(notifiedStatePath);
@@ -74,15 +75,15 @@ function msUntilNextEightAm(now: Date): number {
  * Agenda `runEarlyDeliveryCheck` para rodar todo dia às 08h — primeira execução no próximo 08h
  * (hoje, se ainda não passou, senão amanhã), e a partir daí a cada 24h.
  */
-export function startDailyEarlyDeliveryCheck(configPath: string, notifiedStatePath: string): void {
+export function startDailyEarlyDeliveryCheck(configPath: string, notifiedStatePath: string, avatarCachePath: string): void {
   const delay = msUntilNextEightAm(new Date());
 
   setTimeout(() => {
-    void runEarlyDeliveryCheck(configPath, notifiedStatePath).catch((err) => {
+    void runEarlyDeliveryCheck(configPath, notifiedStatePath, avatarCachePath).catch((err) => {
       console.error('[scheduler] Falha na checagem de liberação antecipada:', err);
     });
     setInterval(() => {
-      void runEarlyDeliveryCheck(configPath, notifiedStatePath).catch((err) => {
+      void runEarlyDeliveryCheck(configPath, notifiedStatePath, avatarCachePath).catch((err) => {
         console.error('[scheduler] Falha na checagem de liberação antecipada:', err);
       });
     }, ONE_DAY_MS);

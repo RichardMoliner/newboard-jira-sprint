@@ -3,7 +3,7 @@ import { readConfig } from '../config/configStore.js';
 import { fetchBoardData } from '../jira/fetchBoardData.js';
 import { getMessages, startProgress } from '../jira/progressLog.js';
 
-export function boardDataRouter(configPath: string): Router {
+export function boardDataRouter(configPath: string, avatarCachePath: string): Router {
   const router = Router();
 
   router.get('/board-data/progress', (_req, res) => {
@@ -34,6 +34,7 @@ export function boardDataRouter(configPath: string): Router {
         hoursPerPfBySprintId,
         hoursPerDayBySprintId,
         config.hoursPerDay ?? undefined,
+        avatarCachePath,
       );
       res.json(data);
     } catch (err) {

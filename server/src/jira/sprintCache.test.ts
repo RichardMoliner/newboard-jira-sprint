@@ -35,23 +35,23 @@ describe('sprintCache', () => {
 
   test('round-trips a cached sprint, creating the cache directory if needed', async () => {
     const cacheDir = await tempCacheDir();
-    await writeCachedSprintData(cacheDir, '7400', { sprint, activities: [] });
-    expect(await readCachedSprintData(cacheDir, '7400')).toEqual({ sprint, activities: [] });
+    await writeCachedSprintData(cacheDir, '7400', { sprint, activities: [], developerRoles: {}, avatarUrlByPerson: {} });
+    expect(await readCachedSprintData(cacheDir, '7400')).toEqual({ sprint, activities: [], developerRoles: {}, avatarUrlByPerson: {} });
   });
 
   test('keeps different sprint ids in separate cache entries', async () => {
     const cacheDir = await tempCacheDir();
     const otherSprint: SprintInfo = { ...sprint, id: '7300', name: 'ALM S07 2026' };
-    await writeCachedSprintData(cacheDir, '7400', { sprint, activities: [] });
-    await writeCachedSprintData(cacheDir, '7300', { sprint: otherSprint, activities: [] });
+    await writeCachedSprintData(cacheDir, '7400', { sprint, activities: [], developerRoles: {}, avatarUrlByPerson: {} });
+    await writeCachedSprintData(cacheDir, '7300', { sprint: otherSprint, activities: [], developerRoles: {}, avatarUrlByPerson: {} });
     expect((await readCachedSprintData(cacheDir, '7400'))?.sprint.id).toBe('7400');
     expect((await readCachedSprintData(cacheDir, '7300'))?.sprint.id).toBe('7300');
   });
 
   test('overwrites a previously cached entry for the same sprint id', async () => {
     const cacheDir = await tempCacheDir();
-    await writeCachedSprintData(cacheDir, '7400', { sprint, activities: [] });
-    const updated = { sprint, activities: [{ key: 'EC-1' } as unknown as import('../domain/types.js').Activity] };
+    await writeCachedSprintData(cacheDir, '7400', { sprint, activities: [], developerRoles: {}, avatarUrlByPerson: {} });
+    const updated = { sprint, activities: [{ key: 'EC-1' } as unknown as import('../domain/types.js').Activity], developerRoles: {}, avatarUrlByPerson: {} };
     await writeCachedSprintData(cacheDir, '7400', updated);
     expect(await readCachedSprintData(cacheDir, '7400')).toEqual(updated);
   });
@@ -61,7 +61,7 @@ describe('sprintCache', () => {
     await mkdir(cacheDir, { recursive: true });
     // Simula um arquivo de cache "antigo" (esquema pré-bump), escrito direto no disco sem passar por
     // writeCachedSprintData — deve ser ignorado, não lido.
-    await writeFile(join(cacheDir, '7400.json'), JSON.stringify({ sprint, activities: [] }), 'utf-8');
+    await writeFile(join(cacheDir, '7400.json'), JSON.stringify({ sprint, activities: [], developerRoles: {}, avatarUrlByPerson: {} }), 'utf-8');
     expect(await readCachedSprintData(cacheDir, '7400')).toBeNull();
   });
 });

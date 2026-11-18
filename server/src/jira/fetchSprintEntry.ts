@@ -14,6 +14,10 @@ function normalize(text: string): string {
 export interface ChangelogHistoryItem {
   field?: string;
   toString?: string | null;
+  /** Para o campo "Sprint", o(s) ID(s) de sprint do novo valor — comma-separated quando o campo é
+   * multi-valor. Diferente de `toString` (o NOME da sprint no momento do changelog), o ID nunca
+   * muda, mesmo que a sprint seja renomeada depois — ver `findSprintEntryDate`. */
+  to?: string | null;
 }
 
 export interface ChangelogHistory {
@@ -23,14 +27,19 @@ export interface ChangelogHistory {
 
 /**
  * Acha o timestamp em que a issue entrou pela última vez na sprint informada, a partir do
- * changelog do Jira. Ignora mudanças de campo "Sprint" que não mencionam essa sprint (ex.: saiu
- * dela para outra) e mudanças de outros campos. `toString` pode listar mais de uma sprint
- * separada por vírgula quando o campo é multi-valor — checa por substring, não igualdade exata.
+ * changelog do Jira. Ignora mudanças de campo "Sprint" que não movem a issue pra essa sprint (ex.:
+ * saiu dela para outra) e mudanças de outros campos. Compara pelo ID da sprint (campo `to`), NUNCA
+ * pelo nome (`toString`): o nome do changelog é o que a sprint se chamava NAQUELE momento, e sprints
+ * podem ser renomeadas depois — comparar por nome atual falha silenciosamente pra qualquer entrada
+ * registrada antes do rename (caso real: COM-34961, sprint 7659 renomeada de "Planning extensões
+ * (mês 11)" pra "COM - S11 - Extensões" depois que a issue entrou nela, fazendo cair pro fallback de
+ * `storyCreated` e mostrar "Ainda não iniciada" como se estivesse parada há anos). `to` pode listar
+ * mais de um ID separado por vírgula quando o campo é multi-valor.
  */
-export function findSprintEntryDate(histories: ChangelogHistory[], sprintName: string): string | null {
+export function findSprintEntryDate(histories: ChangelogHistory[], sprintId: string): string | null {
   const matches = histories
     .flatMap((h) => h.items.map((item) => ({ created: h.created, item })))
-    .filter(({ item }) => item.field === 'Sprint' && (item.toString ?? '').includes(sprintName));
+    .filter(({ item }) => item.field === 'Sprint' && (item.to ?? '').split(',').some((id) => id.trim() === sprintId));
 
   if (matches.length === 0) return null;
 
@@ -130,7 +139,7 @@ const EM_ANDAMENTO_STATUS = 'Em andamento';
 export async function getIssueHistoryFacts(
   issueKey: string,
   updated: string,
-  sprintName: string,
+  sprintId: string,
   currentStatus: string,
   credentials: JiraCredentials,
 ): Promise<IssueHistoryFacts> {
@@ -148,7 +157,7 @@ export async function getIssueHistoryFacts(
   let emAndamentoEnteredAt: string | null;
   try {
     const histories = await fetchIssueChangelog(issueKey, credentials);
-    sprintEnteredAt = findSprintEntryDate(histories, sprintName);
+    sprintEnteredAt = findSprintEntryDate(histories, sprintId);
     doneTransitionDate = findDoneTransitionDate(histories, currentStatus);
     emAndamentoEnteredAt = findStatusEnteredDate(histories, EM_ANDAMENTO_STATUS);
   } catch (err) {

@@ -6,8 +6,11 @@ import { inferDeveloperRoles } from './inferRoles.js';
 import { fillTruncatedWorklogs } from './fillTruncatedWorklogs.js';
 import { parseSprintField } from './parseSprintField.js';
 import { getIssueHistoryFacts } from './fetchSprintEntry.js';
+import { assertCompleteStoryFetch } from './assertCompleteStoryFetch.js';
 import { getImplCodeReviewEnteredAt, latestOrNull } from './fetchImplCodeReviewDate.js';
 import { fetchCurrentUserDisplayName } from './fetchCurrentUser.js';
+import { fetchAvatarUrls } from './fetchAvatars.js';
+import { readAvatarCache, writeAvatarCache } from './avatarCache.js';
 import { report } from './progressLog.js';
 import { mapActivity } from '../domain/mapActivity.js';
 import type { Activity, BoardDataResponse, SprintInfo } from '../domain/types.js';
@@ -57,6 +60,8 @@ interface SprintScopeResult {
   sprints: SprintInfo[];
   activities: Activity[];
   today: string;
+  developerRoles: Record<string, 'dev' | 'tester'>;
+  avatarUrlByPerson: Record<string, string | null>;
 }
 
 /**
@@ -74,6 +79,12 @@ async function fetchActivitiesForSprintScope(
   hoursPerPfBySprintId: Record<string, number | null>,
   hoursPerDayBySprintId: Record<string, number | null>,
   fallbackHoursPerDay: number | undefined,
+  avatarCachePath: string,
+  // Sprints fechadas (Histórico) ficam em cache pra sempre (sem TTL, ver sprintCache.ts) — abortar
+  // aqui numa falha parcial de get_issue evita persistir um snapshot faltando atividades. O board ao
+  // vivo não é cacheado e se autocorrige no próximo refresh de 5min, então segue tolerante a falhas
+  // pontuais (default false).
+  strict: boolean = false,
 ): Promise<SprintScopeResult> {
   const baseUrl = requireEnv('JIRA_BASE_URL').replace(/\/$/, '');
 
@@ -128,6 +139,8 @@ async function fetchActivitiesForSprintScope(
     }
   });
 
+  if (strict) assertCompleteStoryFetch(storyHits, storyDetails);
+
   const sprintByStoryKey = new Map(storyHits.map((hit) => [hit.key, parseSprintField(hit.customfield_10001)]));
   const legalInfoByStoryKey = new Map(
     storyHits.map((hit) => [
@@ -163,7 +176,7 @@ async function fetchActivitiesForSprintScope(
   report('Buscando histórico de sprint...');
   const historyFactPairs = await mapWithConcurrency(resolvedStories, CHANGELOG_CONCURRENCY, async (story) => {
     const sprint = sprintByStoryKey.get(story.key)!;
-    const facts = await getIssueHistoryFacts(story.key, story.updated, sprint.name, story.status, credentials);
+    const facts = await getIssueHistoryFacts(story.key, story.updated, sprint.id, story.status, credentials);
     return [story.key, facts] as const;
   });
   const historyFactsByStoryKey = new Map(historyFactPairs);
@@ -234,9 +247,50 @@ async function fetchActivitiesForSprintScope(
 
   activities.sort((a, b) => a.developer.localeCompare(b.developer) || a.title.localeCompare(b.title));
 
+  report('Buscando avatares...');
+  // Além do dev/tester titular, inclui todo mundo que apontou hora em Implementação/Teste/Bug — o
+  // grupo de avatares da Linha do tempo (`AvatarStack`) mostra qualquer um desses, não só o titular
+  // (caso real: Marlon apontou em COM-67933/COM-67925 sem ser dev nem tester de nenhuma delas).
+  const people = new Set<string>();
+  for (const activity of activities) {
+    people.add(activity.developer);
+    if (activity.tester) people.add(activity.tester);
+    for (const entry of activity.worklogEntries) people.add(entry.author);
+  }
+  const avatarCache = await readAvatarCache(avatarCachePath);
+  const avatarAuth = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
+  const avatarUrlByPerson = await fetchAvatarUrls(
+    [...people],
+    avatarCache,
+    async (name) => {
+      const response = await callJiraTool<{ users: { avatarUrls?: Record<string, string> }[] }>(
+        'search_users',
+        { query: name },
+        credentials,
+      );
+      return response.users;
+    },
+    // Baixa a imagem já autenticada (Basic, igual fetchCurrentUser.ts) e embute como `data:` URI —
+    // ver o comentário de fetchAvatarUrls sobre por que a URL crua do Jira não funciona no client.
+    async (avatarUrl) => {
+      const res = await fetch(avatarUrl, { headers: { Authorization: `Basic ${avatarAuth}` } });
+      if (!res.ok) throw new Error(`Jira retornou ${res.status} ao baixar avatar`);
+      const contentType = res.headers.get('content-type') ?? 'image/png';
+      const base64 = Buffer.from(await res.arrayBuffer()).toString('base64');
+      return `data:${contentType};base64,${base64}`;
+    },
+  );
+  await writeAvatarCache(avatarCachePath, avatarUrlByPerson);
+
   report('Concluído.');
 
-  return { sprints: [...sprints.values()].sort((a, b) => a.name.localeCompare(b.name)), activities, today };
+  return {
+    sprints: [...sprints.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    activities,
+    today,
+    developerRoles: Object.fromEntries(developerRoles),
+    avatarUrlByPerson,
+  };
 }
 
 export async function fetchBoardData(
@@ -245,8 +299,9 @@ export async function fetchBoardData(
   hoursPerPfBySprintId: Record<string, number | null>,
   hoursPerDayBySprintId: Record<string, number | null>,
   fallbackHoursPerDay: number | undefined,
+  avatarCachePath: string,
 ): Promise<BoardDataResponse> {
-  const [{ sprints, activities, today }, currentUserDisplayName] = await Promise.all([
+  const [{ sprints, activities, today, developerRoles, avatarUrlByPerson }, currentUserDisplayName] = await Promise.all([
     fetchActivitiesForSprintScope(
       vertical,
       'sprint in openSprints()',
@@ -255,6 +310,7 @@ export async function fetchBoardData(
       hoursPerPfBySprintId,
       hoursPerDayBySprintId,
       fallbackHoursPerDay,
+      avatarCachePath,
     ),
     fetchCurrentUserDisplayName(credentials),
   ]);
@@ -269,6 +325,8 @@ export async function fetchBoardData(
     sprints,
     activities,
     currentUserDisplayName,
+    developerRoles,
+    avatarUrlByPerson,
   };
 }
 
@@ -285,9 +343,10 @@ export async function fetchClosedSprintsData(
   credentials: JiraCredentials,
   hoursPerPfBySprintId: Record<string, number | null>,
   hoursPerDayBySprintId: Record<string, number | null>,
+  avatarCachePath: string,
 ): Promise<BoardDataResponse> {
   const sprintScopeJql = `sprint in (${sprintIds.join(',')})`;
-  const { sprints, activities, today } = await fetchActivitiesForSprintScope(
+  const { sprints, activities, today, developerRoles, avatarUrlByPerson } = await fetchActivitiesForSprintScope(
     vertical,
     sprintScopeJql,
     'latest-sprint-end',
@@ -295,6 +354,8 @@ export async function fetchClosedSprintsData(
     hoursPerPfBySprintId,
     hoursPerDayBySprintId,
     undefined,
+    avatarCachePath,
+    true,
   );
 
   return {
@@ -307,6 +368,8 @@ export async function fetchClosedSprintsData(
     sprints,
     activities,
     currentUserDisplayName: null,
+    developerRoles,
+    avatarUrlByPerson,
   };
 }
 

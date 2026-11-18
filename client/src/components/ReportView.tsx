@@ -45,6 +45,8 @@ export default function ReportView({
   onSprintClick,
   hoursPerPfBySprintId,
   assumedTestSharePercent,
+  developerRoles,
+  avatarUrlByPerson,
   vertical,
   onClose,
 }: {
@@ -55,6 +57,8 @@ export default function ReportView({
   onSprintClick: (id: string, shiftKey: boolean) => void;
   hoursPerPfBySprintId: Record<string, number>;
   assumedTestSharePercent: number;
+  developerRoles: Record<string, 'dev' | 'tester'>;
+  avatarUrlByPerson: Record<string, string | null>;
   vertical: string;
   onClose: () => void;
 }) {
@@ -93,6 +97,8 @@ export default function ReportView({
         onSprintClick={onSprintClick}
         hoursPerPfBySprintId={hoursPerPfBySprintId}
         assumedTestSharePercent={assumedTestSharePercent}
+        developerRoles={developerRoles}
+        avatarUrlByPerson={avatarUrlByPerson}
       />
 
       <h2 style={{ fontSize: 16, margin: '28px 0 12px' }}>Tarefas ({filtered.length})</h2>

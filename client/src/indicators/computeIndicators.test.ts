@@ -373,6 +373,22 @@ describe('computeRealizedProductivity — hoursPerPfImpl / hoursPerPfTest', () =
 });
 
 describe('computePersonSummaries', () => {
+  function bug(artifact: 'requisito' | 'implementacao' | null, overrides: Partial<Activity['bugs'][number]> = {}) {
+    return {
+      key: 'B1',
+      title: 'x',
+      developer: null,
+      status: 's',
+      startDate: '2026-09-01',
+      endDate: '2026-09-02',
+      worklogEntries: [],
+      artifact,
+      labels: [],
+      url: '',
+      ...overrides,
+    };
+  }
+
   test('aggregates activities, story points and bugs per developer', () => {
     const activities = [
       activity({ key: 'A', developer: 'Alicio', storyPoints: 10, isDone: true }),
@@ -381,7 +397,7 @@ describe('computePersonSummaries', () => {
         developer: 'Alicio',
         storyPoints: 5,
         isOverdue: true,
-        bugs: [{ key: 'B1', title: 'x', developer: null, status: 's', startDate: '2026-09-01', endDate: '2026-09-02', worklogEntries: [], artifact: null, labels: [], url: '' }],
+        bugs: [bug(null)],
       }),
       activity({ key: 'C', developer: 'Bia', storyPoints: null }),
     ];
@@ -395,6 +411,9 @@ describe('computePersonSummaries', () => {
       activities: 2,
       storyPoints: 15,
       bugs: 1,
+      bugsRequisitoCount: 0,
+      bugsImplementacaoCount: 0,
+      bugsSemArtefatoCount: 1,
       done: 1,
       atRisk: 1,
       inProgress: 0,
@@ -405,10 +424,30 @@ describe('computePersonSummaries', () => {
       activities: 1,
       storyPoints: 0,
       bugs: 0,
+      bugsRequisitoCount: 0,
+      bugsImplementacaoCount: 0,
+      bugsSemArtefatoCount: 0,
       done: 0,
       atRisk: 0,
       inProgress: 1,
       noEstimate: 1,
+    });
+  });
+
+  test('breaks down bugs per developer by artifact (requisito/implementação/sem artefato)', () => {
+    const activities = [
+      activity({
+        key: 'A',
+        developer: 'Carlos',
+        bugs: [bug('requisito'), bug('requisito'), bug('implementacao'), bug(null)],
+      }),
+    ];
+    const carlos = computePersonSummaries(activities).find((s) => s.person === 'Carlos');
+    expect(carlos).toMatchObject({
+      bugs: 4,
+      bugsRequisitoCount: 2,
+      bugsImplementacaoCount: 1,
+      bugsSemArtefatoCount: 1,
     });
   });
 
@@ -431,6 +470,10 @@ describe('computePersonSummaries', () => {
 });
 
 describe('computeBugResolverSummaries', () => {
+  function worklog(author: string, hours = 1): Activity['bugs'][number]['worklogEntries'][number] {
+    return { subtaskType: 'Bug', author, date: '2026-09-01', hours, comment: null };
+  }
+
   function bug(overrides: Partial<Activity['bugs'][number]> = {}) {
     return {
       key: 'B-1',
@@ -447,26 +490,67 @@ describe('computeBugResolverSummaries', () => {
     };
   }
 
-  test('counts resolved ("Atendida") bugs grouped by the bug\'s own developer, sorted descending', () => {
+  const ROLES = { Fulano: 'dev', Sicrano: 'dev', Fernanda: 'tester' } as const;
+
+  test('conta bugs "Atendida" por quem logou apontamento nele com papel dev — não pelo assignee ("developer") do bug', () => {
     const activities = [
-      activity({ key: 'A', developer: 'Dono da story', bugs: [bug({ developer: 'Fulano' }), bug({ developer: 'Fulano' })] }),
-      activity({ key: 'B', developer: 'Dono da story', bugs: [bug({ developer: 'Sicrano' })] }),
+      activity({
+        key: 'A',
+        developer: 'Dono da story',
+        bugs: [
+          bug({ developer: 'Fernanda', worklogEntries: [worklog('Fulano')] }),
+          bug({ developer: 'Fernanda', worklogEntries: [worklog('Fulano')] }),
+        ],
+      }),
+      activity({ key: 'B', developer: 'Dono da story', bugs: [bug({ developer: 'Fernanda', worklogEntries: [worklog('Sicrano')] })] }),
     ];
 
-    expect(computeBugResolverSummaries(activities)).toEqual([
+    expect(computeBugResolverSummaries(activities, ROLES)).toEqual([
       { person: 'Fulano', resolvedBugs: 2 },
       { person: 'Sicrano', resolvedBugs: 1 },
     ]);
   });
 
   test('ignores bugs that are not "Atendida" (ainda não resolvidos)', () => {
-    const activities = [activity({ key: 'A', bugs: [bug({ developer: 'Fulano', status: 'Em correção' })] })];
-    expect(computeBugResolverSummaries(activities)).toEqual([]);
+    const activities = [activity({ key: 'A', bugs: [bug({ status: 'Em correção', worklogEntries: [worklog('Fulano')] })] })];
+    expect(computeBugResolverSummaries(activities, ROLES)).toEqual([]);
   });
 
-  test('ignores bugs sem desenvolvedor atribuído', () => {
-    const activities = [activity({ key: 'A', bugs: [bug({ developer: null })] })];
-    expect(computeBugResolverSummaries(activities)).toEqual([]);
+  test('ignores bugs sem nenhum apontamento lançado', () => {
+    const activities = [activity({ key: 'A', bugs: [bug({ worklogEntries: [] })] })];
+    expect(computeBugResolverSummaries(activities, ROLES)).toEqual([]);
+  });
+
+  test('ignora apontamentos de quem tem papel "tester" — caso real: tester fecha o bug com uma nota de validação depois do dev já ter corrigido', () => {
+    const activities = [
+      activity({
+        key: 'A',
+        bugs: [bug({ worklogEntries: [worklog('Fulano', 1), worklog('Fernanda', 0.25)] })],
+      }),
+    ];
+    expect(computeBugResolverSummaries(activities, ROLES)).toEqual([{ person: 'Fulano', resolvedBugs: 1 }]);
+  });
+
+  test('ignora apontamentos de quem não tem papel conhecido (nunca foi assignee de Implementação/Teste na sprint)', () => {
+    const activities = [activity({ key: 'A', bugs: [bug({ worklogEntries: [worklog('Desconhecido')] })] })];
+    expect(computeBugResolverSummaries(activities, ROLES)).toEqual([]);
+  });
+
+  test('não conta o mesmo bug duas vezes pro mesmo dev quando ele lança mais de um apontamento nele', () => {
+    const activities = [
+      activity({ key: 'A', bugs: [bug({ worklogEntries: [worklog('Fulano', 1), worklog('Fulano', 0.5)] })] }),
+    ];
+    expect(computeBugResolverSummaries(activities, ROLES)).toEqual([{ person: 'Fulano', resolvedBugs: 1 }]);
+  });
+
+  test('bug corrigido por mais de um dev conta pros dois (caso real: pareamento)', () => {
+    const activities = [
+      activity({ key: 'A', bugs: [bug({ worklogEntries: [worklog('Fulano'), worklog('Sicrano')] })] }),
+    ];
+    expect(computeBugResolverSummaries(activities, ROLES)).toEqual([
+      { person: 'Fulano', resolvedBugs: 1 },
+      { person: 'Sicrano', resolvedBugs: 1 },
+    ]);
   });
 });
 

@@ -110,6 +110,14 @@ export interface BoardDataResponse {
    * Linha do tempo — compara contra `Activity.developer`. Null quando não foi possível descobrir
    * ou o botão fica desabilitado. */
   currentUserDisplayName: string | null;
+  /** Papel (dev/tester) inferido de cada pessoa (ver `inferRoles.ts` no servidor), a partir de quem
+   * foi assignee de subtarefas de Implementação/Teste nas sprints buscadas — usado pra filtrar quem
+   * conta como "resolutor" nos bugs em `computeBugResolverSummaries`. Quem nunca foi assignee de
+   * nenhuma dessas subtarefas não aparece aqui (papel desconhecido). */
+  developerRoles: Record<string, 'dev' | 'tester'>;
+  /** URL do avatar (48x48) de cada pessoa que aparece como dev/tester em alguma atividade. Null
+   * quando a pessoa não foi encontrada no Jira ou não tem avatar. */
+  avatarUrlByPerson: Record<string, string | null>;
 }
 
 /** Configuração por sprint (horas/PF e prazos), chaveada pelo id da sprint no Jira — sem entrada

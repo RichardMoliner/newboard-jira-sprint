@@ -18,7 +18,7 @@ function emptySprintSettings(): SprintSettings {
   };
 }
 
-export function historicalSprintsRouter(configPath: string, cacheDir: string): Router {
+export function historicalSprintsRouter(configPath: string, cacheDir: string, avatarCachePath: string): Router {
   const router = Router();
 
   router.get('/historical-sprints', async (req, res) => {
@@ -103,9 +103,15 @@ export function historicalSprintsRouter(configPath: string, cacheDir: string): R
           { username: config.jiraUsername, password: config.jiraPassword },
           hoursPerPfBySprintId,
           hoursPerDayBySprintId,
+          avatarCachePath,
         );
         for (const sprint of data.sprints) {
-          const entry: CachedSprintData = { sprint, activities: data.activities.filter((a) => a.sprintId === sprint.id) };
+          const entry: CachedSprintData = {
+            sprint,
+            activities: data.activities.filter((a) => a.sprintId === sprint.id),
+            developerRoles: data.developerRoles,
+            avatarUrlByPerson: data.avatarUrlByPerson,
+          };
           freshBySprintId.set(sprint.id, entry);
           await writeCachedSprintData(cacheDir, sprint.id, entry);
         }
@@ -122,6 +128,11 @@ export function historicalSprintsRouter(configPath: string, cacheDir: string): R
       const sprints = entries.map((e) => e.sprint);
       const activities = entries.flatMap((e) => e.activities);
       const today = sprints.map((s) => s.endDate).sort().slice(-1)[0];
+      // Cada sprint fechada congela o seu próprio mapa de papéis (ver fetchActivitiesForSprintScope)
+      // — ao combinar várias sprints selecionadas no Histórico, funde todos; sem conflito real
+      // esperado (papel de uma pessoa não muda sprint a sprint), última entrada processada vence.
+      const developerRoles = Object.assign({}, ...entries.map((e) => e.developerRoles));
+      const avatarUrlByPerson = Object.assign({}, ...entries.map((e) => e.avatarUrlByPerson));
 
       res.json({
         generatedAt: new Date().toISOString(),
@@ -132,6 +143,8 @@ export function historicalSprintsRouter(configPath: string, cacheDir: string): R
         assumedTestSharePercent: (1 - IMPL_SHARE) * 100,
         sprints,
         activities,
+        developerRoles,
+        avatarUrlByPerson,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro desconhecido ao buscar dados históricos do Jira.';

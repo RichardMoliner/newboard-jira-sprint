@@ -5,9 +5,11 @@ import type { Activity, SprintInfo } from '../domain/types.js';
 export interface CachedSprintData {
   sprint: SprintInfo;
   activities: Activity[];
+  developerRoles: Record<string, 'dev' | 'tester'>;
+  avatarUrlByPerson: Record<string, string | null>;
 }
 
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 7;
 
 function cachePath(cacheDir: string, sprintId: string): string {
   return join(cacheDir, `${sprintId}.v${CACHE_VERSION}.json`);

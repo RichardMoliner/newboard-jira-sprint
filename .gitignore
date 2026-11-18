@@ -3,6 +3,7 @@ node_modules/
 config.json
 notified.json
 .sprint-cache/
+.avatar-cache.json
 dist/
 *.log
 *.tsbuildinfo

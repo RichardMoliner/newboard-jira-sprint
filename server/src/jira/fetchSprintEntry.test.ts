@@ -4,57 +4,69 @@ import { findSprintEntryDate, findDoneTransitionDate, findStatusEnteredDate, typ
 function history(overrides: Partial<ChangelogHistory> = {}): ChangelogHistory {
   return {
     created: '2026-09-22T10:22:37.819-0300',
-    items: [{ field: 'Sprint', toString: 'FROT Editais PM Jaraguá' }],
+    items: [{ field: 'Sprint', to: '7659', toString: 'FROT Editais PM Jaraguá' }],
     ...overrides,
   };
 }
 
 describe('findSprintEntryDate', () => {
   test('returns null when there is no changelog history at all', () => {
-    expect(findSprintEntryDate([], 'FROT Editais PM Jaraguá')).toBeNull();
+    expect(findSprintEntryDate([], '7659')).toBeNull();
   });
 
   test('returns null when no history item touches the Sprint field', () => {
     const histories = [history({ items: [{ field: 'status', toString: 'Em andamento' }] })];
-    expect(findSprintEntryDate(histories, 'FROT Editais PM Jaraguá')).toBeNull();
+    expect(findSprintEntryDate(histories, '7659')).toBeNull();
   });
 
   test('finds the real-world FROT-7964 case: single Sprint change from null into the current sprint', () => {
     const histories = [
-      history({ created: '2026-09-22T10:22:37.819-0300', items: [{ field: 'Sprint', toString: 'FROT Editais PM Jaraguá' }] }),
+      history({ created: '2026-09-22T10:22:37.819-0300', items: [{ field: 'Sprint', to: '7659', toString: 'FROT Editais PM Jaraguá' }] }),
     ];
-    expect(findSprintEntryDate(histories, 'FROT Editais PM Jaraguá')).toBe('2026-09-22T10:22:37.819-0300');
+    expect(findSprintEntryDate(histories, '7659')).toBe('2026-09-22T10:22:37.819-0300');
   });
 
-  test('ignores Sprint changes that do not mention the target sprint name', () => {
-    const histories = [history({ items: [{ field: 'Sprint', toString: 'Outra Sprint' }] })];
-    expect(findSprintEntryDate(histories, 'FROT Editais PM Jaraguá')).toBeNull();
+  test('ignores Sprint changes that do not move the issue into the target sprint ID', () => {
+    const histories = [history({ items: [{ field: 'Sprint', to: '9999', toString: 'Outra Sprint' }] })];
+    expect(findSprintEntryDate(histories, '7659')).toBeNull();
   });
 
-  test('matches when toString lists multiple sprints (multi-value field change)', () => {
-    const histories = [history({ items: [{ field: 'Sprint', toString: 'Sprint Antiga, FROT Editais PM Jaraguá' }] })];
-    expect(findSprintEntryDate(histories, 'FROT Editais PM Jaraguá')).toBe('2026-09-22T10:22:37.819-0300');
+  test('matches when `to` lists multiple sprint IDs, comma-separated (multi-value field change)', () => {
+    const histories = [history({ items: [{ field: 'Sprint', to: '1234, 7659', toString: 'Sprint Antiga, FROT Editais PM Jaraguá' }] })];
+    expect(findSprintEntryDate(histories, '7659')).toBe('2026-09-22T10:22:37.819-0300');
   });
 
   test('picks the most recent matching entry by `created`, regardless of array order', () => {
     const histories = [
-      history({ created: '2026-09-25T09:00:00.000-0300', items: [{ field: 'Sprint', toString: 'FROT Editais PM Jaraguá' }] }),
-      history({ created: '2026-09-22T10:22:37.819-0300', items: [{ field: 'Sprint', toString: 'FROT Editais PM Jaraguá' }] }),
+      history({ created: '2026-09-25T09:00:00.000-0300', items: [{ field: 'Sprint', to: '7659', toString: 'FROT Editais PM Jaraguá' }] }),
+      history({ created: '2026-09-22T10:22:37.819-0300', items: [{ field: 'Sprint', to: '7659', toString: 'FROT Editais PM Jaraguá' }] }),
     ];
-    expect(findSprintEntryDate(histories, 'FROT Editais PM Jaraguá')).toBe('2026-09-25T09:00:00.000-0300');
+    expect(findSprintEntryDate(histories, '7659')).toBe('2026-09-25T09:00:00.000-0300');
   });
 
   test('ignores a later Sprint change that moved the issue OUT of the target sprint', () => {
     const histories = [
-      history({ created: '2026-09-22T10:22:37.819-0300', items: [{ field: 'Sprint', toString: 'FROT Editais PM Jaraguá' }] }),
-      history({ created: '2026-09-23T08:00:00.000-0300', items: [{ field: 'Sprint', toString: 'Outra Sprint' }] }),
+      history({ created: '2026-09-22T10:22:37.819-0300', items: [{ field: 'Sprint', to: '7659', toString: 'FROT Editais PM Jaraguá' }] }),
+      history({ created: '2026-09-23T08:00:00.000-0300', items: [{ field: 'Sprint', to: '9999', toString: 'Outra Sprint' }] }),
     ];
-    expect(findSprintEntryDate(histories, 'FROT Editais PM Jaraguá')).toBe('2026-09-22T10:22:37.819-0300');
+    expect(findSprintEntryDate(histories, '7659')).toBe('2026-09-22T10:22:37.819-0300');
   });
 
-  test('does not crash when toString is null and ignores that item', () => {
-    const histories = [history({ items: [{ field: 'Sprint', toString: null }] })];
-    expect(findSprintEntryDate(histories, 'FROT Editais PM Jaraguá')).toBeNull();
+  test('does not crash when `to` is null and ignores that item', () => {
+    const histories = [history({ items: [{ field: 'Sprint', to: null, toString: null }] })];
+    expect(findSprintEntryDate(histories, '7659')).toBeNull();
+  });
+
+  test('real case: COM-34961 — matches by sprint ID even when the sprint was RENAMED after the changelog entry was recorded (toString still shows the old name, but `to` has the stable ID)', () => {
+    const histories = [
+      history({
+        created: '2026-10-29T06:04:13.532-0300',
+        items: [{ field: 'Sprint', to: '7659', toString: 'Planning extensões (mês 11)' }],
+      }),
+    ];
+    // "COM - S11 - Extensões" é o nome ATUAL da sprint 7659 — não aparece em nenhum toString do
+    // changelog, só o nome antigo (antes do rename) aparece. Match por nome falharia aqui.
+    expect(findSprintEntryDate(histories, '7659')).toBe('2026-10-29T06:04:13.532-0300');
   });
 });
 

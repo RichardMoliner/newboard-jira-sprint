@@ -300,6 +300,8 @@ export default function HistoryView({ sprintSettingsById }: { sprintSettingsById
           today={historicalData.today}
           hoursPerPfBySprintId={hoursPerPfBySprintId}
           assumedTestSharePercent={historicalData.assumedTestSharePercent}
+          developerRoles={historicalData.developerRoles}
+          avatarUrlByPerson={historicalData.avatarUrlByPerson}
           sprintFilter={historicalSprintFilter}
           onSprintClick={handleHistoricalSprintClick}
         />

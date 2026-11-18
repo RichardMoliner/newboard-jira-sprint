@@ -202,6 +202,8 @@ export default function BoardScreen({
             onSprintClick={handleSprintClick}
             hoursPerPfBySprintId={hoursPerPfBySprintId}
             assumedTestSharePercent={data.assumedTestSharePercent}
+            developerRoles={data.developerRoles}
+            avatarUrlByPerson={data.avatarUrlByPerson}
             vertical={vertical}
             onClose={() => setShowReport(false)}
           />
@@ -241,6 +243,8 @@ export default function BoardScreen({
               onGroupSelectionChange={handleGroupSelectionChange}
               onGroupClick={handleGroupClick}
               currentUserDisplayName={data.currentUserDisplayName}
+              avatarUrlByPerson={data.avatarUrlByPerson}
+              developerRoles={data.developerRoles}
             />
           </div>
           <div style={{ display: tab === 'indicators' ? undefined : 'none', paddingBottom: 60, overflow: 'auto' }}>
@@ -250,6 +254,8 @@ export default function BoardScreen({
               today={data.today}
               hoursPerPfBySprintId={hoursPerPfBySprintId}
               assumedTestSharePercent={data.assumedTestSharePercent}
+              developerRoles={data.developerRoles}
+              avatarUrlByPerson={data.avatarUrlByPerson}
               sprintFilter={sprintFilter}
               onSprintClick={handleSprintClick}
               sprintSettingsById={sprintSettingsById}

@@ -123,7 +123,7 @@ describe('runEarlyDeliveryCheck', () => {
 
   test('sem vertical/credenciais configuradas, não chama fetchBoardData e não lança', async () => {
     await writeConfig(tmpConfigPath, emptyConfig());
-    await expect(runEarlyDeliveryCheck(tmpConfigPath, tmpNotifiedPath)).resolves.toBeUndefined();
+    await expect(runEarlyDeliveryCheck(tmpConfigPath, tmpNotifiedPath, 'unused-avatar-cache.json')).resolves.toBeUndefined();
     expect(fetchBoardData).not.toHaveBeenCalled();
   });
 
@@ -138,7 +138,7 @@ describe('runEarlyDeliveryCheck', () => {
       activities: [earlyDeliveryActivity],
     });
 
-    await runEarlyDeliveryCheck(tmpConfigPath, tmpNotifiedPath);
+    await runEarlyDeliveryCheck(tmpConfigPath, tmpNotifiedPath, 'unused-avatar-cache.json');
 
     expect(sendGoogleChatMessage).not.toHaveBeenCalled();
     expect(await readNotifiedState(tmpNotifiedPath)).toEqual({});
@@ -156,7 +156,7 @@ describe('runEarlyDeliveryCheck', () => {
       activities: [earlyDeliveryActivity],
     });
 
-    await runEarlyDeliveryCheck(tmpConfigPath, tmpNotifiedPath);
+    await runEarlyDeliveryCheck(tmpConfigPath, tmpNotifiedPath, 'unused-avatar-cache.json');
 
     expect(sendGoogleChatMessage).not.toHaveBeenCalled();
     expect(await readNotifiedState(tmpNotifiedPath)).toEqual({});
@@ -175,7 +175,7 @@ describe('runEarlyDeliveryCheck', () => {
     });
     (sendGoogleChatMessage as Mock).mockResolvedValue({ ok: true });
 
-    await runEarlyDeliveryCheck(tmpConfigPath, tmpNotifiedPath);
+    await runEarlyDeliveryCheck(tmpConfigPath, tmpNotifiedPath, 'unused-avatar-cache.json');
 
     expect(sendGoogleChatMessage).toHaveBeenCalledWith('https://hook-a', expect.any(String));
     const state = await readNotifiedState(tmpNotifiedPath);
@@ -195,7 +195,7 @@ describe('runEarlyDeliveryCheck', () => {
     });
     (sendGoogleChatMessage as Mock).mockResolvedValue({ ok: false, error: 'timeout' });
 
-    await runEarlyDeliveryCheck(tmpConfigPath, tmpNotifiedPath);
+    await runEarlyDeliveryCheck(tmpConfigPath, tmpNotifiedPath, 'unused-avatar-cache.json');
 
     const state = await readNotifiedState(tmpNotifiedPath);
     expect(state[earlyDeliveryActivity.key]).toBeUndefined();
@@ -211,7 +211,7 @@ describe('runEarlyDeliveryCheck', () => {
     });
     (fetchBoardData as Mock).mockResolvedValue({ today: '2026-10-22', sprints: [], activities: [] });
 
-    await runEarlyDeliveryCheck(tmpConfigPath, tmpNotifiedPath);
+    await runEarlyDeliveryCheck(tmpConfigPath, tmpNotifiedPath, 'unused-avatar-cache.json');
 
     expect(fetchBoardData).toHaveBeenCalledWith(
       'CONTRATOS',
@@ -219,6 +219,7 @@ describe('runEarlyDeliveryCheck', () => {
       { s1: 6 },
       { s1: 7 },
       8,
+      'unused-avatar-cache.json',
     );
   });
 
@@ -250,7 +251,7 @@ describe('runEarlyDeliveryCheck', () => {
       return { ok: true };
     });
 
-    await runEarlyDeliveryCheck(tmpConfigPath, tmpNotifiedPath);
+    await runEarlyDeliveryCheck(tmpConfigPath, tmpNotifiedPath, 'unused-avatar-cache.json');
 
     expect(sendGoogleChatMessage).not.toHaveBeenCalledWith(expect.anything(), expect.stringContaining(skippedActivity.url));
     expect(sendGoogleChatMessage).toHaveBeenCalledWith('https://hook-a', expect.stringContaining(failedActivity.url));

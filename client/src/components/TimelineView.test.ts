@@ -18,6 +18,8 @@ import {
   isDeveloperAvailable,
   isWorkingOnBugs,
   lastWorklogDate,
+  authorsByTypeOrderedByHours,
+  resolveBugResponsible,
   matchesLegendFilter,
   projectDeveloperAvailabilityDate,
   projectQueuedWindows,
@@ -132,6 +134,31 @@ describe('lastWorklogDate', () => {
     ];
     expect(lastWorklogDate(entries, 'Implementação')).toBe('2026-09-11');
   });
+});
+
+describe('authorsByTypeOrderedByHours', () => {
+  test('returns empty array when there are no entries of the given type', () => {
+    const entries = [entry({ subtaskType: 'Teste', author: 'Fulano' })];
+    expect(authorsByTypeOrderedByHours(entries, 'Implementação')).toEqual([]);
+  });
+
+  test('deduplicates an author who logged more than one entry of that type', () => {
+    const entries = [
+      entry({ subtaskType: 'Implementação', author: 'Fulano', hours: 2 }),
+      entry({ subtaskType: 'Implementação', author: 'Fulano', hours: 3 }),
+    ];
+    expect(authorsByTypeOrderedByHours(entries, 'Implementação')).toEqual(['Fulano']);
+  });
+
+  test('orders distinct authors by total hours logged on that type, descending', () => {
+    const entries = [
+      entry({ subtaskType: 'Implementação', author: 'Pouco', hours: 1 }),
+      entry({ subtaskType: 'Implementação', author: 'Muito', hours: 5 }),
+      entry({ subtaskType: 'Implementação', author: 'Muito', hours: 2 }),
+      entry({ subtaskType: 'Teste', author: 'ForaDoTipo', hours: 99 }),
+    ];
+    expect(authorsByTypeOrderedByHours(entries, 'Implementação')).toEqual(['Muito', 'Pouco']);
+  });
 
   test('finds the max date regardless of array order', () => {
     const entries = [
@@ -140,6 +167,46 @@ describe('lastWorklogDate', () => {
       entry({ subtaskType: 'Implementação', date: '2026-09-15' }),
     ];
     expect(lastWorklogDate(entries, 'Implementação')).toBe('2026-09-20');
+  });
+});
+
+describe('resolveBugResponsible', () => {
+  test('returns null when the bug has no developer (assignee) at all', () => {
+    expect(resolveBugResponsible(bug({ developer: null }), 'Ciclana')).toBeNull();
+  });
+
+  test('keeps the bug developer as-is when it is not the activity tester', () => {
+    const b = bug({ developer: 'Fulano', worklogEntries: [entry({ subtaskType: 'Bug', author: 'Fulano' })] });
+    expect(resolveBugResponsible(b, 'Ciclana')).toBe('Fulano');
+  });
+
+  test('real case: bug.developer is the activity tester (assignee ≠ who fixed it) — picks the other worklog author instead', () => {
+    const b = bug({
+      developer: 'Fernanda',
+      worklogEntries: [entry({ subtaskType: 'Bug', author: 'Patrick', hours: 0.15 })],
+    });
+    expect(resolveBugResponsible(b, 'Fernanda')).toBe('Patrick');
+  });
+
+  test('picks the worklog author with the most hours when more than one person besides the tester logged time', () => {
+    const b = bug({
+      developer: 'Fernanda',
+      worklogEntries: [
+        entry({ subtaskType: 'Bug', author: 'Paulo', hours: 3 }),
+        entry({ subtaskType: 'Bug', author: 'Patrick', hours: 1 }),
+      ],
+    });
+    expect(resolveBugResponsible(b, 'Fernanda')).toBe('Paulo');
+  });
+
+  test('falls back to the original developer (the tester) when nobody else logged time on the bug', () => {
+    const b = bug({ developer: 'Fernanda', worklogEntries: [entry({ subtaskType: 'Bug', author: 'Fernanda' })] });
+    expect(resolveBugResponsible(b, 'Fernanda')).toBe('Fernanda');
+  });
+
+  test('falls back to the original developer when there is no activity tester to exclude', () => {
+    const b = bug({ developer: 'Fernanda', worklogEntries: [entry({ subtaskType: 'Bug', author: 'Patrick' })] });
+    expect(resolveBugResponsible(b, null)).toBe('Fernanda');
   });
 });
 
