@@ -146,6 +146,15 @@ export default function TimelineView({
     searchQuery,
   ]);
 
+  // Atividades com bug visíveis no momento (respeita os filtros atuais) — base do botão "Expandir
+  // todos os bugs"; atividades sem bug nenhum não têm o que expandir.
+  const activitiesWithBugs = useMemo(() => filtered.filter((a) => a.bugs.length > 0), [filtered]);
+  const allBugsExpanded =
+    activitiesWithBugs.length > 0 && activitiesWithBugs.every((a) => expandedBugs.has(a.key));
+  function toggleAllBugs() {
+    setExpandedBugs(allBugsExpanded ? new Set() : new Set(activitiesWithBugs.map((a) => a.key)));
+  }
+
   // Composição de cada sprint (para os números/tooltip dos botões de filtro) — sempre sobre TODAS
   // as atividades daquela sprint, independente de busca/"ocultar concluídas" ativos no momento.
   const activitiesBySprintId = useMemo(() => {
@@ -427,6 +436,9 @@ export default function TimelineView({
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginLeft: 'auto' }}>
             <SwitchPill active={hideDone} onClick={() => setHideDone((v) => !v)} label="Ocultar concluídas/Ag. liberação" />
             <SwitchPill active={deadlinesActive} onClick={() => setDeadlinesActive((v) => !v)} label="Mostrar deadlines" />
+            {activitiesWithBugs.length > 0 && (
+              <SwitchPill active={allBugsExpanded} onClick={toggleAllBugs} label="Expandir todos os bugs" />
+            )}
             <div style={{ position: 'relative' }}>
               <input
                 value={searchQuery}
