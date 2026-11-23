@@ -90,6 +90,16 @@ function isNegligibleWorklog(worklog: RawWorklogEntry): boolean {
   return worklog.timeSpentSeconds <= NEGLIGIBLE_WORKLOG_SECONDS;
 }
 
+/**
+ * Alguns comentários de apontamento chegam do Jira com acentos como sequência de escape literal
+ * (`\uXXXX` como texto mesmo, não o caractere), provavelmente de alguma automação que serializou o
+ * corpo da requisição duas vezes ao publicar o comentário. Decodifica de volta pro caractere real;
+ * sem nenhuma ocorrência o texto sai idêntico.
+ */
+function decodeLiteralUnicodeEscapes(text: string): string {
+  return text.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+}
+
 /** Agrupa subtarefas (Implementação/Teste/Bug) buscadas em lote pela atividade (Story) pai. */
 export function groupSubtasks(subtasks: RawSubtask[], baseUrl = ''): GroupedSubtasks {
   const implStartByParent = new Map<string, string>();
@@ -116,7 +126,7 @@ export function groupSubtasks(subtasks: RawSubtask[], baseUrl = ''): GroupedSubt
         author: worklog.author.displayName,
         date: dateOnly(worklog.started),
         hours: worklog.timeSpentSeconds / 3600,
-        comment: worklog.comment ?? null,
+        comment: worklog.comment ? decodeLiteralUnicodeEscapes(worklog.comment) : null,
       });
     }
     secondsByParent.set(parentKey, totalSeconds);
@@ -178,7 +188,7 @@ export function groupSubtasks(subtasks: RawSubtask[], baseUrl = ''): GroupedSubt
           author: worklog.author.displayName,
           date: dateOnly(worklog.started),
           hours: worklog.timeSpentSeconds / 3600,
-          comment: worklog.comment ?? null,
+          comment: worklog.comment ? decodeLiteralUnicodeEscapes(worklog.comment) : null,
         }));
 
       const artifactValue = subtask.customfield_10232?.value;

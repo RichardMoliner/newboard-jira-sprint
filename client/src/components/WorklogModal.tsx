@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Activity, WorklogEntry } from '../types.js';
 import { PersonAvatar } from './PersonAvatar.js';
 import { formatHoursMinutes, formatShort } from './TimelineView.js';
@@ -40,7 +42,16 @@ export default function WorklogModal({
   onClose: () => void;
 }) {
   const groups = groupByAuthor(entries);
-  return (
+  const [expandedAuthors, setExpandedAuthors] = useState<Set<string>>(new Set());
+  function toggleAuthor(author: string) {
+    setExpandedAuthors((prev) => {
+      const next = new Set(prev);
+      if (next.has(author)) next.delete(author);
+      else next.add(author);
+      return next;
+    });
+  }
+  return createPortal(
     <div
       style={{
         position: 'fixed',
@@ -56,11 +67,13 @@ export default function WorklogModal({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
+          position: 'relative',
           background: 'var(--surface-1)',
           border: '1px solid var(--border)',
           borderRadius: 12,
           padding: 28,
-          width: 380,
+          width: 760,
+          maxWidth: 'calc(100vw - 40px)',
           maxHeight: '80vh',
           overflowY: 'auto',
           display: 'flex',
@@ -68,8 +81,27 @@ export default function WorklogModal({
           gap: 14,
         }}
       >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Fechar"
+          style={{
+            position: 'absolute',
+            top: 14,
+            right: 14,
+            background: 'none',
+            border: 'none',
+            color: 'var(--text-secondary)',
+            fontSize: 18,
+            lineHeight: 1,
+            cursor: 'pointer',
+            padding: 4,
+          }}
+        >
+          ✕
+        </button>
         <div>
-          <h2 style={{ fontSize: 16, margin: 0 }}>Apontamentos — {title}</h2>
+          <h2 style={{ fontSize: 16, margin: 0, paddingRight: 24 }}>Apontamentos — {title}</h2>
           <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
             {activity.key} - {activity.title}
           </p>
@@ -79,28 +111,50 @@ export default function WorklogModal({
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Nenhum apontamento.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {groups.map((group) => (
-              <div key={group.author}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <PersonAvatar name={group.author} avatarUrl={avatarUrlByPerson[group.author]} size={22} />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>{group.author}</span>
-                  <span className="tabular-nums" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>
-                    {formatHoursMinutes(group.totalHours)}
-                  </span>
+            {groups.map((group) => {
+              const isExpanded = expandedAuthors.has(group.author);
+              return (
+                <div key={group.author}>
+                  <button
+                    type="button"
+                    onClick={() => toggleAuthor(group.author)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      width: '100%',
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <span style={{ display: 'inline-block', transform: isExpanded ? 'rotate(90deg)' : 'none', color: 'var(--text-muted)', fontSize: 11 }}>
+                      ▸
+                    </span>
+                    <PersonAvatar name={group.author} avatarUrl={avatarUrlByPerson[group.author]} size={22} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>{group.author}</span>
+                    <span className="tabular-nums" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>
+                      {formatHoursMinutes(group.totalHours)}
+                    </span>
+                  </button>
+                  {isExpanded && (
+                    <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: '0 0 0 38px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {group.entries.map((entry, i) => (
+                        <li key={i} style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                          <span className="tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                            {formatShort(entry.date)}
+                          </span>{' '}
+                          · <strong className="tabular-nums">{formatHoursMinutes(entry.hours)}</strong>
+                          {entry.comment && <div style={{ color: 'var(--text-muted)', marginTop: 1 }}>{entry.comment}</div>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-                <ul style={{ listStyle: 'none', margin: 0, padding: '0 0 0 30px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {group.entries.map((entry, i) => (
-                    <li key={i} style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                      <span className="tabular-nums" style={{ color: 'var(--text-muted)' }}>
-                        {formatShort(entry.date)}
-                      </span>{' '}
-                      · <strong className="tabular-nums">{formatHoursMinutes(entry.hours)}</strong>
-                      {entry.comment && <div style={{ color: 'var(--text-muted)', marginTop: 1 }}>{entry.comment}</div>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -124,6 +178,7 @@ export default function WorklogModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

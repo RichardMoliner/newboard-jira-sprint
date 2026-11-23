@@ -464,6 +464,35 @@ describe('groupSubtasks', () => {
     expect(worklogEntriesByParent.get('EC-11420')?.[0].comment).toBeNull();
   });
 
+  test('decodes literal \\uXXXX escape sequences in a worklog comment (caso real: comentário vindo do Jira com acentos escapados como texto, não decodificados)', () => {
+    const { worklogEntriesByParent } = groupSubtasks([
+      subtask({
+        worklog: {
+          worklogs: [
+            {
+              author: { displayName: 'Fulano' },
+              started: '2026-09-08T00:00:00.000-0300',
+              timeSpentSeconds: 3600,
+              comment: 'Continuidade da valida\\u00e7\\u00e3o dos cen\\u00e1rios',
+            },
+          ],
+        },
+      }),
+    ]);
+    expect(worklogEntriesByParent.get('EC-11420')?.[0].comment).toBe('Continuidade da validação dos cenários');
+  });
+
+  test('leaves a comment without any escape sequence untouched', () => {
+    const { worklogEntriesByParent } = groupSubtasks([
+      subtask({
+        worklog: {
+          worklogs: [{ author: { displayName: 'Fulano' }, started: '2026-09-08T00:00:00.000-0300', timeSpentSeconds: 3600, comment: 'Comentário normal' }],
+        },
+      }),
+    ]);
+    expect(worklogEntriesByParent.get('EC-11420')?.[0].comment).toBe('Comentário normal');
+  });
+
   test('attaches the Bug subtask worklog entries onto its BugSubtask entry', () => {
     const { bugsByParent } = groupSubtasks([
       subtask({
