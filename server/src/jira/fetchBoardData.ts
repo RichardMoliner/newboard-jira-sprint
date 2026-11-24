@@ -42,6 +42,8 @@ interface StoryDetail {
   updated: string;
   /** Rótulos (labels) da story — já vem no response_format "detailed" do get_issue, sem custo extra. */
   labels?: string[];
+  /** Solicitante (reporter) da story no Jira — já vem no response_format "detailed", sem custo extra. */
+  reporter: string | null;
 }
 
 function todayISO(): string {

@@ -19,6 +19,7 @@ function activity(overrides: Partial<Activity> = {}): Activity {
     isCarried: false,
     developer: 'Fulano',
     tester: null,
+    requester: null,
     storyPoints: null,
     startDate: '2026-10-01',
     createdDate: '2026-10-01',

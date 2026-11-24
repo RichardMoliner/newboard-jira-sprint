@@ -22,6 +22,7 @@ function baseStory(overrides: Partial<RawStory> = {}): RawStory {
     storyPoints: 3,
     assignee: null,
     testador: 'Luana de Souza Bez Batti',
+    reporter: 'Carlos Solicitante',
     created: '2026-07-08T10:26:04.000-0300',
     updated: '2026-09-08T16:37:55.000-0300',
     ...overrides,
@@ -1270,6 +1271,30 @@ describe('mapActivity', () => {
       today: '2026-09-08',
     });
     expect(activity.tester).toBeNull();
+  });
+
+  test('passes through the story reporter as requester', () => {
+    const activity = mapActivity({
+      story: baseStory({ reporter: 'Marlon Mazzine dos Santos Figueiredo' }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.requester).toBe('Marlon Mazzine dos Santos Figueiredo');
+  });
+
+  test('defaults requester to null when the story has no reporter', () => {
+    const activity = mapActivity({
+      story: baseStory({ reporter: null }),
+      sprint,
+      implStartDate: '2026-08-04',
+      bugs: [],
+      baseUrl: 'https://desenv.betha.com.br',
+      today: '2026-09-08',
+    });
+    expect(activity.requester).toBeNull();
   });
 
   test('leaves bugsLoggedHours null when the activity has no bugs', () => {

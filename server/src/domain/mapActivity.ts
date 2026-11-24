@@ -20,6 +20,8 @@ export interface RawStory {
   updated: string;
   /** Rótulos (labels) da story. */
   labels?: string[];
+  /** Solicitante (reporter) da story no Jira. */
+  reporter: string | null;
 }
 
 /** Rótulo usado pra marcar tarefas que podem ficar de fora de um deploy sem bloquear a publicação. */
@@ -272,6 +274,7 @@ export function mapActivity(params: {
     isCarried: carried,
     developer: implementationAssignee ?? story.assignee ?? '-',
     tester: story.testador,
+    requester: story.reporter,
     storyPoints: story.storyPoints,
     startDate,
     createdDate: dateOnly(story.created),

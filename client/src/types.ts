@@ -42,6 +42,8 @@ export interface Activity {
   isCarried: boolean;
   developer: string;
   tester: string | null;
+  /** Solicitante (reporter) da story no Jira — quem pediu/abriu a demanda, exibido como "PO". */
+  requester: string | null;
   storyPoints: number | null;
   startDate: string;
   /** Data (YYYY-MM-DD) de criação da story no Jira, sempre presente — ao contrário de `startDate`,

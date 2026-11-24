@@ -1341,6 +1341,10 @@ function BugStatusSection({
   );
 }
 
+/** Rótulos de metadado de automação (ex.: /apf-contar) sem valor nenhum pra quem olha o painel —
+ * nunca mostrados como badge. */
+const NOISE_BUG_LABELS = new Set(['apf-autonoma', 'ia-assistida', 'ia-orquestrada']);
+
 function BugRow({
   bug,
   x,
@@ -1355,6 +1359,7 @@ function BugRow({
   const responsible = resolveBugResponsible(bug, activityTester);
   const isResolved = isResolvedBug(bug.status);
   const textColor = isResolved ? 'var(--status-good)' : 'var(--text-muted)';
+  const visibleLabels = bug.labels.filter((label) => !NOISE_BUG_LABELS.has(label));
   return (
     <>
       <div className="timeline-row-info" style={{ position: 'sticky', left: 0, zIndex: 1, background: 'var(--page-plane)', padding: '5px 14px 5px 34px', borderBottom: '1px solid var(--gridline)', borderRight: '1px solid var(--gridline)', fontSize: 10.5, color: isResolved ? 'var(--status-good)' : 'var(--text-secondary)' }}>
@@ -1369,20 +1374,27 @@ function BugRow({
           </a>
           {bug.title}
         </div>
-        <div style={{ color: textColor, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            {responsible && <PersonAvatar name={responsible} avatarUrl={avatarUrlByPerson[responsible]} size={14} />}
-            {responsible ?? '—'} - {bug.status}
+        <div style={{ marginTop: 2, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={{ color: textColor }}>
+            {bug.status}
             {isResolved && ` em ${formatShort(bug.endDate)}`}
           </span>
-          {bug.labels.map((label) => {
-            const info = describeBugLabel(label);
-            return (
-              <Badge key={label} color={info.color}>
-                {info.text}
-              </Badge>
-            );
-          })}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: textColor }}>
+            {responsible && <PersonAvatar name={responsible} avatarUrl={avatarUrlByPerson[responsible]} size={14} />}
+            {responsible ?? '—'}
+          </span>
+          {visibleLabels.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              {visibleLabels.map((label) => {
+                const info = describeBugLabel(label);
+                return (
+                  <Badge key={label} color={info.color}>
+                    {info.text}
+                  </Badge>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
       <div className="timeline-row-bars" style={{ position: 'relative', height: 24, borderBottom: '1px solid var(--gridline)', background: 'var(--page-plane)' }}>
@@ -2074,6 +2086,7 @@ function SideList({
   const testAuthors = authorsByTypeOrderedByHours(testEntries, 'Teste');
   const items: [string, React.ReactNode, string?, React.ReactNode?, (() => void)?][] = [
     ['PF', activity.storyPoints !== null ? String(activity.storyPoints) : '—'],
+    ['PO', activity.requester ? firstName(activity.requester) : '—'],
     ['Dev', firstName(activity.developer)],
     ['Tester', activity.tester ? firstName(activity.tester) : '—'],
     [
